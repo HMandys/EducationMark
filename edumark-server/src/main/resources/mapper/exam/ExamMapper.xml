@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.exam.mapper.ExamMapper">
+
+    <resultMap id="ExamVOMap" type="com.edumark.exam.vo.ExamVO">
+        <id column="id" property="id"/>
+        <result column="school_id" property="schoolId"/>
+        <result column="school_name" property="schoolName"/>
+        <result column="name" property="name"/>
+        <result column="code" property="code"/>
+        <result column="type" property="type"/>
+        <result column="academic_year" property="academicYear"/>
+        <result column="semester" property="semester"/>
+        <result column="grade_id" property="gradeId"/>
+        <result column="grade_name" property="gradeName"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="status" property="status"/>
+        <result column="total_score" property="totalScore"/>
+        <result column="student_count" property="studentCount"/>
+        <result column="subject_count" property="subjectCount"/>
+        <result column="description" property="description"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <select id="selectPageVO" resultMap="ExamVOMap">
+        SELECT e.*,
+            s.name AS school_name,
+            g.name AS grade_name,
+            (SELECT COUNT(1) FROM exam_subject es WHERE es.exam_id = e.id AND es.deleted = 0) AS subject_count
+        FROM exam e
+        LEFT JOIN school s ON s.id = e.school_id
+        LEFT JOIN grade g ON g.id = e.grade_id
+        WHERE e.deleted = 0
+        <if test="query.schoolId != null">
+            AND e.school_id = #{query.schoolId}
+        </if>
+        <if test="query.name != null and query.name != ''">
+            AND e.name LIKE CONCAT('%', #{query.name}, '%')
+        </if>
+        <if test="query.code != null and query.code != ''">
+            AND e.code = #{query.code}
+        </if>
+        <if test="query.type != null">
+            AND e.type = #{query.type}
+        </if>
+        <if test="query.academicYear != null and query.academicYear != ''">
+            AND e.academic_year = #{query.academicYear}
+        </if>
+        <if test="query.semester != null">
+            AND e.semester = #{query.semester}
+        </if>
+        <if test="query.gradeId != null">
+            AND e.grade_id = #{query.gradeId}
+        </if>
+        <if test="query.status != null">
+            AND e.status = #{query.status}
+        </if>
+        ORDER BY e.create_time DESC
+    </select>
+
+    <select id="selectVOById" resultMap="ExamVOMap">
+        SELECT e.*,
+            s.name AS school_name,
+            g.name AS grade_name,
+            (SELECT COUNT(1) FROM exam_subject es WHERE es.exam_id = e.id AND es.deleted = 0) AS subject_count
+        FROM exam e
+        LEFT JOIN school s ON s.id = e.school_id
+        LEFT JOIN grade g ON g.id = e.grade_id
+        WHERE e.id = #{id} AND e.deleted = 0
+    </select>
+
+</mapper>

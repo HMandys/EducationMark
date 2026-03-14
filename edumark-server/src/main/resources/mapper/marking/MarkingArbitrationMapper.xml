@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.marking.mapper.MarkingArbitrationMapper">
+
+    <resultMap id="MarkingArbitrationVOMap" type="com.edumark.marking.vo.MarkingArbitrationVO">
+        <id column="id" property="id"/>
+        <result column="task_id" property="taskId"/>
+        <result column="answer_sheet_id" property="answerSheetId"/>
+        <result column="question_id" property="questionId"/>
+        <result column="student_id" property="studentId"/>
+        <result column="first_marking_id" property="firstMarkingId"/>
+        <result column="first_score" property="firstScore"/>
+        <result column="first_teacher_id" property="firstTeacherId"/>
+        <result column="second_marking_id" property="secondMarkingId"/>
+        <result column="second_score" property="secondScore"/>
+        <result column="second_teacher_id" property="secondTeacherId"/>
+        <result column="score_diff" property="scoreDiff"/>
+        <result column="arbitration_teacher_id" property="arbitrationTeacherId"/>
+        <result column="arbitration_score" property="arbitrationScore"/>
+        <result column="arbitration_time" property="arbitrationTime"/>
+        <result column="arbitration_comment" property="arbitrationComment"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="student_name" property="studentName"/>
+        <result column="first_teacher_name" property="firstTeacherName"/>
+        <result column="second_teacher_name" property="secondTeacherName"/>
+        <result column="arbitration_teacher_name" property="arbitrationTeacherName"/>
+        <result column="question_no" property="questionNo"/>
+        <result column="answer_image_url" property="answerImageUrl"/>
+    </resultMap>
+
+    <select id="selectPageVO" resultMap="MarkingArbitrationVOMap">
+        SELECT
+            ma.*,
+            st.name AS student_name,
+            u1.real_name AS first_teacher_name,
+            u2.real_name AS second_teacher_name,
+            u3.real_name AS arbitration_teacher_name,
+            pq.question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS answer_image_url
+        FROM marking_arbitration ma
+        LEFT JOIN student st ON ma.student_id = st.id
+        LEFT JOIN sys_user u1 ON ma.first_teacher_id = u1.id
+        LEFT JOIN sys_user u2 ON ma.second_teacher_id = u2.id
+        LEFT JOIN sys_user u3 ON ma.arbitration_teacher_id = u3.id
+        LEFT JOIN paper_question pq ON ma.question_id = pq.id
+        WHERE ma.task_id = #{taskId}
+        <if test="status != null">
+            AND ma.status = #{status}
+        </if>
+        ORDER BY ma.create_time DESC
+    </select>
+
+    <select id="selectVOById" resultMap="MarkingArbitrationVOMap">
+        SELECT
+            ma.*,
+            st.name AS student_name,
+            u1.real_name AS first_teacher_name,
+            u2.real_name AS second_teacher_name,
+            u3.real_name AS arbitration_teacher_name,
+            pq.question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS answer_image_url
+        FROM marking_arbitration ma
+        LEFT JOIN student st ON ma.student_id = st.id
+        LEFT JOIN sys_user u1 ON ma.first_teacher_id = u1.id
+        LEFT JOIN sys_user u2 ON ma.second_teacher_id = u2.id
+        LEFT JOIN sys_user u3 ON ma.arbitration_teacher_id = u3.id
+        LEFT JOIN paper_question pq ON ma.question_id = pq.id
+        WHERE ma.id = #{id}
+    </select>
+
+    <select id="selectNextPending" resultMap="MarkingArbitrationVOMap">
+        SELECT
+            ma.*,
+            st.name AS student_name,
+            u1.real_name AS first_teacher_name,
+            u2.real_name AS second_teacher_name,
+            pq.question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS answer_image_url
+        FROM marking_arbitration ma
+        LEFT JOIN student st ON ma.student_id = st.id
+        LEFT JOIN sys_user u1 ON ma.first_teacher_id = u1.id
+        LEFT JOIN sys_user u2 ON ma.second_teacher_id = u2.id
+        LEFT JOIN paper_question pq ON ma.question_id = pq.id
+        WHERE ma.task_id = #{taskId}
+        AND ma.status = 0
+        ORDER BY ma.id
+        LIMIT 1
+    </select>
+</mapper>

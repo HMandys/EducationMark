@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.marking.mapper.MarkingTaskMapper">
+
+    <resultMap id="MarkingTaskVOMap" type="com.edumark.marking.vo.MarkingTaskVO">
+        <id column="id" property="id"/>
+        <result column="exam_id" property="examId"/>
+        <result column="exam_subject_id" property="examSubjectId"/>
+        <result column="question_id" property="questionId"/>
+        <result column="name" property="name"/>
+        <result column="task_type" property="taskType"/>
+        <result column="total_count" property="totalCount"/>
+        <result column="completed_count" property="completedCount"/>
+        <result column="pending_count" property="pendingCount"/>
+        <result column="enable_double_marking" property="enableDoubleMarking"/>
+        <result column="double_marking_threshold" property="doubleMarkingThreshold"/>
+        <result column="status" property="status"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="exam_name" property="examName"/>
+        <result column="subject_name" property="subjectName"/>
+        <result column="question_no" property="questionNo"/>
+    </resultMap>
+
+    <select id="selectPageVO" resultMap="MarkingTaskVOMap">
+        SELECT
+            mt.*,
+            e.name AS exam_name,
+            es.subject_name AS subject_name,
+            pq.question_no
+        FROM marking_task mt
+        LEFT JOIN exam e ON mt.exam_id = e.id
+        LEFT JOIN exam_subject es ON mt.exam_subject_id = es.id
+        LEFT JOIN paper_question pq ON mt.question_id = pq.id
+        WHERE mt.deleted = 0
+        <if test="examId != null">
+            AND mt.exam_id = #{examId}
+        </if>
+        <if test="examSubjectId != null">
+            AND mt.exam_subject_id = #{examSubjectId}
+        </if>
+        <if test="status != null">
+            AND mt.status = #{status}
+        </if>
+        ORDER BY mt.create_time DESC
+    </select>
+
+    <select id="selectVOById" resultMap="MarkingTaskVOMap">
+        SELECT
+            mt.*,
+            e.name AS exam_name,
+            es.subject_name AS subject_name,
+            pq.question_no
+        FROM marking_task mt
+        LEFT JOIN exam e ON mt.exam_id = e.id
+        LEFT JOIN exam_subject es ON mt.exam_subject_id = es.id
+        LEFT JOIN paper_question pq ON mt.question_id = pq.id
+        WHERE mt.id = #{id}
+        AND mt.deleted = 0
+    </select>
+
+    <select id="selectListByExamSubjectId" resultMap="MarkingTaskVOMap">
+        SELECT
+            mt.*,
+            e.name AS exam_name,
+            es.subject_name AS subject_name,
+            pq.question_no
+        FROM marking_task mt
+        LEFT JOIN exam e ON mt.exam_id = e.id
+        LEFT JOIN exam_subject es ON mt.exam_subject_id = es.id
+        LEFT JOIN paper_question pq ON mt.question_id = pq.id
+        WHERE mt.exam_subject_id = #{examSubjectId}
+        AND mt.deleted = 0
+        ORDER BY pq.sort
+    </select>
+</mapper>

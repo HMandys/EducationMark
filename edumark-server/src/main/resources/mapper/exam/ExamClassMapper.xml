@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.exam.mapper.ExamClassMapper">
+
+    <resultMap id="ExamClassVOMap" type="com.edumark.exam.vo.ExamVO$ExamClassVO">
+        <result column="class_id" property="classId"/>
+        <result column="class_name" property="className"/>
+        <result column="student_count" property="studentCount"/>
+    </resultMap>
+
+    <select id="selectListByExamId" resultMap="ExamClassVOMap">
+        SELECT ec.class_id,
+            c.name AS class_name,
+            (SELECT COUNT(1) FROM student st WHERE st.class_id = ec.class_id AND st.deleted = 0) AS student_count
+        FROM exam_class ec
+        LEFT JOIN class_info c ON c.id = ec.class_id
+        WHERE ec.exam_id = #{examId} AND ec.deleted = 0
+        ORDER BY c.sort ASC, c.create_time ASC
+    </select>
+
+    <delete id="deleteByExamId">
+        UPDATE exam_class SET deleted = 1 WHERE exam_id = #{examId}
+    </delete>
+
+</mapper>

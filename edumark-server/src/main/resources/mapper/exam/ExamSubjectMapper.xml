@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.exam.mapper.ExamSubjectMapper">
+
+    <resultMap id="ExamSubjectVOMap" type="com.edumark.exam.vo.ExamSubjectVO">
+        <id column="id" property="id"/>
+        <result column="exam_id" property="examId"/>
+        <result column="exam_name" property="examName"/>
+        <result column="subject_name" property="subjectName"/>
+        <result column="subject_code" property="subjectCode"/>
+        <result column="full_score" property="fullScore"/>
+        <result column="pass_score" property="passScore"/>
+        <result column="excellent_score" property="excellentScore"/>
+        <result column="duration" property="duration"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="sort" property="sort"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="question_count" property="questionCount"/>
+        <result column="paper_id" property="paperId"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <select id="selectListByExamId" resultMap="ExamSubjectVOMap">
+        SELECT es.*,
+            e.name AS exam_name,
+            (SELECT COUNT(1) FROM paper_question pq
+             JOIN paper p ON p.id = pq.paper_id
+             WHERE p.exam_subject_id = es.id AND pq.deleted = 0) AS question_count,
+            (SELECT p.id FROM paper p WHERE p.exam_subject_id = es.id AND p.deleted = 0 LIMIT 1) AS paper_id
+        FROM exam_subject es
+        LEFT JOIN exam e ON e.id = es.exam_id
+        WHERE es.exam_id = #{examId} AND es.deleted = 0
+        ORDER BY es.sort ASC, es.create_time ASC
+    </select>
+
+    <select id="selectVOById" resultMap="ExamSubjectVOMap">
+        SELECT es.*,
+            e.name AS exam_name,
+            (SELECT COUNT(1) FROM paper_question pq
+             JOIN paper p ON p.id = pq.paper_id
+             WHERE p.exam_subject_id = es.id AND pq.deleted = 0) AS question_count,
+            (SELECT p.id FROM paper p WHERE p.exam_subject_id = es.id AND p.deleted = 0 LIMIT 1) AS paper_id
+        FROM exam_subject es
+        LEFT JOIN exam e ON e.id = es.exam_id
+        WHERE es.id = #{id} AND es.deleted = 0
+    </select>
+
+</mapper>

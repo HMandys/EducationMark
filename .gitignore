@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+target/
+dist/
+build/
+*.jar
+*.war

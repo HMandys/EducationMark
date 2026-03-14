@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.score.mapper.SubjectScoreMapper">
+
+    <resultMap id="SubjectScoreVOMap" type="com.edumark.score.vo.SubjectScoreVO">
+        <id column="id" property="id"/>
+        <result column="exam_subject_id" property="examSubjectId"/>
+        <result column="subject_name" property="subjectName"/>
+        <result column="full_score" property="fullScore"/>
+        <result column="score" property="score"/>
+        <result column="objective_score" property="objectiveScore"/>
+        <result column="subjective_score" property="subjectiveScore"/>
+        <result column="class_rank" property="classRank"/>
+        <result column="grade_rank" property="gradeRank"/>
+        <result column="student_id" property="studentId"/>
+        <result column="student_name" property="studentName"/>
+        <result column="student_number" property="studentNumber"/>
+        <result column="class_name" property="className"/>
+    </resultMap>
+
+    <select id="selectPageVO" resultMap="SubjectScoreVOMap">
+        SELECT ss.*,
+            es.subject_name,
+            es.full_score,
+            s.name AS student_name,
+            s.student_number,
+            c.name AS class_name
+        FROM subject_score ss
+        LEFT JOIN exam_subject es ON es.id = ss.exam_subject_id
+        LEFT JOIN student s ON s.id = ss.student_id
+        LEFT JOIN class_info c ON c.id = ss.class_id
+        WHERE 1=1
+        <if test="query.examId != null">
+            AND ss.exam_id = #{query.examId}
+        </if>
+        <if test="query.examSubjectId != null">
+            AND ss.exam_subject_id = #{query.examSubjectId}
+        </if>
+        <if test="query.classId != null">
+            AND ss.class_id = #{query.classId}
+        </if>
+        <if test="query.studentName != null and query.studentName != ''">
+            AND s.name LIKE CONCAT('%', #{query.studentName}, '%')
+        </if>
+        <if test="query.studentNumber != null and query.studentNumber != ''">
+            AND s.student_number = #{query.studentNumber}
+        </if>
+        ORDER BY ss.score DESC, ss.grade_rank ASC
+    </select>
+
+    <select id="selectListByExamAndStudent" resultMap="SubjectScoreVOMap">
+        SELECT ss.*,
+            es.subject_name,
+            es.full_score,
+            s.name AS student_name,
+            s.student_number,
+            c.name AS class_name
+        FROM subject_score ss
+        LEFT JOIN exam_subject es ON es.id = ss.exam_subject_id
+        LEFT JOIN student s ON s.id = ss.student_id
+        LEFT JOIN class_info c ON c.id = ss.class_id
+        WHERE ss.exam_id = #{examId} AND ss.student_id = #{studentId}
+        ORDER BY es.sort ASC
+    </select>
+
+    <select id="selectListByExamSubjectId" resultType="com.edumark.score.entity.SubjectScore">
+        SELECT * FROM subject_score WHERE exam_subject_id = #{examSubjectId} ORDER BY score DESC
+    </select>
+
+    <delete id="deleteByExamId">
+        DELETE FROM subject_score WHERE exam_id = #{examId}
+    </delete>
+
+</mapper>

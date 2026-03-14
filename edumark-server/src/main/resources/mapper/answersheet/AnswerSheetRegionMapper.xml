@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.answersheet.mapper.AnswerSheetRegionMapper">
+
+    <resultMap id="AnswerSheetRegionVOMap" type="com.edumark.answersheet.vo.AnswerSheetRegionVO">
+        <id column="id" property="id"/>
+        <result column="template_id" property="templateId"/>
+        <result column="region_type" property="regionType"/>
+        <result column="region_name" property="regionName"/>
+        <result column="page_no" property="pageNo"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="question_start" property="questionStart"/>
+        <result column="question_end" property="questionEnd"/>
+        <result column="question_ids" property="questionIds"
+                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="config" property="config"
+                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+    </resultMap>
+
+    <select id="selectListByTemplateId" resultMap="AnswerSheetRegionVOMap">
+        SELECT r.*
+        FROM answer_sheet_region r
+        WHERE r.template_id = #{templateId} AND r.deleted = 0
+        ORDER BY r.page_no ASC, r.sort_order ASC
+    </select>
+
+    <delete id="deleteByTemplateId">
+        UPDATE answer_sheet_region SET deleted = 1 WHERE template_id = #{templateId}
+    </delete>
+
+</mapper>

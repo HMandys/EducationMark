@@ -1,0 +1,88 @@
+// 全局样式
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji';
+  font-size: 14px;
+  color: #333;
+  background-color: #f0f2f5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+// 滚动条样式
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 3px;
+
+  &:hover {
+    background: #ccc;
+  }
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+// NProgress 进度条样式
+#nprogress {
+  .bar {
+    background: #409eff !important;
+    height: 3px !important;
+  }
+
+  .spinner {
+    display: none !important;
+  }
+}
+
+// 通用类
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+// 页面容器
+.page-container {
+  padding: 0;
+}
+
+// Element Plus 覆盖
+.el-card {
+  border-radius: 8px;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.el-table {
+  --el-table-header-bg-color: #fafafa;
+}
+
+.el-button--primary {
+  --el-button-hover-bg-color: #66b1ff;
+  --el-button-active-bg-color: #3a8ee6;
+}

@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.system.mapper.SysUserMapper">
+
+    <!-- 根据用户名查询用户（包含角色信息） -->
+    <select id="selectByUsername" resultType="com.edumark.system.entity.SysUser">
+        SELECT
+            u.*,
+            r.role_code,
+            r.role_name
+        FROM sys_user u
+        LEFT JOIN sys_user_role ur ON u.id = ur.user_id
+        LEFT JOIN sys_role r ON ur.role_id = r.id
+        WHERE u.username = #{username}
+          AND u.deleted = 0
+        LIMIT 1
+    </select>
+
+    <!-- 分页查询用户列表 -->
+    <select id="selectUserPage" resultType="com.edumark.system.vo.SysUserVO">
+        SELECT
+            u.id,
+            u.username,
+            u.real_name,
+            u.phone,
+            u.email,
+            u.avatar,
+            u.gender,
+            u.user_type,
+            u.school_id,
+            u.status,
+            u.remark,
+            u.create_time,
+            s.school_name
+        FROM sys_user u
+        LEFT JOIN school s ON u.school_id = s.id
+        <where>
+            u.deleted = 0
+            <if test="query.username != null and query.username != ''">
+                AND u.username LIKE CONCAT('%', #{query.username}, '%')
+            </if>
+            <if test="query.realName != null and query.realName != ''">
+                AND u.real_name LIKE CONCAT('%', #{query.realName}, '%')
+            </if>
+            <if test="query.phone != null and query.phone != ''">
+                AND u.phone = #{query.phone}
+            </if>
+            <if test="query.userType != null">
+                AND u.user_type = #{query.userType}
+            </if>
+            <if test="query.schoolId != null">
+                AND u.school_id = #{query.schoolId}
+            </if>
+            <if test="query.status != null">
+                AND u.status = #{query.status}
+            </if>
+            <if test="query.roleId != null">
+                AND EXISTS (
+                    SELECT 1 FROM sys_user_role ur
+                    WHERE ur.user_id = u.id AND ur.role_id = #{query.roleId}
+                )
+            </if>
+        </where>
+        ORDER BY u.create_time DESC
+    </select>
+
+    <!-- 根据用户ID查询用户详情 -->
+    <select id="selectUserById" resultType="com.edumark.system.vo.SysUserVO">
+        SELECT
+            u.id,
+            u.username,
+            u.real_name,
+            u.phone,
+            u.email,
+            u.avatar,
+            u.gender,
+            u.user_type,
+            u.school_id,
+            u.status,
+            u.remark,
+            u.create_time,
+            s.school_name
+        FROM sys_user u
+        LEFT JOIN school s ON u.school_id = s.id
+        WHERE u.id = #{userId}
+          AND u.deleted = 0
+    </select>
+
+    <!-- 根据用户ID查询角色ID列表 -->
+    <select id="selectRoleIdsByUserId" resultType="java.lang.Long">
+        SELECT role_id
+        FROM sys_user_role
+        WHERE user_id = #{userId}
+    </select>
+
+    <!-- 根据用户ID查询权限编码列表 -->
+    <select id="selectPermissionCodesByUserId" resultType="java.lang.String">
+        SELECT DISTINCT p.permission_code
+        FROM sys_permission p
+        INNER JOIN sys_role_permission rp ON p.id = rp.permission_id
+        INNER JOIN sys_user_role ur ON rp.role_id = ur.role_id
+        WHERE ur.user_id = #{userId}
+          AND p.deleted = 0
+          AND p.status = 1
+    </select>
+
+</mapper>

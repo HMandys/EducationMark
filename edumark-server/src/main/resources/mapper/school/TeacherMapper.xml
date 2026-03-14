@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.school.mapper.TeacherMapper">
+
+    <resultMap id="TeacherVOMap" type="com.edumark.school.vo.TeacherVO">
+        <id column="id" property="id"/>
+        <result column="school_id" property="schoolId"/>
+        <result column="school_name" property="schoolName"/>
+        <result column="user_id" property="userId"/>
+        <result column="username" property="username"/>
+        <result column="job_number" property="jobNumber"/>
+        <result column="name" property="name"/>
+        <result column="gender" property="gender"/>
+        <result column="phone" property="phone"/>
+        <result column="email" property="email"/>
+        <result column="id_card" property="idCard"/>
+        <result column="subject" property="subject"/>
+        <result column="title" property="title"/>
+        <result column="entry_date" property="entryDate"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <select id="selectPageVO" resultMap="TeacherVOMap">
+        SELECT t.*,
+            s.name AS school_name,
+            u.username AS username
+        FROM teacher t
+        LEFT JOIN school s ON t.school_id = s.id
+        LEFT JOIN sys_user u ON t.user_id = u.id
+        WHERE t.deleted = 0
+        <if test="query.schoolId != null">
+            AND t.school_id = #{query.schoolId}
+        </if>
+        <if test="query.jobNumber != null and query.jobNumber != ''">
+            AND t.job_number = #{query.jobNumber}
+        </if>
+        <if test="query.name != null and query.name != ''">
+            AND t.name LIKE CONCAT('%', #{query.name}, '%')
+        </if>
+        <if test="query.phone != null and query.phone != ''">
+            AND t.phone = #{query.phone}
+        </if>
+        <if test="query.subject != null and query.subject != ''">
+            AND t.subject LIKE CONCAT('%', #{query.subject}, '%')
+        </if>
+        <if test="query.status != null">
+            AND t.status = #{query.status}
+        </if>
+        ORDER BY t.create_time DESC
+    </select>
+
+    <select id="selectVOById" resultMap="TeacherVOMap">
+        SELECT t.*,
+            s.name AS school_name,
+            u.username AS username
+        FROM teacher t
+        LEFT JOIN school s ON t.school_id = s.id
+        LEFT JOIN sys_user u ON t.user_id = u.id
+        WHERE t.id = #{id} AND t.deleted = 0
+    </select>
+
+    <select id="selectListBySchoolId" resultMap="TeacherVOMap">
+        SELECT id, school_id, name, job_number, subject
+        FROM teacher
+        WHERE school_id = #{schoolId} AND deleted = 0
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+        ORDER BY name ASC
+    </select>
+
+    <select id="selectByUserId" resultType="com.edumark.school.entity.Teacher">
+        SELECT * FROM teacher WHERE user_id = #{userId} AND deleted = 0
+    </select>
+
+</mapper>

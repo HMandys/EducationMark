@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.school.mapper.SchoolMapper">
+
+    <resultMap id="SchoolVOMap" type="com.edumark.school.vo.SchoolVO">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="code" property="code"/>
+        <result column="type" property="type"/>
+        <result column="province" property="province"/>
+        <result column="city" property="city"/>
+        <result column="district" property="district"/>
+        <result column="address" property="address"/>
+        <result column="phone" property="phone"/>
+        <result column="contact_name" property="contactName"/>
+        <result column="contact_phone" property="contactPhone"/>
+        <result column="logo" property="logo"/>
+        <result column="status" property="status"/>
+        <result column="sort" property="sort"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="grade_count" property="gradeCount"/>
+        <result column="teacher_count" property="teacherCount"/>
+        <result column="student_count" property="studentCount"/>
+    </resultMap>
+
+    <select id="selectPageVO" resultMap="SchoolVOMap">
+        SELECT s.*,
+            (SELECT COUNT(1) FROM grade g WHERE g.school_id = s.id AND g.deleted = 0) AS grade_count,
+            (SELECT COUNT(1) FROM teacher t WHERE t.school_id = s.id AND t.deleted = 0) AS teacher_count,
+            (SELECT COUNT(1) FROM student st WHERE st.school_id = s.id AND st.deleted = 0) AS student_count
+        FROM school s
+        WHERE s.deleted = 0
+        <if test="query.name != null and query.name != ''">
+            AND s.name LIKE CONCAT('%', #{query.name}, '%')
+        </if>
+        <if test="query.code != null and query.code != ''">
+            AND s.code = #{query.code}
+        </if>
+        <if test="query.type != null">
+            AND s.type = #{query.type}
+        </if>
+        <if test="query.province != null and query.province != ''">
+            AND s.province = #{query.province}
+        </if>
+        <if test="query.city != null and query.city != ''">
+            AND s.city = #{query.city}
+        </if>
+        <if test="query.status != null">
+            AND s.status = #{query.status}
+        </if>
+        ORDER BY s.sort ASC, s.create_time DESC
+    </select>
+
+    <select id="selectVOById" resultMap="SchoolVOMap">
+        SELECT s.*,
+            (SELECT COUNT(1) FROM grade g WHERE g.school_id = s.id AND g.deleted = 0) AS grade_count,
+            (SELECT COUNT(1) FROM teacher t WHERE t.school_id = s.id AND t.deleted = 0) AS teacher_count,
+            (SELECT COUNT(1) FROM student st WHERE st.school_id = s.id AND st.deleted = 0) AS student_count
+        FROM school s
+        WHERE s.id = #{id} AND s.deleted = 0
+    </select>
+
+    <select id="selectListForSelect" resultMap="SchoolVOMap">
+        SELECT id, name, code
+        FROM school
+        WHERE deleted = 0
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+        ORDER BY sort ASC, create_time DESC
+    </select>
+
+</mapper>

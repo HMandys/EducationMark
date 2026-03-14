@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.school.mapper.ParentMapper">
+
+    <resultMap id="ParentVOMap" type="com.edumark.school.vo.ParentVO">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="username" property="username"/>
+        <result column="name" property="name"/>
+        <result column="gender" property="gender"/>
+        <result column="phone" property="phone"/>
+        <result column="id_card" property="idCard"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <select id="selectPageVO" resultMap="ParentVOMap">
+        SELECT p.*,
+            u.username AS username
+        FROM parent p
+        LEFT JOIN sys_user u ON p.user_id = u.id
+        WHERE p.deleted = 0
+        <if test="query.name != null and query.name != ''">
+            AND p.name LIKE CONCAT('%', #{query.name}, '%')
+        </if>
+        <if test="query.phone != null and query.phone != ''">
+            AND p.phone = #{query.phone}
+        </if>
+        <if test="query.status != null">
+            AND p.status = #{query.status}
+        </if>
+        <if test="query.studentId != null">
+            AND EXISTS (
+                SELECT 1 FROM parent_student_bind psb
+                WHERE psb.parent_id = p.id AND psb.student_id = #{query.studentId} AND psb.deleted = 0
+            )
+        </if>
+        ORDER BY p.create_time DESC
+    </select>
+
+    <select id="selectVOById" resultMap="ParentVOMap">
+        SELECT p.*,
+            u.username AS username
+        FROM parent p
+        LEFT JOIN sys_user u ON p.user_id = u.id
+        WHERE p.id = #{id} AND p.deleted = 0
+    </select>
+
+    <select id="selectByUserId" resultType="com.edumark.school.entity.Parent">
+        SELECT * FROM parent WHERE user_id = #{userId} AND deleted = 0
+    </select>
+
+    <select id="selectByPhone" resultType="com.edumark.school.entity.Parent">
+        SELECT * FROM parent WHERE phone = #{phone} AND deleted = 0
+    </select>
+
+</mapper>

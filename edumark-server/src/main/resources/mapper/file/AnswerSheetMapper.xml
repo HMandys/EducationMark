@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.file.mapper.AnswerSheetMapper">
+
+    <resultMap id="AnswerSheetVOMap" type="com.edumark.file.vo.AnswerSheetVO">
+        <id column="id" property="id"/>
+        <result column="exam_id" property="examId"/>
+        <result column="exam_name" property="examName"/>
+        <result column="exam_subject_id" property="examSubjectId"/>
+        <result column="subject_name" property="subjectName"/>
+        <result column="student_id" property="studentId"/>
+        <result column="student_name" property="studentName"/>
+        <result column="student_number" property="studentNumber"/>
+        <result column="class_name" property="className"/>
+        <result column="seat_number" property="seatNumber"/>
+        <result column="image_count" property="imageCount"/>
+        <result column="status" property="status"/>
+        <result column="objective_score" property="objectiveScore"/>
+        <result column="subjective_score" property="subjectiveScore"/>
+        <result column="total_score" property="totalScore"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <select id="selectPageVO" resultMap="AnswerSheetVOMap">
+        SELECT a.*,
+            e.name AS exam_name,
+            es.subject_name AS subject_name,
+            s.name AS student_name,
+            c.name AS class_name
+        FROM answer_sheet a
+        LEFT JOIN exam e ON e.id = a.exam_id
+        LEFT JOIN exam_subject es ON es.id = a.exam_subject_id
+        LEFT JOIN student s ON s.id = a.student_id
+        LEFT JOIN class_info c ON c.id = s.class_id
+        WHERE a.deleted = 0
+        <if test="query.examId != null">
+            AND a.exam_id = #{query.examId}
+        </if>
+        <if test="query.examSubjectId != null">
+            AND a.exam_subject_id = #{query.examSubjectId}
+        </if>
+        <if test="query.studentId != null">
+            AND a.student_id = #{query.studentId}
+        </if>
+        <if test="query.studentNumber != null and query.studentNumber != ''">
+            AND a.student_number = #{query.studentNumber}
+        </if>
+        <if test="query.studentName != null and query.studentName != ''">
+            AND s.name LIKE CONCAT('%', #{query.studentName}, '%')
+        </if>
+        <if test="query.classId != null">
+            AND s.class_id = #{query.classId}
+        </if>
+        <if test="query.status != null">
+            AND a.status = #{query.status}
+        </if>
+        ORDER BY a.create_time DESC
+    </select>
+
+    <select id="selectVOById" resultMap="AnswerSheetVOMap">
+        SELECT a.*,
+            e.name AS exam_name,
+            es.subject_name AS subject_name,
+            s.name AS student_name,
+            c.name AS class_name
+        FROM answer_sheet a
+        LEFT JOIN exam e ON e.id = a.exam_id
+        LEFT JOIN exam_subject es ON es.id = a.exam_subject_id
+        LEFT JOIN student s ON s.id = a.student_id
+        LEFT JOIN class_info c ON c.id = s.class_id
+        WHERE a.id = #{id} AND a.deleted = 0
+    </select>
+
+    <select id="selectListByExamSubjectId" resultMap="AnswerSheetVOMap">
+        SELECT a.*,
+            e.name AS exam_name,
+            es.subject_name AS subject_name,
+            s.name AS student_name,
+            c.name AS class_name
+        FROM answer_sheet a
+        LEFT JOIN exam e ON e.id = a.exam_id
+        LEFT JOIN exam_subject es ON es.id = a.exam_subject_id
+        LEFT JOIN student s ON s.id = a.student_id
+        LEFT JOIN class_info c ON c.id = s.class_id
+        WHERE a.exam_subject_id = #{examSubjectId} AND a.deleted = 0
+        ORDER BY a.student_number ASC
+    </select>
+
+    <select id="selectByStudentAndSubject" resultType="com.edumark.file.entity.AnswerSheet">
+        SELECT * FROM answer_sheet
+        WHERE student_id = #{studentId}
+          AND exam_subject_id = #{examSubjectId}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+</mapper>

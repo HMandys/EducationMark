@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.score.mapper.ScoreStatisticsMapper">
+
+    <resultMap id="ScoreStatisticsVOMap" type="com.edumark.score.vo.ScoreStatisticsVO">
+        <id column="id" property="id"/>
+        <result column="exam_id" property="examId"/>
+        <result column="exam_name" property="examName"/>
+        <result column="exam_subject_id" property="examSubjectId"/>
+        <result column="subject_name" property="subjectName"/>
+        <result column="class_id" property="classId"/>
+        <result column="class_name" property="className"/>
+        <result column="stat_type" property="statType"/>
+        <result column="student_count" property="studentCount"/>
+        <result column="full_score" property="fullScore"/>
+        <result column="max_score" property="maxScore"/>
+        <result column="min_score" property="minScore"/>
+        <result column="avg_score" property="avgScore"/>
+        <result column="pass_count" property="passCount"/>
+        <result column="pass_rate" property="passRate"/>
+        <result column="excellent_count" property="excellentCount"/>
+        <result column="excellent_rate" property="excellentRate"/>
+        <result column="score_segments" property="scoreSegments"
+                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+    </resultMap>
+
+    <select id="selectListByExamId" resultMap="ScoreStatisticsVOMap">
+        SELECT st.*,
+            e.name AS exam_name,
+            es.subject_name,
+            c.name AS class_name
+        FROM score_statistics st
+        LEFT JOIN exam e ON e.id = st.exam_id
+        LEFT JOIN exam_subject es ON es.id = st.exam_subject_id
+        LEFT JOIN class_info c ON c.id = st.class_id
+        WHERE st.exam_id = #{examId}
+        ORDER BY st.stat_type, c.name, es.sort
+    </select>
+
+    <select id="selectClassStatBySubject" resultMap="ScoreStatisticsVOMap">
+        SELECT st.*,
+            e.name AS exam_name,
+            es.subject_name,
+            c.name AS class_name
+        FROM score_statistics st
+        LEFT JOIN exam e ON e.id = st.exam_id
+        LEFT JOIN exam_subject es ON es.id = st.exam_subject_id
+        LEFT JOIN class_info c ON c.id = st.class_id
+        WHERE st.exam_subject_id = #{examSubjectId} AND st.stat_type = 1
+        ORDER BY c.name
+    </select>
+
+    <select id="selectGradeStatByExam" resultMap="ScoreStatisticsVOMap">
+        SELECT st.*,
+            e.name AS exam_name,
+            es.subject_name
+        FROM score_statistics st
+        LEFT JOIN exam e ON e.id = st.exam_id
+        LEFT JOIN exam_subject es ON es.id = st.exam_subject_id
+        WHERE st.exam_id = #{examId}
+        <if test="examSubjectId != null">
+            AND st.exam_subject_id = #{examSubjectId} AND st.stat_type = 3
+        </if>
+        <if test="examSubjectId == null">
+            AND st.exam_subject_id IS NULL AND st.stat_type = 4
+        </if>
+    </select>
+
+    <delete id="deleteByExamId">
+        DELETE FROM score_statistics WHERE exam_id = #{examId}
+    </delete>
+
+</mapper>

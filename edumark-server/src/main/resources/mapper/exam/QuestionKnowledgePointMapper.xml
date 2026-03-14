@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.exam.mapper.QuestionKnowledgePointMapper">
+
+    <delete id="deleteByQuestionId">
+        UPDATE question_knowledge_point SET deleted = 1 WHERE question_id = #{questionId}
+    </delete>
+
+</mapper>

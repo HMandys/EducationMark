@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.file.mapper.AnswerSheetImageMapper">
+
+    <resultMap id="AnswerSheetImageVOMap" type="com.edumark.file.vo.AnswerSheetImageVO">
+        <id column="id" property="id"/>
+        <result column="answer_sheet_id" property="answerSheetId"/>
+        <result column="page_num" property="pageNum"/>
+        <result column="image_path" property="imagePath"/>
+        <result column="image_url" property="imageUrl"/>
+        <result column="original_name" property="originalName"/>
+        <result column="file_size" property="fileSize"/>
+        <result column="width" property="width"/>
+        <result column="height" property="height"/>
+        <result column="sort" property="sort"/>
+    </resultMap>
+
+    <select id="selectListByAnswerSheetId" resultMap="AnswerSheetImageVOMap">
+        SELECT * FROM answer_sheet_image
+        WHERE answer_sheet_id = #{answerSheetId} AND deleted = 0
+        ORDER BY sort ASC, page_num ASC
+    </select>
+
+    <update id="deleteByAnswerSheetId">
+        UPDATE answer_sheet_image SET deleted = 1 WHERE answer_sheet_id = #{answerSheetId}
+    </update>
+
+</mapper>

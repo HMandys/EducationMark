@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.marking.mapper.MarkingRecordMapper">
+
+    <resultMap id="MarkingRecordVOMap" type="com.edumark.marking.vo.MarkingRecordVO">
+        <id column="id" property="id"/>
+        <result column="task_id" property="taskId"/>
+        <result column="answer_sheet_id" property="answerSheetId"/>
+        <result column="question_id" property="questionId"/>
+        <result column="student_id" property="studentId"/>
+        <result column="teacher_id" property="teacherId"/>
+        <result column="marking_role" property="markingRole"/>
+        <result column="score" property="score"/>
+        <result column="full_score" property="fullScore"/>
+        <result column="comment" property="comment"/>
+        <result column="marking_time" property="markingTime"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="teacher_name" property="teacherName"/>
+        <result column="student_name" property="studentName"/>
+        <result column="student_number" property="studentNumber"/>
+        <result column="question_no" property="questionNo"/>
+        <result column="answer_image_url" property="answerImageUrl"/>
+    </resultMap>
+
+    <select id="selectPageVO" resultMap="MarkingRecordVOMap">
+        SELECT
+            mr.*,
+            u.real_name AS teacher_name,
+            st.name AS student_name,
+            st.student_no AS student_number,
+            pq.question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
+        FROM marking_record mr
+        LEFT JOIN sys_user u ON mr.teacher_id = u.id
+        LEFT JOIN student st ON mr.student_id = st.id
+        LEFT JOIN paper_question pq ON mr.question_id = pq.id
+        WHERE mr.task_id = #{taskId}
+        <if test="teacherId != null">
+            AND mr.teacher_id = #{teacherId}
+        </if>
+        <if test="status != null">
+            AND mr.status = #{status}
+        </if>
+        ORDER BY mr.create_time
+    </select>
+
+    <select id="selectVOById" resultMap="MarkingRecordVOMap">
+        SELECT
+            mr.*,
+            u.real_name AS teacher_name,
+            st.name AS student_name,
+            st.student_no AS student_number,
+            pq.question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
+        FROM marking_record mr
+        LEFT JOIN sys_user u ON mr.teacher_id = u.id
+        LEFT JOIN student st ON mr.student_id = st.id
+        LEFT JOIN paper_question pq ON mr.question_id = pq.id
+        WHERE mr.id = #{id}
+    </select>
+
+    <select id="selectNextPending" resultMap="MarkingRecordVOMap">
+        SELECT
+            mr.*,
+            u.real_name AS teacher_name,
+            st.name AS student_name,
+            st.student_no AS student_number,
+            pq.question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
+        FROM marking_record mr
+        LEFT JOIN sys_user u ON mr.teacher_id = u.id
+        LEFT JOIN student st ON mr.student_id = st.id
+        LEFT JOIN paper_question pq ON mr.question_id = pq.id
+        WHERE mr.task_id = #{taskId}
+        AND mr.teacher_id = #{teacherId}
+        AND mr.status = 0
+        ORDER BY mr.id
+        LIMIT 1
+    </select>
+
+    <select id="selectByAnswerSheetAndQuestion" resultType="com.edumark.marking.entity.MarkingRecord">
+        SELECT * FROM marking_record
+        WHERE answer_sheet_id = #{answerSheetId}
+        AND question_id = #{questionId}
+        ORDER BY marking_role
+    </select>
+</mapper>

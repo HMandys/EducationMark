@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.exam.mapper.PaperMapper">
+
+    <resultMap id="PaperMap" type="com.edumark.exam.entity.Paper">
+        <id column="id" property="id"/>
+        <result column="exam_subject_id" property="examSubjectId"/>
+        <result column="name" property="name"/>
+        <result column="code" property="code"/>
+        <result column="type" property="type"/>
+        <result column="total_score" property="totalScore"/>
+        <result column="question_count" property="questionCount"/>
+        <result column="objective_count" property="objectiveCount"/>
+        <result column="subjective_count" property="subjectiveCount"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="exam_name" property="examName"/>
+        <result column="subject_name" property="subjectName"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectByExamSubjectId" resultMap="PaperMap">
+        SELECT p.*,
+            e.name AS exam_name,
+            es.subject_name AS subject_name
+        FROM paper p
+        LEFT JOIN exam_subject es ON es.id = p.exam_subject_id
+        LEFT JOIN exam e ON e.id = es.exam_id
+        WHERE p.exam_subject_id = #{examSubjectId} AND p.deleted = 0
+        LIMIT 1
+    </select>
+
+</mapper>

@@ -1,0 +1,620 @@
+package com.edumark.score.service.impl;
+
+import com.alibaba.excel.EasyExcel;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.edumark.common.exception.BusinessException;
+import com.edumark.common.result.PageResult;
+import com.edumark.exam.entity.Exam;
+import com.edumark.exam.entity.ExamClass;
+import com.edumark.exam.entity.ExamSubject;
+import com.edumark.exam.mapper.ExamClassMapper;
+import com.edumark.exam.mapper.ExamMapper;
+import com.edumark.exam.mapper.ExamSubjectMapper;
+import com.edumark.file.entity.AnswerSheet;
+import com.edumark.file.mapper.AnswerSheetMapper;
+import com.edumark.school.entity.Student;
+import com.edumark.school.mapper.StudentMapper;
+import com.edumark.score.dto.ScoreQueryDTO;
+import com.edumark.score.entity.*;
+import com.edumark.score.mapper.*;
+import com.edumark.score.service.ScoreService;
+import com.edumark.score.vo.ExamScoreVO;
+import com.edumark.score.vo.ScoreStatisticsVO;
+import com.edumark.score.vo.SubjectScoreVO;
+import jakarta.annotation.Resource;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * 成绩服务实现
+ *
+ * @author EduMark
+ */
+@Service
+public class ScoreServiceImpl implements ScoreService {
+
+    @Resource
+    private ExamScoreMapper examScoreMapper;
+
+    @Resource
+    private SubjectScoreMapper subjectScoreMapper;
+
+    @Resource
+    private ScoreStatisticsMapper statisticsMapper;
+
+    @Resource
+    private ScorePublishRecordMapper publishRecordMapper;
+
+    @Resource
+    private ExamMapper examMapper;
+
+    @Resource
+    private ExamSubjectMapper examSubjectMapper;
+
+    @Resource
+    private ExamClassMapper examClassMapper;
+
+    @Resource
+    private AnswerSheetMapper answerSheetMapper;
+
+    @Resource
+    private StudentMapper studentMapper;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void aggregateScores(Long examId) {
+        Exam exam = examMapper.selectById(examId);
+        if (exam == null) {
+            throw new BusinessException("考试不存在");
+        }
+
+        // 清除旧数据
+        examScoreMapper.deleteByExamId(examId);
+        subjectScoreMapper.deleteByExamId(examId);
+
+        // 查询考试科目
+        List<ExamSubject> subjects = examSubjectMapper.selectList(
+                new LambdaQueryWrapper<ExamSubject>()
+                        .eq(ExamSubject::getExamId, examId)
+                        .eq(ExamSubject::getStatus, 1)
+        );
+
+        // 查询所有答题卡(已完成阅卷的)
+        List<AnswerSheet> answerSheets = answerSheetMapper.selectList(
+                new LambdaQueryWrapper<AnswerSheet>()
+                        .eq(AnswerSheet::getExamId, examId)
+                        .eq(AnswerSheet::getStatus, 4) // 已完成
+        );
+
+        // 按学生分组
+        Map<Long, List<AnswerSheet>> studentSheets = answerSheets.stream()
+                .collect(Collectors.groupingBy(AnswerSheet::getStudentId));
+
+        // 查询学生信息
+        Set<Long> studentIds = studentSheets.keySet();
+        Map<Long, Student> studentMap = new HashMap<>();
+        if (!studentIds.isEmpty()) {
+            List<Student> students = studentMapper.selectBatchIds(studentIds);
+            studentMap = students.stream().collect(Collectors.toMap(Student::getId, s -> s));
+        }
+
+        // 汇总各科成绩和总分
+        for (Map.Entry<Long, List<AnswerSheet>> entry : studentSheets.entrySet()) {
+            Long studentId = entry.getKey();
+            List<AnswerSheet> sheets = entry.getValue();
+            Student student = studentMap.get(studentId);
+            if (student == null) continue;
+
+            BigDecimal totalScore = BigDecimal.ZERO;
+            int subjectCount = 0;
+
+            // 保存各科成绩
+            for (AnswerSheet sheet : sheets) {
+                SubjectScore subjectScore = new SubjectScore();
+                subjectScore.setExamId(examId);
+                subjectScore.setExamSubjectId(sheet.getExamSubjectId());
+                subjectScore.setStudentId(studentId);
+                subjectScore.setClassId(student.getClassId());
+                subjectScore.setAnswerSheetId(sheet.getId());
+                subjectScore.setScore(BigDecimal.valueOf(sheet.getTotalScore() != null ? sheet.getTotalScore() : 0));
+                subjectScore.setObjectiveScore(BigDecimal.valueOf(sheet.getObjectiveScore() != null ? sheet.getObjectiveScore() : 0));
+                subjectScore.setSubjectiveScore(BigDecimal.valueOf(sheet.getSubjectiveScore() != null ? sheet.getSubjectiveScore() : 0));
+                subjectScore.setCreateTime(LocalDateTime.now());
+                subjectScoreMapper.insert(subjectScore);
+
+                totalScore = totalScore.add(subjectScore.getScore());
+                subjectCount++;
+            }
+
+            // 保存总成绩
+            ExamScore examScore = new ExamScore();
+            examScore.setExamId(examId);
+            examScore.setStudentId(studentId);
+            examScore.setClassId(student.getClassId());
+            examScore.setTotalScore(totalScore);
+            examScore.setSubjectCount(subjectCount);
+            examScore.setCreateTime(LocalDateTime.now());
+            examScoreMapper.insert(examScore);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void calculateRanking(Long examId) {
+        // 计算年级排名(总分)
+        List<ExamScore> examScores = examScoreMapper.selectListByExamId(examId);
+        examScores.sort((a, b) -> b.getTotalScore().compareTo(a.getTotalScore()));
+
+        int gradeRank = 0;
+        BigDecimal lastScore = null;
+        for (int i = 0; i < examScores.size(); i++) {
+            ExamScore score = examScores.get(i);
+            if (lastScore == null || score.getTotalScore().compareTo(lastScore) != 0) {
+                gradeRank = i + 1;
+            }
+            score.setGradeRank(gradeRank);
+            lastScore = score.getTotalScore();
+        }
+
+        // 计算班级排名(总分)
+        Map<Long, List<ExamScore>> classScores = examScores.stream()
+                .collect(Collectors.groupingBy(ExamScore::getClassId));
+
+        for (List<ExamScore> scores : classScores.values()) {
+            scores.sort((a, b) -> b.getTotalScore().compareTo(a.getTotalScore()));
+            int classRank = 0;
+            lastScore = null;
+            for (int i = 0; i < scores.size(); i++) {
+                ExamScore score = scores.get(i);
+                if (lastScore == null || score.getTotalScore().compareTo(lastScore) != 0) {
+                    classRank = i + 1;
+                }
+                score.setClassRank(classRank);
+                lastScore = score.getTotalScore();
+            }
+        }
+
+        // 更新排名
+        for (ExamScore score : examScores) {
+            score.setUpdateTime(LocalDateTime.now());
+            examScoreMapper.updateById(score);
+        }
+
+        // 计算各科目排名
+        List<ExamSubject> subjects = examSubjectMapper.selectList(
+                new LambdaQueryWrapper<ExamSubject>().eq(ExamSubject::getExamId, examId)
+        );
+
+        for (ExamSubject subject : subjects) {
+            List<SubjectScore> subjectScores = subjectScoreMapper.selectListByExamSubjectId(subject.getId());
+
+            // 年级排名
+            subjectScores.sort((a, b) -> b.getScore().compareTo(a.getScore()));
+            gradeRank = 0;
+            lastScore = null;
+            for (int i = 0; i < subjectScores.size(); i++) {
+                SubjectScore score = subjectScores.get(i);
+                if (lastScore == null || score.getScore().compareTo(lastScore) != 0) {
+                    gradeRank = i + 1;
+                }
+                score.setGradeRank(gradeRank);
+                lastScore = score.getScore();
+            }
+
+            // 班级排名
+            Map<Long, List<SubjectScore>> classSubjectScores = subjectScores.stream()
+                    .collect(Collectors.groupingBy(SubjectScore::getClassId));
+
+            for (List<SubjectScore> scores : classSubjectScores.values()) {
+                scores.sort((a, b) -> b.getScore().compareTo(a.getScore()));
+                int classRank = 0;
+                lastScore = null;
+                for (int i = 0; i < scores.size(); i++) {
+                    SubjectScore score = scores.get(i);
+                    if (lastScore == null || score.getScore().compareTo(lastScore) != 0) {
+                        classRank = i + 1;
+                    }
+                    score.setClassRank(classRank);
+                    lastScore = score.getScore();
+                }
+            }
+
+            // 更新排名
+            for (SubjectScore score : subjectScores) {
+                score.setUpdateTime(LocalDateTime.now());
+                subjectScoreMapper.updateById(score);
+            }
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void calculateStatistics(Long examId) {
+        // 清除旧统计数据
+        statisticsMapper.deleteByExamId(examId);
+
+        Exam exam = examMapper.selectById(examId);
+        List<ExamSubject> subjects = examSubjectMapper.selectList(
+                new LambdaQueryWrapper<ExamSubject>().eq(ExamSubject::getExamId, examId)
+        );
+        List<ExamClass> examClasses = examClassMapper.selectListByExamId(examId);
+
+        // 1. 班级科目统计
+        for (ExamClass examClass : examClasses) {
+            for (ExamSubject subject : subjects) {
+                calculateClassSubjectStat(examId, subject, examClass.getClassId());
+            }
+            // 班级总分统计
+            calculateClassTotalStat(examId, examClass.getClassId(), subjects);
+        }
+
+        // 2. 年级科目统计
+        for (ExamSubject subject : subjects) {
+            calculateGradeSubjectStat(examId, subject);
+        }
+
+        // 3. 年级总分统计
+        calculateGradeTotalStat(examId, subjects);
+    }
+
+    private void calculateClassSubjectStat(Long examId, ExamSubject subject, Long classId) {
+        List<SubjectScore> scores = subjectScoreMapper.selectList(
+                new LambdaQueryWrapper<SubjectScore>()
+                        .eq(SubjectScore::getExamSubjectId, subject.getId())
+                        .eq(SubjectScore::getClassId, classId)
+        );
+
+        if (scores.isEmpty()) return;
+
+        ScoreStatistics stat = createStatistics(scores.stream().map(SubjectScore::getScore).toList(),
+                subject.getFullScore(), subject.getPassScore(), subject.getExcellentScore());
+        stat.setExamId(examId);
+        stat.setExamSubjectId(subject.getId());
+        stat.setClassId(classId);
+        stat.setStatType(1); // 班级科目
+        stat.setFullScore(BigDecimal.valueOf(subject.getFullScore()));
+        statisticsMapper.insert(stat);
+    }
+
+    private void calculateClassTotalStat(Long examId, Long classId, List<ExamSubject> subjects) {
+        List<ExamScore> scores = examScoreMapper.selectList(
+                new LambdaQueryWrapper<ExamScore>()
+                        .eq(ExamScore::getExamId, examId)
+                        .eq(ExamScore::getClassId, classId)
+        );
+
+        if (scores.isEmpty()) return;
+
+        int fullScore = subjects.stream().mapToInt(ExamSubject::getFullScore).sum();
+        int passScore = (int) (fullScore * 0.6);
+        int excellentScore = (int) (fullScore * 0.85);
+
+        ScoreStatistics stat = createStatistics(scores.stream().map(ExamScore::getTotalScore).toList(),
+                fullScore, passScore, excellentScore);
+        stat.setExamId(examId);
+        stat.setClassId(classId);
+        stat.setStatType(2); // 班级总分
+        stat.setFullScore(BigDecimal.valueOf(fullScore));
+        statisticsMapper.insert(stat);
+    }
+
+    private void calculateGradeSubjectStat(Long examId, ExamSubject subject) {
+        List<SubjectScore> scores = subjectScoreMapper.selectList(
+                new LambdaQueryWrapper<SubjectScore>()
+                        .eq(SubjectScore::getExamSubjectId, subject.getId())
+        );
+
+        if (scores.isEmpty()) return;
+
+        ScoreStatistics stat = createStatistics(scores.stream().map(SubjectScore::getScore).toList(),
+                subject.getFullScore(), subject.getPassScore(), subject.getExcellentScore());
+        stat.setExamId(examId);
+        stat.setExamSubjectId(subject.getId());
+        stat.setStatType(3); // 年级科目
+        stat.setFullScore(BigDecimal.valueOf(subject.getFullScore()));
+        statisticsMapper.insert(stat);
+    }
+
+    private void calculateGradeTotalStat(Long examId, List<ExamSubject> subjects) {
+        List<ExamScore> scores = examScoreMapper.selectListByExamId(examId);
+
+        if (scores.isEmpty()) return;
+
+        int fullScore = subjects.stream().mapToInt(ExamSubject::getFullScore).sum();
+        int passScore = (int) (fullScore * 0.6);
+        int excellentScore = (int) (fullScore * 0.85);
+
+        ScoreStatistics stat = createStatistics(scores.stream().map(ExamScore::getTotalScore).toList(),
+                fullScore, passScore, excellentScore);
+        stat.setExamId(examId);
+        stat.setStatType(4); // 年级总分
+        stat.setFullScore(BigDecimal.valueOf(fullScore));
+        statisticsMapper.insert(stat);
+    }
+
+    private ScoreStatistics createStatistics(List<BigDecimal> scores, int fullScore, Integer passScore, Integer excellentScore) {
+        ScoreStatistics stat = new ScoreStatistics();
+        stat.setStudentCount(scores.size());
+
+        BigDecimal max = scores.stream().max(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
+        BigDecimal min = scores.stream().min(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
+        BigDecimal sum = scores.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal avg = sum.divide(BigDecimal.valueOf(scores.size()), 1, RoundingMode.HALF_UP);
+
+        stat.setMaxScore(max);
+        stat.setMinScore(min);
+        stat.setAvgScore(avg);
+
+        // 及格率
+        if (passScore != null) {
+            long passCount = scores.stream().filter(s -> s.compareTo(BigDecimal.valueOf(passScore)) >= 0).count();
+            stat.setPassCount((int) passCount);
+            stat.setPassRate(BigDecimal.valueOf(passCount * 100.0 / scores.size()).setScale(2, RoundingMode.HALF_UP));
+        }
+
+        // 优秀率
+        if (excellentScore != null) {
+            long excellentCount = scores.stream().filter(s -> s.compareTo(BigDecimal.valueOf(excellentScore)) >= 0).count();
+            stat.setExcellentCount((int) excellentCount);
+            stat.setExcellentRate(BigDecimal.valueOf(excellentCount * 100.0 / scores.size()).setScale(2, RoundingMode.HALF_UP));
+        }
+
+        // 分数段统计
+        Map<String, Integer> segments = new LinkedHashMap<>();
+        int[] bounds = {0, 60, 70, 80, 90, 100};
+        for (int i = 0; i < bounds.length - 1; i++) {
+            int low = (int) (fullScore * bounds[i] / 100.0);
+            int high = (int) (fullScore * bounds[i + 1] / 100.0);
+            String key = bounds[i] + "-" + bounds[i + 1];
+            int finalI = i;
+            long count = scores.stream().filter(s -> {
+                double score = s.doubleValue();
+                if (finalI == bounds.length - 2) {
+                    return score >= low && score <= high;
+                }
+                return score >= low && score < high;
+            }).count();
+            segments.put(key, (int) count);
+        }
+        stat.setScoreSegments(segments);
+
+        stat.setCreateTime(LocalDateTime.now());
+        return stat;
+    }
+
+    @Override
+    public PageResult<ExamScoreVO> pageExamScores(ScoreQueryDTO query) {
+        Page<ExamScoreVO> page = new Page<>(query.getPageNum(), query.getPageSize());
+        examScoreMapper.selectPageVO(page, query);
+        return new PageResult<>(page.getRecords(), page.getTotal());
+    }
+
+    @Override
+    public PageResult<SubjectScoreVO> pageSubjectScores(ScoreQueryDTO query) {
+        Page<SubjectScoreVO> page = new Page<>(query.getPageNum(), query.getPageSize());
+        subjectScoreMapper.selectPageVO(page, query);
+        return new PageResult<>(page.getRecords(), page.getTotal());
+    }
+
+    @Override
+    public ExamScoreVO getStudentExamScore(Long examId, Long studentId) {
+        ExamScoreVO vo = examScoreMapper.selectVOByExamAndStudent(examId, studentId);
+        if (vo != null) {
+            List<SubjectScoreVO> subjectScores = subjectScoreMapper.selectListByExamAndStudent(examId, studentId);
+            vo.setSubjectScores(subjectScores);
+        }
+        return vo;
+    }
+
+    @Override
+    public List<ScoreStatisticsVO> getStatistics(Long examId, Long examSubjectId, Long classId) {
+        List<ScoreStatisticsVO> result = new ArrayList<>();
+
+        if (examSubjectId != null && classId != null) {
+            // 班级科目统计
+            result = statisticsMapper.selectList(
+                    new LambdaQueryWrapper<ScoreStatistics>()
+                            .eq(ScoreStatistics::getExamId, examId)
+                            .eq(ScoreStatistics::getExamSubjectId, examSubjectId)
+                            .eq(ScoreStatistics::getClassId, classId)
+            ).stream().map(this::toVO).toList();
+        } else if (examSubjectId != null) {
+            // 科目的班级对比
+            result = statisticsMapper.selectClassStatBySubject(examSubjectId);
+        } else if (classId != null) {
+            // 班级各科统计
+            result = statisticsMapper.selectList(
+                    new LambdaQueryWrapper<ScoreStatistics>()
+                            .eq(ScoreStatistics::getExamId, examId)
+                            .eq(ScoreStatistics::getClassId, classId)
+                            .in(ScoreStatistics::getStatType, 1, 2)
+            ).stream().map(this::toVO).toList();
+        } else {
+            // 年级整体统计
+            result = statisticsMapper.selectListByExamId(examId);
+        }
+
+        // 转换分数段为列表
+        for (ScoreStatisticsVO vo : result) {
+            if (vo.getScoreSegments() != null) {
+                List<ScoreStatisticsVO.ScoreSegmentVO> segmentList = new ArrayList<>();
+                for (Map.Entry<String, Integer> entry : vo.getScoreSegments().entrySet()) {
+                    segmentList.add(new ScoreStatisticsVO.ScoreSegmentVO(entry.getKey(), entry.getValue()));
+                }
+                vo.setSegmentList(segmentList);
+            }
+        }
+
+        return result;
+    }
+
+    private ScoreStatisticsVO toVO(ScoreStatistics stat) {
+        ScoreStatisticsVO vo = new ScoreStatisticsVO();
+        vo.setId(stat.getId());
+        vo.setExamId(stat.getExamId());
+        vo.setExamSubjectId(stat.getExamSubjectId());
+        vo.setClassId(stat.getClassId());
+        vo.setStatType(stat.getStatType());
+        vo.setStudentCount(stat.getStudentCount());
+        vo.setFullScore(stat.getFullScore());
+        vo.setMaxScore(stat.getMaxScore());
+        vo.setMinScore(stat.getMinScore());
+        vo.setAvgScore(stat.getAvgScore());
+        vo.setPassCount(stat.getPassCount());
+        vo.setPassRate(stat.getPassRate());
+        vo.setExcellentCount(stat.getExcellentCount());
+        vo.setExcellentRate(stat.getExcellentRate());
+        vo.setScoreSegments(stat.getScoreSegments());
+        return vo;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void publish(Long examId, Long userId) {
+        Exam exam = examMapper.selectById(examId);
+        if (exam == null) {
+            throw new BusinessException("考试不存在");
+        }
+        if (exam.getStatus() == 5) {
+            throw new BusinessException("成绩已发布");
+        }
+        if (exam.getStatus() < 4) {
+            throw new BusinessException("阅卷未完成，不能发布成绩");
+        }
+
+        // 汇总成绩
+        aggregateScores(examId);
+
+        // 计算排名
+        calculateRanking(examId);
+
+        // 计算统计
+        calculateStatistics(examId);
+
+        // 更新考试状态
+        exam.setStatus(5);
+        examMapper.updateById(exam);
+
+        // 记录发布
+        ScorePublishRecord record = new ScorePublishRecord();
+        record.setExamId(examId);
+        record.setPublishType(1);
+        record.setPublishTime(LocalDateTime.now());
+        record.setPublishBy(userId);
+        record.setCreateTime(LocalDateTime.now());
+        publishRecordMapper.insert(record);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unpublish(Long examId, Long userId) {
+        Exam exam = examMapper.selectById(examId);
+        if (exam == null) {
+            throw new BusinessException("考试不存在");
+        }
+        if (exam.getStatus() != 5) {
+            throw new BusinessException("成绩未发布");
+        }
+
+        // 更新考试状态
+        exam.setStatus(4);
+        examMapper.updateById(exam);
+
+        // 记录撤回
+        ScorePublishRecord record = new ScorePublishRecord();
+        record.setExamId(examId);
+        record.setPublishType(2);
+        record.setPublishTime(LocalDateTime.now());
+        record.setPublishBy(userId);
+        record.setCreateTime(LocalDateTime.now());
+        publishRecordMapper.insert(record);
+    }
+
+    @Override
+    public byte[] exportExcel(Long examId, Long classId) {
+        ScoreQueryDTO query = new ScoreQueryDTO();
+        query.setExamId(examId);
+        query.setClassId(classId);
+        query.setPageNum(1);
+        query.setPageSize(10000);
+
+        Page<ExamScoreVO> page = new Page<>(1, 10000);
+        examScoreMapper.selectPageVO(page, query);
+        List<ExamScoreVO> scores = page.getRecords();
+
+        // 查询各科成绩
+        for (ExamScoreVO score : scores) {
+            List<SubjectScoreVO> subjectScores = subjectScoreMapper.selectListByExamAndStudent(examId, score.getStudentId());
+            score.setSubjectScores(subjectScores);
+        }
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            // 转换为导出数据
+            List<ScoreExportData> exportData = scores.stream().map(s -> {
+                ScoreExportData data = new ScoreExportData();
+                data.setStudentName(s.getStudentName());
+                data.setStudentNumber(s.getStudentNumber());
+                data.setClassName(s.getClassName());
+                data.setTotalScore(s.getTotalScore() != null ? s.getTotalScore().toString() : "");
+                data.setClassRank(s.getClassRank() != null ? s.getClassRank().toString() : "");
+                data.setGradeRank(s.getGradeRank() != null ? s.getGradeRank().toString() : "");
+                return data;
+            }).toList();
+
+            EasyExcel.write(baos, ScoreExportData.class).sheet("成绩").doWrite(exportData);
+            return baos.toByteArray();
+        } catch (Exception e) {
+            throw new BusinessException("导出失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 成绩导出数据类
+     */
+    public static class ScoreExportData {
+        @com.alibaba.excel.annotation.ExcelProperty("姓名")
+        private String studentName;
+
+        @com.alibaba.excel.annotation.ExcelProperty("学号")
+        private String studentNumber;
+
+        @com.alibaba.excel.annotation.ExcelProperty("班级")
+        private String className;
+
+        @com.alibaba.excel.annotation.ExcelProperty("总分")
+        private String totalScore;
+
+        @com.alibaba.excel.annotation.ExcelProperty("班级排名")
+        private String classRank;
+
+        @com.alibaba.excel.annotation.ExcelProperty("年级排名")
+        private String gradeRank;
+
+        // Getters and Setters
+        public String getStudentName() { return studentName; }
+        public void setStudentName(String studentName) { this.studentName = studentName; }
+
+        public String getStudentNumber() { return studentNumber; }
+        public void setStudentNumber(String studentNumber) { this.studentNumber = studentNumber; }
+
+        public String getClassName() { return className; }
+        public void setClassName(String className) { this.className = className; }
+
+        public String getTotalScore() { return totalScore; }
+        public void setTotalScore(String totalScore) { this.totalScore = totalScore; }
+
+        public String getClassRank() { return classRank; }
+        public void setClassRank(String classRank) { this.classRank = classRank; }
+
+        public String getGradeRank() { return gradeRank; }
+        public void setGradeRank(String gradeRank) { this.gradeRank = gradeRank; }
+    }
+}

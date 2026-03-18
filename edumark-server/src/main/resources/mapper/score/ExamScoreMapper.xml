@@ -21,9 +21,9 @@
     <select id="selectPageVO" resultMap="ExamScoreVOMap">
         SELECT es.*,
             e.name AS exam_name,
-            s.name AS student_name,
-            s.student_number,
-            c.name AS class_name
+            s.student_name AS student_name,
+            s.student_code AS student_number,
+            c.class_name AS class_name
         FROM exam_score es
         LEFT JOIN exam e ON e.id = es.exam_id
         LEFT JOIN student s ON s.id = es.student_id
@@ -36,10 +36,10 @@
             AND es.class_id = #{query.classId}
         </if>
         <if test="query.studentName != null and query.studentName != ''">
-            AND s.name LIKE CONCAT('%', #{query.studentName}, '%')
+            AND s.student_name LIKE CONCAT('%', #{query.studentName}, '%')
         </if>
         <if test="query.studentNumber != null and query.studentNumber != ''">
-            AND s.student_number = #{query.studentNumber}
+            AND s.student_code = #{query.studentNumber}
         </if>
         ORDER BY es.total_score DESC, es.grade_rank ASC
     </select>
@@ -47,9 +47,9 @@
     <select id="selectVOByExamAndStudent" resultMap="ExamScoreVOMap">
         SELECT es.*,
             e.name AS exam_name,
-            s.name AS student_name,
-            s.student_number,
-            c.name AS class_name
+            s.student_name AS student_name,
+            s.student_code AS student_number,
+            c.class_name AS class_name
         FROM exam_score es
         LEFT JOIN exam e ON e.id = es.exam_id
         LEFT JOIN student s ON s.id = es.student_id

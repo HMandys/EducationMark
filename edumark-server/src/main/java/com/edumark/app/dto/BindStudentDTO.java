@@ -2,14 +2,12 @@ package com.edumark.app.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
 
 /**
  * 绑定学生参数
  *
  * @author EduMark
  */
-@Data
 @Schema(description = "绑定学生参数")
 public class BindStudentDTO {
 
@@ -24,4 +22,13 @@ public class BindStudentDTO {
     @NotBlank(message = "绑定码不能为空")
     @Schema(description = "绑定码")
     private String bindCode;
+
+    public String getStudentName() { return studentName; }
+    public void setStudentName(String studentName) { this.studentName = studentName; }
+
+    public String getStudentNumber() { return studentNumber; }
+    public void setStudentNumber(String studentNumber) { this.studentNumber = studentNumber; }
+
+    public String getBindCode() { return bindCode; }
+    public void setBindCode(String bindCode) { this.bindCode = bindCode; }
 }

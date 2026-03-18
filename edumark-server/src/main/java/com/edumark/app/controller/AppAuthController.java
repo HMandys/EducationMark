@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Tag(name = "App-认证接口")
 @RestController
-@RequestMapping("/api/app/auth")
+@RequestMapping("/app/auth")
 public class AppAuthController {
 
     @Operation(summary = "登录")

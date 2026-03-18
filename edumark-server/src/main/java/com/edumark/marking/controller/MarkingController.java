@@ -24,7 +24,7 @@ import java.util.List;
  */
 @Tag(name = "阅卷工作台")
 @RestController
-@RequestMapping("/api/marking")
+@RequestMapping("/marking")
 public class MarkingController {
 
     @Resource

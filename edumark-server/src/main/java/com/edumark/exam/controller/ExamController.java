@@ -21,7 +21,7 @@ import java.util.List;
  */
 @Tag(name = "考试管理")
 @RestController
-@RequestMapping("/api/exam")
+@RequestMapping("/exam")
 public class ExamController {
 
     @Resource

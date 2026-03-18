@@ -6,11 +6,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.edumark.common.exception.BusinessException;
 import com.edumark.common.result.PageResult;
 import com.edumark.exam.entity.Exam;
-import com.edumark.exam.entity.ExamClass;
 import com.edumark.exam.entity.ExamSubject;
 import com.edumark.exam.mapper.ExamClassMapper;
 import com.edumark.exam.mapper.ExamMapper;
 import com.edumark.exam.mapper.ExamSubjectMapper;
+import com.edumark.exam.vo.ExamVO;
 import com.edumark.file.entity.AnswerSheet;
 import com.edumark.file.mapper.AnswerSheetMapper;
 import com.edumark.school.entity.Student;
@@ -245,10 +245,10 @@ public class ScoreServiceImpl implements ScoreService {
         List<ExamSubject> subjects = examSubjectMapper.selectList(
                 new LambdaQueryWrapper<ExamSubject>().eq(ExamSubject::getExamId, examId)
         );
-        List<ExamClass> examClasses = examClassMapper.selectListByExamId(examId);
+        List<ExamVO.ExamClassVO> examClasses = examClassMapper.selectListByExamId(examId);
 
         // 1. 班级科目统计
-        for (ExamClass examClass : examClasses) {
+        for (ExamVO.ExamClassVO examClass : examClasses) {
             for (ExamSubject subject : subjects) {
                 calculateClassSubjectStat(examId, subject, examClass.getClassId());
             }

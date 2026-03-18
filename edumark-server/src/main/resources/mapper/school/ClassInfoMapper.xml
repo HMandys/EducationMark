@@ -21,10 +21,20 @@
     </resultMap>
 
     <select id="selectPageVO" resultMap="ClassInfoVOMap">
-        SELECT c.*,
-            s.name AS school_name,
-            g.name AS grade_name,
-            t.name AS head_teacher_name,
+        SELECT c.id,
+            c.school_id,
+            s.school_name AS school_name,
+            c.grade_id,
+            g.grade_name AS grade_name,
+            c.class_name AS name,
+            c.class_code AS code,
+            c.sort AS class_num,
+            c.head_teacher_id,
+            t.teacher_name AS head_teacher_name,
+            c.status,
+            c.sort,
+            '' AS remark,
+            c.create_time,
             (SELECT COUNT(1) FROM student st WHERE st.class_id = c.id AND st.deleted = 0) AS student_count
         FROM class_info c
         LEFT JOIN school s ON c.school_id = s.id
@@ -38,7 +48,7 @@
             AND c.grade_id = #{query.gradeId}
         </if>
         <if test="query.name != null and query.name != ''">
-            AND c.name LIKE CONCAT('%', #{query.name}, '%')
+            AND c.class_name LIKE CONCAT('%', #{query.name}, '%')
         </if>
         <if test="query.headTeacherId != null">
             AND c.head_teacher_id = #{query.headTeacherId}
@@ -46,14 +56,24 @@
         <if test="query.status != null">
             AND c.status = #{query.status}
         </if>
-        ORDER BY c.sort ASC, c.class_num ASC
+        ORDER BY c.sort ASC, c.create_time DESC
     </select>
 
     <select id="selectVOById" resultMap="ClassInfoVOMap">
-        SELECT c.*,
-            s.name AS school_name,
-            g.name AS grade_name,
-            t.name AS head_teacher_name,
+        SELECT c.id,
+            c.school_id,
+            s.school_name AS school_name,
+            c.grade_id,
+            g.grade_name AS grade_name,
+            c.class_name AS name,
+            c.class_code AS code,
+            c.sort AS class_num,
+            c.head_teacher_id,
+            t.teacher_name AS head_teacher_name,
+            c.status,
+            c.sort,
+            '' AS remark,
+            c.create_time,
             (SELECT COUNT(1) FROM student st WHERE st.class_id = c.id AND st.deleted = 0) AS student_count
         FROM class_info c
         LEFT JOIN school s ON c.school_id = s.id
@@ -63,25 +83,39 @@
     </select>
 
     <select id="selectListByGradeId" resultMap="ClassInfoVOMap">
-        SELECT id, school_id, grade_id, name, code, class_num
+        SELECT id,
+            school_id,
+            grade_id,
+            class_name AS name,
+            class_code AS code,
+            sort AS class_num,
+            sort,
+            '' AS remark
         FROM class_info
         WHERE grade_id = #{gradeId} AND deleted = 0
         <if test="status != null">
             AND status = #{status}
         </if>
-        ORDER BY sort ASC, class_num ASC
+        ORDER BY sort ASC, create_time DESC
     </select>
 
     <select id="selectListBySchoolId" resultMap="ClassInfoVOMap">
-        SELECT c.id, c.school_id, c.grade_id, c.name, c.code, c.class_num,
-            g.name AS grade_name
+        SELECT c.id,
+            c.school_id,
+            c.grade_id,
+            c.class_name AS name,
+            c.class_code AS code,
+            c.sort AS class_num,
+            c.sort,
+            '' AS remark,
+            g.grade_name AS grade_name
         FROM class_info c
         LEFT JOIN grade g ON c.grade_id = g.id
         WHERE c.school_id = #{schoolId} AND c.deleted = 0
         <if test="status != null">
             AND c.status = #{status}
         </if>
-        ORDER BY g.grade_num ASC, c.class_num ASC
+        ORDER BY g.sort ASC, c.sort ASC
     </select>
 
 </mapper>

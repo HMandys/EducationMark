@@ -23,21 +23,34 @@
     </resultMap>
 
     <select id="selectPageVO" resultMap="TeacherVOMap">
-        SELECT t.*,
-            s.name AS school_name,
-            u.username AS username
+        SELECT t.id,
+            t.school_id,
+            s.school_name AS school_name,
+            NULL AS user_id,
+            NULL AS username,
+            t.teacher_code AS job_number,
+            t.teacher_name AS name,
+            t.gender,
+            t.phone,
+            t.email,
+            NULL AS id_card,
+            t.subject,
+            t.title,
+            NULL AS entry_date,
+            t.status,
+            '' AS remark,
+            t.create_time
         FROM teacher t
         LEFT JOIN school s ON t.school_id = s.id
-        LEFT JOIN sys_user u ON t.user_id = u.id
         WHERE t.deleted = 0
         <if test="query.schoolId != null">
             AND t.school_id = #{query.schoolId}
         </if>
         <if test="query.jobNumber != null and query.jobNumber != ''">
-            AND t.job_number = #{query.jobNumber}
+            AND t.teacher_code = #{query.jobNumber}
         </if>
         <if test="query.name != null and query.name != ''">
-            AND t.name LIKE CONCAT('%', #{query.name}, '%')
+            AND t.teacher_name LIKE CONCAT('%', #{query.name}, '%')
         </if>
         <if test="query.phone != null and query.phone != ''">
             AND t.phone = #{query.phone}
@@ -52,23 +65,41 @@
     </select>
 
     <select id="selectVOById" resultMap="TeacherVOMap">
-        SELECT t.*,
-            s.name AS school_name,
-            u.username AS username
+        SELECT t.id,
+            t.school_id,
+            s.school_name AS school_name,
+            NULL AS user_id,
+            NULL AS username,
+            t.teacher_code AS job_number,
+            t.teacher_name AS name,
+            t.gender,
+            t.phone,
+            t.email,
+            NULL AS id_card,
+            t.subject,
+            t.title,
+            NULL AS entry_date,
+            t.status,
+            '' AS remark,
+            t.create_time
         FROM teacher t
         LEFT JOIN school s ON t.school_id = s.id
-        LEFT JOIN sys_user u ON t.user_id = u.id
         WHERE t.id = #{id} AND t.deleted = 0
     </select>
 
     <select id="selectListBySchoolId" resultMap="TeacherVOMap">
-        SELECT id, school_id, name, job_number, subject
+        SELECT id,
+            school_id,
+            teacher_name AS name,
+            teacher_code AS job_number,
+            subject,
+            '' AS remark
         FROM teacher
         WHERE school_id = #{schoolId} AND deleted = 0
         <if test="status != null">
             AND status = #{status}
         </if>
-        ORDER BY name ASC
+        ORDER BY teacher_name ASC
     </select>
 
     <select id="selectByUserId" resultType="com.edumark.school.entity.Teacher">

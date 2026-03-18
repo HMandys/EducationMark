@@ -21,7 +21,7 @@ import java.util.Map;
  */
 @Tag(name = "App-考试与成绩")
 @RestController
-@RequestMapping("/api/app")
+@RequestMapping("/app")
 public class AppExamController {
 
     @Resource

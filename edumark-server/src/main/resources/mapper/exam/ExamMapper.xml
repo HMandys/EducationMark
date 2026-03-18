@@ -26,8 +26,8 @@
 
     <select id="selectPageVO" resultMap="ExamVOMap">
         SELECT e.*,
-            s.name AS school_name,
-            g.name AS grade_name,
+            s.school_name AS school_name,
+            g.grade_name AS grade_name,
             (SELECT COUNT(1) FROM exam_subject es WHERE es.exam_id = e.id AND es.deleted = 0) AS subject_count
         FROM exam e
         LEFT JOIN school s ON s.id = e.school_id
@@ -38,9 +38,6 @@
         </if>
         <if test="query.name != null and query.name != ''">
             AND e.name LIKE CONCAT('%', #{query.name}, '%')
-        </if>
-        <if test="query.code != null and query.code != ''">
-            AND e.code = #{query.code}
         </if>
         <if test="query.type != null">
             AND e.type = #{query.type}
@@ -62,8 +59,8 @@
 
     <select id="selectVOById" resultMap="ExamVOMap">
         SELECT e.*,
-            s.name AS school_name,
-            g.name AS grade_name,
+            s.school_name AS school_name,
+            g.grade_name AS grade_name,
             (SELECT COUNT(1) FROM exam_subject es WHERE es.exam_id = e.id AND es.deleted = 0) AS subject_count
         FROM exam e
         LEFT JOIN school s ON s.id = e.school_id

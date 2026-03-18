@@ -19,8 +19,17 @@
     </resultMap>
 
     <select id="selectPageVO" resultMap="GradeVOMap">
-        SELECT g.*,
-            s.name AS school_name,
+        SELECT g.id,
+            g.school_id,
+            s.school_name AS school_name,
+            g.grade_name AS name,
+            g.grade_code AS code,
+            NULL AS enroll_year,
+            g.sort AS grade_num,
+            g.status,
+            g.sort,
+            '' AS remark,
+            g.create_time,
             (SELECT COUNT(1) FROM class_info c WHERE c.grade_id = g.id AND c.deleted = 0) AS class_count,
             (SELECT COUNT(1) FROM student st JOIN class_info c ON st.class_id = c.id
              WHERE c.grade_id = g.id AND st.deleted = 0 AND c.deleted = 0) AS student_count
@@ -31,10 +40,7 @@
             AND g.school_id = #{query.schoolId}
         </if>
         <if test="query.name != null and query.name != ''">
-            AND g.name LIKE CONCAT('%', #{query.name}, '%')
-        </if>
-        <if test="query.enrollYear != null">
-            AND g.enroll_year = #{query.enrollYear}
+            AND g.grade_name LIKE CONCAT('%', #{query.name}, '%')
         </if>
         <if test="query.status != null">
             AND g.status = #{query.status}
@@ -43,8 +49,17 @@
     </select>
 
     <select id="selectVOById" resultMap="GradeVOMap">
-        SELECT g.*,
-            s.name AS school_name,
+        SELECT g.id,
+            g.school_id,
+            s.school_name AS school_name,
+            g.grade_name AS name,
+            g.grade_code AS code,
+            NULL AS enroll_year,
+            g.sort AS grade_num,
+            g.status,
+            g.sort,
+            '' AS remark,
+            g.create_time,
             (SELECT COUNT(1) FROM class_info c WHERE c.grade_id = g.id AND c.deleted = 0) AS class_count,
             (SELECT COUNT(1) FROM student st JOIN class_info c ON st.class_id = c.id
              WHERE c.grade_id = g.id AND st.deleted = 0 AND c.deleted = 0) AS student_count
@@ -54,13 +69,20 @@
     </select>
 
     <select id="selectListBySchoolId" resultMap="GradeVOMap">
-        SELECT id, school_id, name, code, enroll_year, grade_num
+        SELECT id,
+            school_id,
+            grade_name AS name,
+            grade_code AS code,
+            NULL AS enroll_year,
+            sort AS grade_num,
+            sort,
+            '' AS remark
         FROM grade
         WHERE school_id = #{schoolId} AND deleted = 0
         <if test="status != null">
             AND status = #{status}
         </if>
-        ORDER BY sort ASC, grade_num ASC
+        ORDER BY sort ASC, create_time DESC
     </select>
 
 </mapper>

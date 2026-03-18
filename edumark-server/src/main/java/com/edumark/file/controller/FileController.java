@@ -18,7 +18,7 @@ import java.util.List;
  */
 @Tag(name = "文件管理")
 @RestController
-@RequestMapping("/api/file")
+@RequestMapping("/file")
 public class FileController {
 
     @Resource

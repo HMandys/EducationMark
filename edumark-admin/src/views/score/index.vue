@@ -27,7 +27,6 @@
             clearable
             style="width: 150px"
           >
-            <el-option label="全部科目(总分)" :value="undefined" />
             <el-option
               v-for="subject in subjectList"
               :key="subject.id"
@@ -363,11 +362,11 @@ let classCompareChart: echarts.ECharts | null = null
 const loadExamList = async () => {
   try {
     const res = await getExamPage({ pageNum: 1, pageSize: 100, status: 5 }) // 已发布成绩的考试
-    examList.value = res.data.records
+    examList.value = res.data.list
 
     // 同时加载阅卷完成待发布的考试
     const res2 = await getExamPage({ pageNum: 1, pageSize: 100, status: 4 })
-    examList.value = [...examList.value, ...res2.data.records]
+    examList.value = [...examList.value, ...res2.data.list]
   } catch (error) {
     console.error('加载考试列表失败', error)
   }
@@ -411,12 +410,12 @@ const handleSearch = async () => {
     if (queryForm.examSubjectId) {
       // 查询科目成绩
       const res = await getSubjectScorePage(queryForm)
-      subjectScoreList.value = res.data.records
+      subjectScoreList.value = res.data.list
       total.value = res.data.total
     } else {
       // 查询总分成绩
       const res = await getExamScorePage(queryForm)
-      examScoreList.value = res.data.records
+      examScoreList.value = res.data.list
       total.value = res.data.total
     }
   } catch (error) {
@@ -559,7 +558,7 @@ const handlePublish = async () => {
   await ElMessageBox.confirm('确定要发布成绩吗？发布后学生和家长可以查看成绩。', '提示', { type: 'warning' })
 
   try {
-    await publishScore(queryForm.examId!, userStore.userInfo?.id || 0)
+    await publishScore(queryForm.examId!, userStore.userInfo?.userId || 0)
     ElMessage.success('发布成功')
     await loadExamList()
     await handleExamChange()
@@ -573,7 +572,7 @@ const handleUnpublish = async () => {
   await ElMessageBox.confirm('确定要撤回成绩吗？撤回后学生和家长将无法查看成绩。', '提示', { type: 'warning' })
 
   try {
-    await unpublishScore(queryForm.examId!, userStore.userInfo?.id || 0)
+    await unpublishScore(queryForm.examId!, userStore.userInfo?.userId || 0)
     ElMessage.success('撤回成功')
     await loadExamList()
     await handleExamChange()

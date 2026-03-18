@@ -18,7 +18,7 @@ import java.util.List;
  */
 @Tag(name = "App-学生管理")
 @RestController
-@RequestMapping("/api/app/student")
+@RequestMapping("/app/student")
 public class AppStudentController {
 
     @Operation(summary = "获取已绑定学生列表（家长）")

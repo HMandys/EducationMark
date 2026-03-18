@@ -26,8 +26,8 @@
         SELECT a.*,
             e.name AS exam_name,
             es.subject_name AS subject_name,
-            s.name AS student_name,
-            c.name AS class_name
+            s.student_name AS student_name,
+            c.class_name AS class_name
         FROM answer_sheet a
         LEFT JOIN exam e ON e.id = a.exam_id
         LEFT JOIN exam_subject es ON es.id = a.exam_subject_id
@@ -47,7 +47,7 @@
             AND a.student_number = #{query.studentNumber}
         </if>
         <if test="query.studentName != null and query.studentName != ''">
-            AND s.name LIKE CONCAT('%', #{query.studentName}, '%')
+            AND s.student_name LIKE CONCAT('%', #{query.studentName}, '%')
         </if>
         <if test="query.classId != null">
             AND s.class_id = #{query.classId}
@@ -62,8 +62,8 @@
         SELECT a.*,
             e.name AS exam_name,
             es.subject_name AS subject_name,
-            s.name AS student_name,
-            c.name AS class_name
+            s.student_name AS student_name,
+            c.class_name AS class_name
         FROM answer_sheet a
         LEFT JOIN exam e ON e.id = a.exam_id
         LEFT JOIN exam_subject es ON es.id = a.exam_subject_id
@@ -76,8 +76,8 @@
         SELECT a.*,
             e.name AS exam_name,
             es.subject_name AS subject_name,
-            s.name AS student_name,
-            c.name AS class_name
+            s.student_name AS student_name,
+            c.class_name AS class_name
         FROM answer_sheet a
         LEFT JOIN exam e ON e.id = a.exam_id
         LEFT JOIN exam_subject es ON es.id = a.exam_subject_id

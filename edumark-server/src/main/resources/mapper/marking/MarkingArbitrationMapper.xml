@@ -32,7 +32,7 @@
     <select id="selectPageVO" resultMap="MarkingArbitrationVOMap">
         SELECT
             ma.*,
-            st.name AS student_name,
+            st.student_name AS student_name,
             u1.real_name AS first_teacher_name,
             u2.real_name AS second_teacher_name,
             u3.real_name AS arbitration_teacher_name,
@@ -54,7 +54,7 @@
     <select id="selectVOById" resultMap="MarkingArbitrationVOMap">
         SELECT
             ma.*,
-            st.name AS student_name,
+            st.student_name AS student_name,
             u1.real_name AS first_teacher_name,
             u2.real_name AS second_teacher_name,
             u3.real_name AS arbitration_teacher_name,
@@ -72,7 +72,7 @@
     <select id="selectNextPending" resultMap="MarkingArbitrationVOMap">
         SELECT
             ma.*,
-            st.name AS student_name,
+            st.student_name AS student_name,
             u1.real_name AS first_teacher_name,
             u2.real_name AS second_teacher_name,
             pq.question_no,

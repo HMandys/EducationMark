@@ -125,7 +125,7 @@ export function unpublishScore(examId: number, userId: number) {
 
 // 导出成绩Excel
 export function exportScoreExcel(examId: number, classId?: number) {
-  return request.get(`/score/export/${examId}`, {
+  return request.getRaw<Blob>(`/score/export/${examId}`, {
     params: { classId },
     responseType: 'blob',
   })

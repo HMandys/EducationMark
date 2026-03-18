@@ -22,9 +22,9 @@
         SELECT ss.*,
             es.subject_name,
             es.full_score,
-            s.name AS student_name,
-            s.student_number,
-            c.name AS class_name
+            s.student_name AS student_name,
+            s.student_code AS student_number,
+            c.class_name AS class_name
         FROM subject_score ss
         LEFT JOIN exam_subject es ON es.id = ss.exam_subject_id
         LEFT JOIN student s ON s.id = ss.student_id
@@ -40,10 +40,10 @@
             AND ss.class_id = #{query.classId}
         </if>
         <if test="query.studentName != null and query.studentName != ''">
-            AND s.name LIKE CONCAT('%', #{query.studentName}, '%')
+            AND s.student_name LIKE CONCAT('%', #{query.studentName}, '%')
         </if>
         <if test="query.studentNumber != null and query.studentNumber != ''">
-            AND s.student_number = #{query.studentNumber}
+            AND s.student_code = #{query.studentNumber}
         </if>
         ORDER BY ss.score DESC, ss.grade_rank ASC
     </select>
@@ -52,9 +52,9 @@
         SELECT ss.*,
             es.subject_name,
             es.full_score,
-            s.name AS student_name,
-            s.student_number,
-            c.name AS class_name
+            s.student_name AS student_name,
+            s.student_code AS student_number,
+            c.class_name AS class_name
         FROM subject_score ss
         LEFT JOIN exam_subject es ON es.id = ss.exam_subject_id
         LEFT JOIN student s ON s.id = ss.student_id

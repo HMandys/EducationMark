@@ -16,24 +16,24 @@
             psb.id AS bind_id,
             psb.student_id,
             psb.relation,
-            s.name AS student_name,
-            s.student_number,
-            c.name AS class_name
+            s.student_name AS student_name,
+            s.student_code AS student_number,
+            c.class_name AS class_name
         FROM parent_student_bind psb
         LEFT JOIN student s ON psb.student_id = s.id
         LEFT JOIN class_info c ON s.class_id = c.id
-        WHERE psb.parent_id = #{parentId} AND psb.deleted = 0 AND s.deleted = 0
+        WHERE psb.parent_id = #{parentId} AND s.deleted = 0
         ORDER BY psb.create_time ASC
     </select>
 
     <select id="selectByStudentId" resultType="com.edumark.school.entity.ParentStudentBind">
         SELECT * FROM parent_student_bind
-        WHERE student_id = #{studentId} AND deleted = 0
+        WHERE student_id = #{studentId}
     </select>
 
     <select id="selectByParentAndStudent" resultType="com.edumark.school.entity.ParentStudentBind">
         SELECT * FROM parent_student_bind
-        WHERE parent_id = #{parentId} AND student_id = #{studentId} AND deleted = 0
+        WHERE parent_id = #{parentId} AND student_id = #{studentId}
     </select>
 
 </mapper>

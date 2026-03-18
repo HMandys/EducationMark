@@ -27,8 +27,8 @@
         SELECT
             mr.*,
             u.real_name AS teacher_name,
-            st.name AS student_name,
-            st.student_no AS student_number,
+            st.student_name AS student_name,
+            st.student_code AS student_number,
             pq.question_no,
             (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
         FROM marking_record mr
@@ -49,8 +49,8 @@
         SELECT
             mr.*,
             u.real_name AS teacher_name,
-            st.name AS student_name,
-            st.student_no AS student_number,
+            st.student_name AS student_name,
+            st.student_code AS student_number,
             pq.question_no,
             (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
         FROM marking_record mr
@@ -64,8 +64,8 @@
         SELECT
             mr.*,
             u.real_name AS teacher_name,
-            st.name AS student_name,
-            st.student_no AS student_number,
+            st.student_name AS student_name,
+            st.student_code AS student_number,
             pq.question_no,
             (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
         FROM marking_record mr

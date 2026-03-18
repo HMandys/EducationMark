@@ -17,6 +17,9 @@ public class ExamQueryDTO extends PageQuery {
     @Schema(description = "考试名称(模糊)")
     private String name;
 
+    @Schema(description = "考试编码")
+    private String code;
+
     @Schema(description = "考试类型")
     private Integer type;
 
@@ -38,6 +41,9 @@ public class ExamQueryDTO extends PageQuery {
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
 
     public Integer getType() { return type; }
     public void setType(Integer type) { this.type = type; }

@@ -16,7 +16,7 @@ import java.util.Map;
  */
 @Tag(name = "App-答题卡查看")
 @RestController
-@RequestMapping("/api/app/answer-sheet")
+@RequestMapping("/app/answer-sheet")
 public class AppAnswerSheetController {
 
     @Operation(summary = "获取学生的答题卡列表")

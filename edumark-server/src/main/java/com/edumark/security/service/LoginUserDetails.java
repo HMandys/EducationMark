@@ -7,6 +7,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -46,6 +47,9 @@ public class LoginUserDetails implements UserDetails {
             return List.of();
         }
         return permissions.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(permission -> !permission.isEmpty())
                 .map(SimpleGrantedAuthority::new)
                 .collect(Collectors.toList());
     }

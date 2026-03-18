@@ -22,7 +22,7 @@ import java.util.List;
  */
 @Tag(name = "家长管理")
 @RestController
-@RequestMapping("/api/parent")
+@RequestMapping("/parent")
 public class ParentController {
 
     @Resource

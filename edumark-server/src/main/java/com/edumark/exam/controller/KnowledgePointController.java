@@ -20,7 +20,7 @@ import java.util.List;
  */
 @Tag(name = "知识点管理")
 @RestController
-@RequestMapping("/api/knowledge-point")
+@RequestMapping("/knowledge-point")
 public class KnowledgePointController {
 
     @Resource

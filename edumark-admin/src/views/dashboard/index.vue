@@ -1,368 +1,453 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 
+const router = useRouter()
 const userStore = useUserStore()
 
-// 统计卡片数据
+const todayText = computed(() => {
+  return new Date().toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+  })
+})
+
 const statsCards = ref([
   {
-    title: '考试总数',
-    value: 128,
-    icon: 'Document',
-    color: '#409eff',
-    bgColor: 'rgba(64, 158, 255, 0.1)',
+    title: '考试总量',
+    value: '128',
     suffix: '场',
+    detail: '本学期已归档 93 场，进行中 12 场',
+    icon: 'Tickets',
+    tone: 'primary',
   },
   {
-    title: '待阅卷任务',
-    value: 24,
-    icon: 'Edit',
-    color: '#e6a23c',
-    bgColor: 'rgba(230, 162, 60, 0.1)',
-    suffix: '份',
+    title: '待处理阅卷',
+    value: '24',
+    suffix: '项',
+    detail: '其中 6 项接近截止时间，需要优先处理',
+    icon: 'EditPen',
+    tone: 'warning',
   },
   {
-    title: '学生总数',
-    value: 3680,
-    icon: 'User',
-    color: '#67c23a',
-    bgColor: 'rgba(103, 194, 58, 0.1)',
+    title: '学生覆盖',
+    value: '3,680',
     suffix: '人',
+    detail: '覆盖 42 个班级，在线绑定率 88%',
+    icon: 'User',
+    tone: 'success',
   },
   {
-    title: '今日访问',
-    value: 512,
-    icon: 'View',
-    color: '#909399',
-    bgColor: 'rgba(144, 147, 153, 0.1)',
+    title: '成绩发布',
+    value: '16',
     suffix: '次',
+    detail: '最近 7 天新增 5 次发布操作',
+    icon: 'DataAnalysis',
+    tone: 'danger',
   },
 ])
 
-// 快捷入口
 const quickActions = ref([
-  { title: '创建考试', icon: 'Plus', path: '/exam/create', color: '#409eff' },
-  { title: '阅卷工作台', icon: 'Edit', path: '/marking/workspace', color: '#e6a23c' },
-  { title: '成绩查询', icon: 'Search', path: '/score/query', color: '#67c23a' },
-  { title: '数据报表', icon: 'DataAnalysis', path: '/report', color: '#f56c6c' },
+  { title: '考试管理', desc: '创建与发布考试计划', path: '/exam/list', icon: 'Document' },
+  { title: '答题卡模板', desc: '进入模板维护与编辑', path: '/answer-sheet-design/list', icon: 'DocumentCopy' },
+  { title: '阅卷工作台', desc: '处理任务分配与进度', path: '/marking/workspace', icon: 'Edit' },
+  { title: '成绩查询', desc: '查看统计与发布情况', path: '/score/list', icon: 'TrendCharts' },
+  { title: '用户管理', desc: '维护后台账号与角色', path: '/system/user', icon: 'UserFilled' },
+  { title: '学校管理', desc: '管理组织、年级和班级', path: '/school/list', icon: 'School' },
 ])
 
-// 最近考试
 const recentExams = ref([
-  { id: 1, name: '2024年春季期中考试', status: '已完成', date: '2024-04-15', subject: '数学' },
-  { id: 2, name: '高三模拟考试（一）', status: '阅卷中', date: '2024-04-12', subject: '综合' },
-  { id: 3, name: '初二单元测试', status: '待发布', date: '2024-04-10', subject: '英语' },
-  { id: 4, name: '高一月考', status: '已完成', date: '2024-04-08', subject: '物理' },
+  { id: 1, name: '高三二模联考', subject: '综合', schedule: '03-20 08:30', status: '进行中', owner: '教务处' },
+  { id: 2, name: '初二月考', subject: '数学', schedule: '03-21 14:00', status: '待发布', owner: '数学组' },
+  { id: 3, name: '高一英语阶段测', subject: '英语', schedule: '03-18 09:00', status: '已完成', owner: '英语组' },
+  { id: 4, name: '九年级期中统测', subject: '全科', schedule: '03-25 08:00', status: '待执行', owner: '年级组' },
 ])
 
-// 待办事项
+const teamBoard = ref([
+  { label: '组织管理', value: '学校、年级、班级、教师、学生、家长' },
+  { label: '考试资产', value: '考试、知识点、答题卡模板统一管理' },
+  { label: '系统配置', value: '角色授权、菜单控制、用户状态管理' },
+])
+
 const todoList = ref([
-  { id: 1, title: '完成高三模拟考试阅卷', priority: 'high', deadline: '2024-04-20' },
-  { id: 2, title: '发布期中考试成绩', priority: 'medium', deadline: '2024-04-22' },
-  { id: 3, title: '生成班级学情报告', priority: 'low', deadline: '2024-04-25' },
+  { title: '完成高三二模联考主观题复核', level: '高优先级', deadline: '今天 18:00 前' },
+  { title: '校验成绩发布名单与班级映射', level: '中优先级', deadline: '明天 10:00 前' },
+  { title: '补充初二英语知识点层级', level: '常规', deadline: '本周内' },
 ])
 
-const getPriorityTag = (priority: string): 'primary' | 'success' | 'warning' | 'info' | 'danger' => {
-  const map: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = {
-    high: 'danger',
-    medium: 'warning',
-    low: 'info',
-  }
-  return map[priority] || 'info'
+function handleNavigate(path: string) {
+  router.push(path)
 }
 
-const getPriorityText = (priority: string) => {
-  const map: Record<string, string> = {
-    high: '紧急',
-    medium: '一般',
-    low: '低',
-  }
-  return map[priority] || '未知'
-}
-
-const getStatusTag = (status: string): 'primary' | 'success' | 'warning' | 'info' | 'danger' => {
-  const map: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = {
-    '已完成': 'success',
-    '阅卷中': 'warning',
-    '待发布': 'info',
+function getStatusType(status: string): 'success' | 'warning' | 'info' | 'danger' {
+  const map: Record<string, 'success' | 'warning' | 'info' | 'danger'> = {
+    已完成: 'success',
+    进行中: 'warning',
+    待发布: 'info',
+    待执行: 'danger',
   }
   return map[status] || 'info'
 }
 </script>
 
 <template>
-  <div class="dashboard">
-    <!-- 欢迎信息 -->
-    <div class="welcome-section">
-      <h2>
-        欢迎回来，{{ userStore.realName || '管理员' }}
-        <span class="wave">👋</span>
-      </h2>
-      <p>{{ userStore.roleName || '超级管理员' }} | 今天是个好日子，继续努力！</p>
-    </div>
-
-    <!-- 统计卡片 -->
-    <el-row :gutter="20" class="stats-row">
-      <el-col v-for="card in statsCards" :key="card.title" :xs="24" :sm="12" :lg="6">
-        <div class="stats-card" :style="{ backgroundColor: card.bgColor }">
-          <div class="stats-icon" :style="{ backgroundColor: card.color }">
-            <el-icon :size="24"><component :is="card.icon" /></el-icon>
-          </div>
-          <div class="stats-info">
-            <div class="stats-value">
-              {{ card.value.toLocaleString() }}
-              <span class="stats-suffix">{{ card.suffix }}</span>
-            </div>
-            <div class="stats-title">{{ card.title }}</div>
-          </div>
+  <div class="page-container dashboard-page">
+    <section class="page-hero dashboard-hero">
+      <div>
+        <div class="page-hero__title">
+          {{ userStore.realName || '管理员' }}，今天的后台状态正常
         </div>
-      </el-col>
-    </el-row>
+        <div class="page-hero__desc">
+          你当前以「{{ userStore.roleName || '超级管理员' }}」身份登录。{{ todayText }}，建议优先查看阅卷任务与成绩发布。
+        </div>
+      </div>
 
-    <!-- 快捷入口 -->
-    <div class="section">
-      <h3 class="section-title">快捷入口</h3>
-      <el-row :gutter="20">
-        <el-col v-for="action in quickActions" :key="action.title" :xs="12" :sm="6">
-          <div class="quick-action" @click="$router.push(action.path)">
-            <div class="action-icon" :style="{ backgroundColor: action.color }">
-              <el-icon :size="28"><component :is="action.icon" /></el-icon>
-            </div>
-            <span class="action-title">{{ action.title }}</span>
+      <div class="page-hero__meta">
+        <div class="metric-chip">
+          <span>当前账号</span>
+          <strong>{{ userStore.userInfo?.username || 'admin' }}</strong>
+        </div>
+        <div class="metric-chip">
+          <span>权限数</span>
+          <strong>{{ userStore.permissions.length }}</strong>
+        </div>
+        <div class="metric-chip">
+          <span>系统状态</span>
+          <strong>运行中</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats-grid">
+      <article
+        v-for="card in statsCards"
+        :key="card.title"
+        class="stats-card"
+        :class="`stats-card--${card.tone}`"
+      >
+        <div class="stats-card__head">
+          <span>{{ card.title }}</span>
+          <el-icon :size="20"><component :is="card.icon" /></el-icon>
+        </div>
+        <div class="stats-card__value">
+          {{ card.value }}
+          <small>{{ card.suffix }}</small>
+        </div>
+        <p class="stats-card__detail">{{ card.detail }}</p>
+      </article>
+    </section>
+
+    <section class="dashboard-main">
+      <el-card class="panel-card quick-card" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <span>高频入口</span>
+            <div><el-tag type="primary">可直接跳转</el-tag></div>
           </div>
-        </el-col>
-      </el-row>
-    </div>
+        </template>
 
-    <!-- 内容区域 -->
-    <el-row :gutter="20">
-      <!-- 最近考试 -->
-      <el-col :xs="24" :lg="14">
-        <el-card class="section-card">
+        <div class="quick-grid">
+          <button
+            v-for="action in quickActions"
+            :key="action.title"
+            class="quick-item"
+            type="button"
+            @click="handleNavigate(action.path)"
+          >
+            <div class="quick-item__icon">
+              <el-icon :size="18"><component :is="action.icon" /></el-icon>
+            </div>
+            <div class="quick-item__content">
+              <strong>{{ action.title }}</strong>
+              <span>{{ action.desc }}</span>
+            </div>
+          </button>
+        </div>
+      </el-card>
+
+      <div class="dashboard-columns">
+        <el-card class="panel-card" shadow="never">
           <template #header>
             <div class="card-header">
-              <span>最近考试</span>
-              <el-button type="primary" link>查看全部</el-button>
+              <span>近期考试</span>
+              <div><el-button type="primary" link @click="handleNavigate('/exam/list')">进入考试管理</el-button></div>
             </div>
           </template>
 
-          <el-table :data="recentExams" stripe>
-            <el-table-column prop="name" label="考试名称" min-width="180" />
-            <el-table-column prop="subject" label="科目" width="80" />
-            <el-table-column prop="date" label="日期" width="120" />
-            <el-table-column prop="status" label="状态" width="100">
-              <template #default="{ row }">
-                <el-tag :type="getStatusTag(row.status)" size="small">
-                  {{ row.status }}
-                </el-tag>
-              </template>
-            </el-table-column>
-          </el-table>
+          <div class="exam-list">
+            <div v-for="item in recentExams" :key="item.id" class="exam-list__item">
+              <div>
+                <div class="exam-list__title">{{ item.name }}</div>
+                <div class="exam-list__meta">
+                  <span>{{ item.subject }}</span>
+                  <span>{{ item.schedule }}</span>
+                  <span>{{ item.owner }}</span>
+                </div>
+              </div>
+              <el-tag :type="getStatusType(item.status)">{{ item.status }}</el-tag>
+            </div>
+          </div>
         </el-card>
-      </el-col>
 
-      <!-- 待办事项 -->
-      <el-col :xs="24" :lg="10">
-        <el-card class="section-card">
-          <template #header>
-            <div class="card-header">
-              <span>待办事项</span>
-              <el-button type="primary" link>添加</el-button>
+        <div class="side-stack">
+          <el-card class="panel-card" shadow="never">
+            <template #header>
+              <div class="card-header">
+                <span>管理范围</span>
+                <div><el-tag type="info">全链路</el-tag></div>
+              </div>
+            </template>
+
+            <div class="board-list">
+              <div v-for="item in teamBoard" :key="item.label" class="board-list__item">
+                <span class="board-list__label">{{ item.label }}</span>
+                <span class="board-list__value">{{ item.value }}</span>
+              </div>
             </div>
-          </template>
+          </el-card>
 
-          <div class="todo-list">
-            <div v-for="todo in todoList" :key="todo.id" class="todo-item">
-              <el-checkbox />
-              <div class="todo-content">
-                <div class="todo-title">{{ todo.title }}</div>
-                <div class="todo-meta">
-                  <el-tag :type="getPriorityTag(todo.priority)" size="small">
-                    {{ getPriorityText(todo.priority) }}
-                  </el-tag>
-                  <span class="todo-deadline">截止: {{ todo.deadline }}</span>
+          <el-card class="panel-card" shadow="never">
+            <template #header>
+              <div class="card-header">
+                <span>待办提醒</span>
+                <div><el-tag type="warning">3 项</el-tag></div>
+              </div>
+            </template>
+
+            <div class="todo-list">
+              <div v-for="item in todoList" :key="item.title" class="todo-item">
+                <div class="todo-item__dot"></div>
+                <div class="todo-item__content">
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.level }} · {{ item.deadline }}</span>
                 </div>
               </div>
             </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+          </el-card>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
 <style lang="scss" scoped>
-.dashboard {
-  max-width: 1400px;
+.dashboard-page {
+  gap: 18px;
 }
 
-.welcome-section {
-  margin-bottom: 24px;
-
-  h2 {
-    font-size: 24px;
-    font-weight: 600;
-    color: #333;
-    margin: 0 0 8px;
-
-    .wave {
-      display: inline-block;
-      animation: wave 1.5s infinite;
-    }
-  }
-
-  p {
-    color: #666;
-    margin: 0;
-  }
+.dashboard-hero {
+  align-items: center;
 }
 
-@keyframes wave {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(20deg); }
-  75% { transform: rotate(-10deg); }
-}
-
-.stats-row {
-  margin-bottom: 24px;
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .stats-card {
+  padding: 20px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow);
+}
+
+.stats-card__head {
   display: flex;
   align-items: center;
-  padding: 20px;
-  border-radius: 12px;
-  transition: transform 0.2s, box-shadow 0.2s;
-
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  }
-
-  .stats-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    margin-right: 16px;
-  }
-
-  .stats-info {
-    .stats-value {
-      font-size: 28px;
-      font-weight: 600;
-      color: #333;
-      line-height: 1.2;
-
-      .stats-suffix {
-        font-size: 14px;
-        font-weight: normal;
-        color: #999;
-        margin-left: 4px;
-      }
-    }
-
-    .stats-title {
-      font-size: 14px;
-      color: #666;
-      margin-top: 4px;
-    }
-  }
+  justify-content: space-between;
+  color: var(--app-text-secondary);
 }
 
-.section {
-  margin-bottom: 24px;
-
-  .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #333;
-    margin: 0 0 16px;
-  }
+.stats-card__value {
+  margin-top: 20px;
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--app-text);
 }
 
-.quick-action {
+.stats-card__value small {
+  margin-left: 6px;
+  font-size: 14px;
+  color: var(--app-text-tertiary);
+}
+
+.stats-card__detail {
+  margin-top: 12px;
+  line-height: 1.7;
+  color: var(--app-text-secondary);
+}
+
+.stats-card--primary {
+  border-color: #bfdbfe;
+}
+
+.stats-card--warning {
+  border-color: #fcd34d;
+}
+
+.stats-card--success {
+  border-color: #86efac;
+}
+
+.stats-card--danger {
+  border-color: #fca5a5;
+}
+
+.dashboard-main,
+.side-stack {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 24px 16px;
+  gap: 16px;
+}
+
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+  gap: 16px;
+}
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quick-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
   background: #fff;
-  border-radius: 12px;
+  text-align: left;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  }
-
-  .action-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    margin-bottom: 12px;
-  }
-
-  .action-title {
-    font-size: 14px;
-    color: #333;
-  }
+  transition: transform 0.18s ease, border-color 0.18s ease;
 }
 
-.section-card {
-  margin-bottom: 20px;
-
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
+.quick-item:hover {
+  transform: translateY(-2px);
+  border-color: #bfd2ee;
 }
 
+.quick-item__icon {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--app-primary-soft);
+  color: var(--app-primary);
+}
+
+.quick-item__content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quick-item__content strong {
+  font-size: 15px;
+  color: var(--app-text);
+}
+
+.quick-item__content span {
+  line-height: 1.6;
+  color: var(--app-text-secondary);
+}
+
+.exam-list,
+.board-list,
 .todo-list {
-  .todo-item {
-    display: flex;
-    align-items: flex-start;
-    padding: 12px 0;
-    border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-    &:last-child {
-      border-bottom: none;
-    }
+.exam-list__item,
+.board-list__item,
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: #fff;
+}
 
-    .el-checkbox {
-      margin-top: 2px;
-    }
+.exam-list__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--app-text);
+}
 
-    .todo-content {
-      flex: 1;
-      margin-left: 12px;
+.exam-list__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  color: var(--app-text-tertiary);
+}
 
-      .todo-title {
-        font-size: 14px;
-        color: #333;
-        margin-bottom: 6px;
-      }
+.board-list__label {
+  min-width: 88px;
+  color: var(--app-text-secondary);
+}
 
-      .todo-meta {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+.board-list__value {
+  color: var(--app-text);
+  line-height: 1.7;
+}
 
-        .todo-deadline {
-          font-size: 12px;
-          color: #999;
-        }
-      }
-    }
+.todo-item {
+  justify-content: flex-start;
+}
+
+.todo-item__dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--app-primary);
+}
+
+.todo-item__content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.todo-item__content strong {
+  color: var(--app-text);
+}
+
+.todo-item__content span {
+  color: var(--app-text-secondary);
+}
+
+@media (max-width: 1200px) {
+  .stats-grid,
+  .quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid,
+  .quick-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

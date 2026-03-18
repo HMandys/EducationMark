@@ -24,14 +24,28 @@
     </resultMap>
 
     <select id="selectPageVO" resultMap="StudentVOMap">
-        SELECT st.*,
-            s.name AS school_name,
-            c.name AS class_name,
-            g.name AS grade_name
+        SELECT st.id,
+            st.school_id,
+            s.school_name AS school_name,
+            st.class_id,
+            c.class_name AS class_name,
+            g.grade_name AS grade_name,
+            NULL AS user_id,
+            st.student_code AS student_number,
+            st.student_name AS name,
+            st.gender,
+            st.phone,
+            NULL AS id_card,
+            NULL AS birthday,
+            NULL AS enroll_date,
+            st.bind_code,
+            st.status,
+            '' AS remark,
+            st.create_time
         FROM student st
         LEFT JOIN school s ON st.school_id = s.id
         LEFT JOIN class_info c ON st.class_id = c.id
-        LEFT JOIN grade g ON c.grade_id = g.id
+        LEFT JOIN grade g ON st.grade_id = g.id
         WHERE st.deleted = 0
         <if test="query.schoolId != null">
             AND st.school_id = #{query.schoolId}
@@ -43,43 +57,63 @@
             AND c.grade_id = #{query.gradeId}
         </if>
         <if test="query.studentNumber != null and query.studentNumber != ''">
-            AND st.student_number = #{query.studentNumber}
+            AND st.student_code = #{query.studentNumber}
         </if>
         <if test="query.name != null and query.name != ''">
-            AND st.name LIKE CONCAT('%', #{query.name}, '%')
+            AND st.student_name LIKE CONCAT('%', #{query.name}, '%')
         </if>
         <if test="query.status != null">
             AND st.status = #{query.status}
         </if>
-        ORDER BY st.student_number ASC
+        ORDER BY st.student_code ASC
     </select>
 
     <select id="selectVOById" resultMap="StudentVOMap">
-        SELECT st.*,
-            s.name AS school_name,
-            c.name AS class_name,
-            g.name AS grade_name
+        SELECT st.id,
+            st.school_id,
+            s.school_name AS school_name,
+            st.class_id,
+            c.class_name AS class_name,
+            g.grade_name AS grade_name,
+            NULL AS user_id,
+            st.student_code AS student_number,
+            st.student_name AS name,
+            st.gender,
+            st.phone,
+            NULL AS id_card,
+            NULL AS birthday,
+            NULL AS enroll_date,
+            st.bind_code,
+            st.status,
+            '' AS remark,
+            st.create_time
         FROM student st
         LEFT JOIN school s ON st.school_id = s.id
         LEFT JOIN class_info c ON st.class_id = c.id
-        LEFT JOIN grade g ON c.grade_id = g.id
+        LEFT JOIN grade g ON st.grade_id = g.id
         WHERE st.id = #{id} AND st.deleted = 0
     </select>
 
     <select id="selectListByClassId" resultMap="StudentVOMap">
-        SELECT id, school_id, class_id, student_number, name, gender
+        SELECT id,
+            school_id,
+            class_id,
+            student_code AS student_number,
+            student_name AS name,
+            gender,
+            '' AS remark
         FROM student
         WHERE class_id = #{classId} AND deleted = 0
         <if test="status != null">
             AND status = #{status}
         </if>
-        ORDER BY student_number ASC
+        ORDER BY student_code ASC
     </select>
 
     <select id="selectByNumberAndName" resultType="com.edumark.school.entity.Student">
         SELECT * FROM student
-        WHERE student_number = #{studentNumber}
-        AND name = #{name}
+        WHERE student_code = #{studentNumber}
+        AND student_name = #{name}
         AND deleted = 0
     </select>
 

@@ -26,7 +26,7 @@ import java.util.List;
  */
 @Tag(name = "成绩管理")
 @RestController
-@RequestMapping("/api/score")
+@RequestMapping("/score")
 public class ScoreController {
 
     @Resource

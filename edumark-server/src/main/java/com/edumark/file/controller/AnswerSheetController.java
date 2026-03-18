@@ -22,7 +22,7 @@ import java.util.List;
  */
 @Tag(name = "答题卡管理")
 @RestController
-@RequestMapping("/api/answer-sheet")
+@RequestMapping("/answer-sheet")
 public class AnswerSheetController {
 
     @Resource

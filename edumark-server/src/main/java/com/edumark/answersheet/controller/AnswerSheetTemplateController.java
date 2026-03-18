@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Tag(name = "答题卡模板管理")
 @RestController
-@RequestMapping("/api/answer-sheet-template")
+@RequestMapping("/answer-sheet-template")
 public class AnswerSheetTemplateController {
 
     @Resource

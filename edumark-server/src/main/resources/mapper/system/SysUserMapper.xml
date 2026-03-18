@@ -102,6 +102,8 @@
         WHERE ur.user_id = #{userId}
           AND p.deleted = 0
           AND p.status = 1
+          AND p.permission_code IS NOT NULL
+          AND p.permission_code != ''
     </select>
 
 </mapper>

@@ -6,27 +6,23 @@ import Navbar from './components/Navbar.vue'
 
 const appStore = useAppStore()
 
-const sidebarWidth = computed(() => (appStore.sidebarCollapsed ? '64px' : '220px'))
+const sidebarWidth = computed(() => (appStore.sidebarCollapsed ? '92px' : '248px'))
 </script>
 
 <template>
-  <div class="layout">
-    <!-- 侧边栏 -->
+  <div class="layout-shell">
     <aside class="sidebar" :style="{ width: sidebarWidth }">
       <Sidebar />
     </aside>
 
-    <!-- 主内容区 -->
     <div class="main-container" :style="{ marginLeft: sidebarWidth }">
-      <!-- 顶部导航 -->
       <header class="navbar">
         <Navbar />
       </header>
 
-      <!-- 页面内容 -->
       <main class="main-content">
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
+          <transition name="fade-slide" mode="out-in">
             <keep-alive>
               <component :is="Component" />
             </keep-alive>
@@ -38,10 +34,10 @@ const sidebarWidth = computed(() => (appStore.sidebarCollapsed ? '64px' : '220px
 </template>
 
 <style lang="scss" scoped>
-.layout {
+.layout-shell {
   width: 100%;
-  height: 100vh;
-  display: flex;
+  min-height: 100vh;
+  background: var(--app-bg);
 }
 
 .sidebar {
@@ -49,43 +45,57 @@ const sidebarWidth = computed(() => (appStore.sidebarCollapsed ? '64px' : '220px
   left: 0;
   top: 0;
   height: 100%;
-  background-color: #001529;
-  transition: width 0.3s;
+  transition: width 0.28s ease;
   z-index: 1001;
   overflow: hidden;
+  box-shadow: 18px 0 40px rgba(15, 23, 42, 0.16);
 }
 
 .main-container {
-  flex: 1;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  transition: margin-left 0.3s;
+  transition: margin-left 0.28s ease;
 }
 
 .navbar {
-  height: 60px;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
   position: sticky;
   top: 0;
   z-index: 1000;
+  height: 76px;
+  margin: 16px 20px 0;
+  padding: 0 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--app-shadow);
 }
 
 .main-content {
   flex: 1;
   padding: 20px;
-  background-color: #f0f2f5;
   overflow: auto;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
-.fade-enter-from,
-.fade-leave-to {
+.fade-slide-enter-from,
+.fade-slide-leave-to {
   opacity: 0;
+  transform: translateY(6px);
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    margin: 12px 12px 0;
+  }
+
+  .main-content {
+    padding: 12px;
+  }
 }
 </style>

@@ -16,13 +16,20 @@
     </resultMap>
 
     <select id="selectPageVO" resultMap="ParentVOMap">
-        SELECT p.*,
-            u.username AS username
+        SELECT p.id,
+            NULL AS user_id,
+            NULL AS username,
+            p.parent_name AS name,
+            NULL AS gender,
+            p.phone,
+            NULL AS id_card,
+            p.status,
+            '' AS remark,
+            p.create_time
         FROM parent p
-        LEFT JOIN sys_user u ON p.user_id = u.id
         WHERE p.deleted = 0
         <if test="query.name != null and query.name != ''">
-            AND p.name LIKE CONCAT('%', #{query.name}, '%')
+            AND p.parent_name LIKE CONCAT('%', #{query.name}, '%')
         </if>
         <if test="query.phone != null and query.phone != ''">
             AND p.phone = #{query.phone}
@@ -33,17 +40,24 @@
         <if test="query.studentId != null">
             AND EXISTS (
                 SELECT 1 FROM parent_student_bind psb
-                WHERE psb.parent_id = p.id AND psb.student_id = #{query.studentId} AND psb.deleted = 0
+                WHERE psb.parent_id = p.id AND psb.student_id = #{query.studentId}
             )
         </if>
         ORDER BY p.create_time DESC
     </select>
 
     <select id="selectVOById" resultMap="ParentVOMap">
-        SELECT p.*,
-            u.username AS username
+        SELECT p.id,
+            NULL AS user_id,
+            NULL AS username,
+            p.parent_name AS name,
+            NULL AS gender,
+            p.phone,
+            NULL AS id_card,
+            p.status,
+            '' AS remark,
+            p.create_time
         FROM parent p
-        LEFT JOIN sys_user u ON p.user_id = u.id
         WHERE p.id = #{id} AND p.deleted = 0
     </select>
 

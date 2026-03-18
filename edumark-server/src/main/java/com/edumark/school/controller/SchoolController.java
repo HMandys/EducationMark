@@ -21,7 +21,7 @@ import java.util.List;
  */
 @Tag(name = "学校管理")
 @RestController
-@RequestMapping("/api/school")
+@RequestMapping("/school")
 public class SchoolController {
 
     @Resource

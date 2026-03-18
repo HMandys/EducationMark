@@ -34,6 +34,11 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response: AxiosResponse<Result>) => {
     NProgress.done()
+
+    if (response.config.responseType === 'blob' || response.config.responseType === 'arraybuffer') {
+      return response
+    }
+
     const res = response.data
 
     // 成功
@@ -98,6 +103,9 @@ service.interceptors.response.use(
 // 封装请求方法
 export const request = {
   get<T = any>(url: string, config?: AxiosRequestConfig): Promise<Result<T>> {
+    return service.get(url, config)
+  },
+  getRaw<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return service.get(url, config)
   },
   post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<Result<T>> {

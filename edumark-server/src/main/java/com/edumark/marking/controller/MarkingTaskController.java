@@ -21,7 +21,7 @@ import java.util.List;
  */
 @Tag(name = "阅卷任务管理")
 @RestController
-@RequestMapping("/api/marking/task")
+@RequestMapping("/marking/task")
 public class MarkingTaskController {
 
     @Resource

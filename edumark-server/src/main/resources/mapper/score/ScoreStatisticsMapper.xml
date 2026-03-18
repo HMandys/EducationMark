@@ -28,26 +28,26 @@
         SELECT st.*,
             e.name AS exam_name,
             es.subject_name,
-            c.name AS class_name
+            c.class_name AS class_name
         FROM score_statistics st
         LEFT JOIN exam e ON e.id = st.exam_id
         LEFT JOIN exam_subject es ON es.id = st.exam_subject_id
         LEFT JOIN class_info c ON c.id = st.class_id
         WHERE st.exam_id = #{examId}
-        ORDER BY st.stat_type, c.name, es.sort
+        ORDER BY st.stat_type, c.class_name, es.sort
     </select>
 
     <select id="selectClassStatBySubject" resultMap="ScoreStatisticsVOMap">
         SELECT st.*,
             e.name AS exam_name,
             es.subject_name,
-            c.name AS class_name
+            c.class_name AS class_name
         FROM score_statistics st
         LEFT JOIN exam e ON e.id = st.exam_id
         LEFT JOIN exam_subject es ON es.id = st.exam_subject_id
         LEFT JOIN class_info c ON c.id = st.class_id
         WHERE st.exam_subject_id = #{examSubjectId} AND st.stat_type = 1
-        ORDER BY c.name
+        ORDER BY c.class_name
     </select>
 
     <select id="selectGradeStatByExam" resultMap="ScoreStatisticsVOMap">

@@ -35,7 +35,7 @@ INSERT INTO sys_permission (id, parent_id, permission_name, permission_code, per
 INSERT INTO sys_permission (id, parent_id, permission_name, permission_code, permission_type, path, component, icon, sort, visible, status, deleted) VALUES
 (101, 1, '用户管理', 'system:user:list', 2, 'user', 'system/user/index', 'User', 1, 1, 1, 0),
 (102, 1, '角色管理', 'system:role:list', 2, 'role', 'system/role/index', 'UserFilled', 2, 1, 1, 0),
-(103, 1, '权限管理', 'system:permission:list', 2, 'permission', 'system/permission/index', 'Lock', 3, 1, 1, 0),
+(103, 1, '菜单管理', 'system:menu:list', 2, 'menu', 'system/menu/index', 'Menu', 3, 1, 1, 0),
 (104, 1, '操作日志', 'system:log:list', 2, 'log', 'system/log/index', 'Tickets', 4, 1, 1, 0);
 
 -- 用户管理按钮权限
@@ -45,6 +45,20 @@ INSERT INTO sys_permission (id, parent_id, permission_name, permission_code, per
 (1013, 101, '用户修改', 'system:user:edit', 3, NULL, NULL, NULL, 3, 1, 1, 0),
 (1014, 101, '用户删除', 'system:user:delete', 3, NULL, NULL, NULL, 4, 1, 1, 0),
 (1015, 101, '重置密码', 'system:user:resetPwd', 3, NULL, NULL, NULL, 5, 1, 1, 0);
+
+-- 角色管理按钮权限
+INSERT INTO sys_permission (id, parent_id, permission_name, permission_code, permission_type, path, component, icon, sort, visible, status, deleted) VALUES
+(1021, 102, '角色查询', 'system:role:query', 3, NULL, NULL, NULL, 1, 1, 1, 0),
+(1022, 102, '角色新增', 'system:role:add', 3, NULL, NULL, NULL, 2, 1, 1, 0),
+(1023, 102, '角色修改', 'system:role:edit', 3, NULL, NULL, NULL, 3, 1, 1, 0),
+(1024, 102, '角色删除', 'system:role:delete', 3, NULL, NULL, NULL, 4, 1, 1, 0);
+
+-- 菜单管理按钮权限
+INSERT INTO sys_permission (id, parent_id, permission_name, permission_code, permission_type, path, component, icon, sort, visible, status, deleted) VALUES
+(1031, 103, '菜单查询', 'system:menu:query', 3, NULL, NULL, NULL, 1, 1, 1, 0),
+(1032, 103, '菜单新增', 'system:menu:add', 3, NULL, NULL, NULL, 2, 1, 1, 0),
+(1033, 103, '菜单修改', 'system:menu:edit', 3, NULL, NULL, NULL, 3, 1, 1, 0),
+(1034, 103, '菜单删除', 'system:menu:delete', 3, NULL, NULL, NULL, 4, 1, 1, 0);
 
 -- 学校管理子菜单
 INSERT INTO sys_permission (id, parent_id, permission_name, permission_code, permission_type, path, component, icon, sort, visible, status, deleted) VALUES

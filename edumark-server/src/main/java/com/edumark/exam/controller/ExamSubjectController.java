@@ -18,7 +18,7 @@ import java.util.List;
  */
 @Tag(name = "考试科目管理")
 @RestController
-@RequestMapping("/api/exam-subject")
+@RequestMapping("/exam-subject")
 public class ExamSubjectController {
 
     @Resource

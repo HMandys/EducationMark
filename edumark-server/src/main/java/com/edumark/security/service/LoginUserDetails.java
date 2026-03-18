@@ -5,8 +5,10 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -43,14 +45,34 @@ public class LoginUserDetails implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        if (permissions == null || permissions.isEmpty()) {
-            return List.of();
+        List<GrantedAuthority> authorities = new ArrayList<>();
+
+        if (permissions != null && !permissions.isEmpty()) {
+            authorities.addAll(permissions.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(permission -> !permission.isEmpty())
+                    .distinct()
+                    .map(SimpleGrantedAuthority::new)
+                    .toList());
         }
-        return permissions.stream()
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .filter(permission -> !permission.isEmpty())
-                .map(SimpleGrantedAuthority::new)
+
+        if (roleCode != null && !roleCode.isBlank()) {
+            String normalizedRoleCode = roleCode.trim().toUpperCase(Locale.ROOT);
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + normalizedRoleCode));
+
+            if ("SUPER_ADMIN".equals(normalizedRoleCode) || "SCHOOL_ADMIN".equals(normalizedRoleCode)) {
+                authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+            }
+            if ("TEACHER".equals(normalizedRoleCode)
+                    || "HEAD_TEACHER".equals(normalizedRoleCode)
+                    || "MARKING_LEADER".equals(normalizedRoleCode)) {
+                authorities.add(new SimpleGrantedAuthority("ROLE_TEACHER"));
+            }
+        }
+
+        return authorities.stream()
+                .distinct()
                 .collect(Collectors.toList());
     }
 

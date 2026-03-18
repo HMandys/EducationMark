@@ -22,7 +22,7 @@ public interface MarkingTaskMapper extends BaseMapper<MarkingTask> {
     /**
      * 分页查询阅卷任务
      */
-    IPage<MarkingTaskVO> selectPageVO(Page<MarkingTaskVO> page, @Param("examId") Long examId, @Param("subjectId") Long subjectId, @Param("status") Integer status);
+    IPage<MarkingTaskVO> selectPageVO(Page<MarkingTaskVO> page, @Param("examId") Long examId, @Param("examSubjectId") Long examSubjectId, @Param("status") Integer status);
 
     /**
      * 根据ID查询阅卷任务详情

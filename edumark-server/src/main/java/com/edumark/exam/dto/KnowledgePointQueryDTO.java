@@ -20,6 +20,9 @@ public class KnowledgePointQueryDTO extends PageQuery {
     @Schema(description = "知识点名称(模糊)")
     private String name;
 
+    @Schema(description = "知识点编码")
+    private String code;
+
     @Schema(description = "父级ID")
     private Long parentId;
 
@@ -35,6 +38,9 @@ public class KnowledgePointQueryDTO extends PageQuery {
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
 
     public Long getParentId() { return parentId; }
     public void setParentId(Long parentId) { this.parentId = parentId; }

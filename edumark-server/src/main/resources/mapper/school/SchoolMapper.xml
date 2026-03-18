@@ -28,7 +28,7 @@
         SELECT s.id,
             s.school_name AS name,
             s.school_code AS code,
-            s.type,
+            1 AS type,
             s.province,
             s.city,
             s.district,
@@ -52,9 +52,6 @@
         <if test="query.code != null and query.code != ''">
             AND s.school_code = #{query.code}
         </if>
-        <if test="query.type != null">
-            AND s.type = #{query.type}
-        </if>
         <if test="query.province != null and query.province != ''">
             AND s.province = #{query.province}
         </if>
@@ -71,7 +68,7 @@
         SELECT s.id,
             s.school_name AS name,
             s.school_code AS code,
-            s.type,
+            1 AS type,
             s.province,
             s.city,
             s.district,

@@ -21,7 +21,7 @@
 
     <select id="selectPageVO" resultMap="KnowledgePointVOMap">
         SELECT kp.*,
-            s.name AS school_name,
+            s.school_name AS school_name,
             pkp.name AS parent_name
         FROM knowledge_point kp
         LEFT JOIN school s ON s.id = kp.school_id
@@ -50,7 +50,7 @@
 
     <select id="selectVOById" resultMap="KnowledgePointVOMap">
         SELECT kp.*,
-            s.name AS school_name,
+            s.school_name AS school_name,
             pkp.name AS parent_name
         FROM knowledge_point kp
         LEFT JOIN school s ON s.id = kp.school_id
@@ -60,7 +60,7 @@
 
     <select id="selectTree" resultMap="KnowledgePointVOMap">
         SELECT kp.*,
-            s.name AS school_name,
+            s.school_name AS school_name,
             pkp.name AS parent_name
         FROM knowledge_point kp
         LEFT JOIN school s ON s.id = kp.school_id
@@ -74,7 +74,7 @@
 
     <select id="selectByQuestionId" resultMap="KnowledgePointVOMap">
         SELECT kp.*,
-            s.name AS school_name
+            s.school_name AS school_name
         FROM knowledge_point kp
         JOIN question_knowledge_point qkp ON qkp.knowledge_point_id = kp.id
         LEFT JOIN school s ON s.id = kp.school_id

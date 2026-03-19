@@ -176,7 +176,12 @@
           <template v-if="hasBounds(region)">
             <div class="overlay-header">
               <span>{{ region.regionName }}</span>
-              <span>{{ getRoleLabel(region) }}</span>
+              <span>
+                {{ getRoleLabel(region) }}
+                <template v-if="region.config?.bubbleMap?.length">
+                  · {{ region.config.bubbleMap.length }} 项
+                </template>
+              </span>
             </div>
             <div class="overlay-footer">
               <span>第 {{ region.pageNo || 1 }} 页</span>
@@ -195,6 +200,19 @@
             <div class="overlay-missing-text">未标注坐标</div>
           </template>
         </div>
+
+        <template v-for="(region, regionIndex) in template.regions || []" :key="`bubble-map-${regionIndex}`">
+          <div
+            v-for="(bubble, bubbleIndex) in region.config?.bubbleMap || []"
+            :key="`bubble-${regionIndex}-${bubbleIndex}`"
+            class="bubble-box"
+            :class="{ 'is-selected-region': selectedRegionIndex === regionIndex }"
+            :style="getBubbleStyle(bubble)"
+            @click.stop="handleSelect(regionIndex)"
+          >
+            {{ bubble.option }}
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -202,7 +220,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
-import type { AnswerSheetRegion, AnswerSheetTemplate, RegionRole } from '@/api/answerSheetTemplate'
+import type { AnswerSheetRegion, AnswerSheetTemplate, BubbleMapItem, RegionRole } from '@/api/answerSheetTemplate'
 
 type InteractionMode = 'move' | 'resize'
 
@@ -325,6 +343,14 @@ const getOverlayStyle = (region: AnswerSheetRegion, index: number) => {
     position: 'absolute' as const,
   }
 }
+
+const getBubbleStyle = (bubble: BubbleMapItem) => ({
+  left: `${bubble.x}%`,
+  top: `${bubble.y}%`,
+  width: `${bubble.width}%`,
+  height: `${bubble.height}%`,
+  position: 'absolute' as const,
+})
 
 const cloneRegion = (region: AnswerSheetRegion): AnswerSheetRegion => ({
   ...region,
@@ -514,6 +540,24 @@ onBeforeUnmount(() => {
   pointer-events: auto;
   cursor: move;
   overflow: hidden;
+}
+
+.bubble-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(16, 185, 129, 0.95);
+  background: rgba(16, 185, 129, 0.18);
+  color: #047857;
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: auto;
+}
+
+.bubble-box.is-selected-region {
+  border-color: rgba(220, 38, 38, 0.95);
+  background: rgba(220, 38, 38, 0.14);
+  color: #b91c1c;
 }
 
 .overlay-region.is-selected {

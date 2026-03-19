@@ -79,6 +79,9 @@ export interface RegionConfig {
   questionsPerRow?: number
   bubbleStyle?: 'circle' | 'square'
   hasMultipleChoice?: boolean
+  bubbleMap?: BubbleMapItem[]
+  detectedBubbleCount?: number
+  expectedBubbleCount?: number
   // 填空题配置
   lineHeight?: number
   linesPerQuestion?: number
@@ -91,6 +94,16 @@ export interface RegionConfig {
   gridType?: 'square' | 'line'
   gridSize?: number
   wordCount?: number
+}
+
+export interface BubbleMapItem {
+  questionNo: number
+  option: string
+  x: number
+  y: number
+  width: number
+  height: number
+  confidence?: number
 }
 
 export interface TemplateValidationIssue {

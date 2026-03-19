@@ -5,6 +5,7 @@ import com.edumark.common.result.PageResult;
 import com.edumark.exam.dto.ExamDTO;
 import com.edumark.exam.dto.ExamQueryDTO;
 import com.edumark.exam.entity.Exam;
+import com.edumark.exam.vo.ExamPublishCheckVO;
 import com.edumark.exam.vo.ExamVO;
 
 import java.util.List;
@@ -55,6 +56,11 @@ public interface ExamService extends IService<Exam> {
      * 发布考试
      */
     void publish(Long id);
+
+    /**
+     * 发布前检查
+     */
+    ExamPublishCheckVO publishCheck(Long id);
 
     /**
      * 撤回发布

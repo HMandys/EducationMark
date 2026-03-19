@@ -104,9 +104,10 @@
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-            <el-button type="primary" link @click="handleSubjects(row)">科目</el-button>
+            <el-button type="primary" link @click="handleSubjects(row)">继续配置</el-button>
+            <el-button type="info" link @click="handleCheckPublish(row)">检查</el-button>
             <el-button
-              v-if="row.status === 0"
+              v-if="row.status === 4"
               type="success"
               link
               @click="handlePublish(row)"
@@ -206,8 +207,8 @@
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="年级">
-              <el-select v-model="formData.gradeId" placeholder="请选择年级" clearable>
+            <el-form-item label="年级" prop="gradeId">
+              <el-select v-model="formData.gradeId" placeholder="请选择年级" clearable @change="handleGradeChange">
                 <el-option
                   v-for="item in gradeList"
                   :key="item.id"
@@ -217,15 +218,10 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="总分">
-              <el-input-number v-model="formData.totalScore" :min="0" :max="1000" />
-            </el-form-item>
-          </el-col>
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="开始时间">
+            <el-form-item label="开始时间" prop="startTime">
               <el-date-picker
                 v-model="formData.startTime"
                 type="datetime"
@@ -236,7 +232,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="结束时间">
+            <el-form-item label="结束时间" prop="endTime">
               <el-date-picker
                 v-model="formData.endTime"
                 type="datetime"
@@ -247,11 +243,12 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="参考班级">
+        <el-form-item label="参考班级" prop="classIds">
           <el-select
             v-model="formData.classIds"
             multiple
-            placeholder="请选择参考班级"
+            :disabled="!formData.gradeId"
+            :placeholder="formData.gradeId ? '请选择参考班级' : '请先选择年级'"
             style="width: 100%"
           >
             <el-option
@@ -262,6 +259,12 @@
             />
           </el-select>
         </el-form-item>
+        <el-alert
+          title="考试总分将根据已配置科目自动汇总，无需手工填写。"
+          type="info"
+          :closable="false"
+          show-icon
+        />
         <el-form-item label="描述">
           <el-input v-model="formData.description" type="textarea" :rows="2" placeholder="请输入描述" />
         </el-form-item>
@@ -369,6 +372,8 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { Search, Refresh, Plus, Delete } from '@element-plus/icons-vue'
 import {
   getExamPage,
+  getExamDetail,
+  getExamPublishCheck,
   createExam,
   updateExam,
   deleteExam,
@@ -379,10 +384,11 @@ import {
   createExamSubject,
   updateExamSubject,
   deleteExamSubject,
+  type ExamPublishCheck,
   type Exam,
   type ExamSubject,
 } from '@/api/exam'
-import { getSchoolSelectList, getGradeListBySchool, getClassListBySchool, type School, type Grade, type ClassInfo } from '@/api/school'
+import { getSchoolSelectList, getGradeListBySchool, getClassListByGrade, type School, type Grade, type ClassInfo } from '@/api/school'
 
 // 下拉列表数据
 const schoolList = ref<School[]>([])
@@ -429,11 +435,26 @@ const formData = reactive<FormDataType>({
   gradeId: undefined,
   startTime: undefined,
   endTime: undefined,
-  totalScore: 0,
   description: '',
   remark: '',
   classIds: [],
 })
+
+const validateEndTime = (_rule: unknown, value: string | undefined, callback: (error?: Error) => void) => {
+  if (!value) {
+    callback(new Error('请选择结束时间'))
+    return
+  }
+  if (!formData.startTime) {
+    callback()
+    return
+  }
+  if (new Date(formData.startTime).getTime() >= new Date(value).getTime()) {
+    callback(new Error('结束时间必须晚于开始时间'))
+    return
+  }
+  callback()
+}
 
 const formRules: FormRules = {
   schoolId: [{ required: true, message: '请选择学校', trigger: 'change' }],
@@ -441,6 +462,13 @@ const formRules: FormRules = {
   type: [{ required: true, message: '请选择考试类型', trigger: 'change' }],
   academicYear: [{ required: true, message: '请输入学年', trigger: 'blur' }],
   semester: [{ required: true, message: '请选择学期', trigger: 'change' }],
+  gradeId: [{ required: true, message: '请选择年级', trigger: 'change' }],
+  startTime: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
+  endTime: [
+    { required: true, message: '请选择结束时间', trigger: 'change' },
+    { validator: validateEndTime, trigger: 'change' },
+  ],
+  classIds: [{ required: true, message: '请至少选择一个参考班级', trigger: 'change' }],
 }
 
 // 科目管理对话框
@@ -517,6 +545,27 @@ const getStatusTagType = (status: number): 'primary' | 'success' | 'warning' | '
   return map[status] || 'info'
 }
 
+const getDefaultAcademicYear = () => {
+  const now = new Date()
+  const year = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1
+  return `${year}-${year + 1}`
+}
+
+const getDefaultSemester = () => {
+  const month = new Date().getMonth() + 1
+  return month >= 2 && month <= 7 ? 2 : 1
+}
+
+const loadGradeOptions = async (schoolId: number) => {
+  const res = await getGradeListBySchool(schoolId)
+  gradeList.value = res.data
+}
+
+const loadClassOptions = async (gradeId: number) => {
+  const res = await getClassListByGrade(gradeId)
+  classList.value = res.data
+}
+
 // 加载下拉数据
 const loadSchoolList = async () => {
   const res = await getSchoolSelectList()
@@ -529,12 +578,15 @@ const handleSchoolChange = async (schoolId: number) => {
   gradeList.value = []
   classList.value = []
   if (schoolId) {
-    const [gradeRes, classRes] = await Promise.all([
-      getGradeListBySchool(schoolId),
-      getClassListBySchool(schoolId),
-    ])
-    gradeList.value = gradeRes.data
-    classList.value = classRes.data
+    await loadGradeOptions(schoolId)
+  }
+}
+
+const handleGradeChange = async (gradeId: number | undefined) => {
+  formData.classIds = []
+  classList.value = []
+  if (gradeId) {
+    await loadClassOptions(gradeId)
   }
 }
 
@@ -582,12 +634,11 @@ const handleAdd = () => {
     name: '',
     code: '',
     type: 5,
-    academicYear: '',
-    semester: 1,
+    academicYear: getDefaultAcademicYear(),
+    semester: getDefaultSemester(),
     gradeId: undefined,
     startTime: undefined,
     endTime: undefined,
-    totalScore: 0,
     description: '',
     remark: '',
     classIds: [],
@@ -600,10 +651,17 @@ const handleAdd = () => {
 // 编辑
 const handleEdit = async (row: Exam) => {
   dialogTitle.value = '编辑考试'
-  Object.assign(formData, row)
-  formData.classIds = row.classes?.map(c => c.classId) || []
-  if (row.schoolId) {
-    await handleSchoolChange(row.schoolId)
+  const res = await getExamDetail(row.id)
+  const detail = res.data
+  Object.assign(formData, detail)
+  formData.classIds = detail.classes?.map(c => c.classId) || []
+  gradeList.value = []
+  classList.value = []
+  if (detail.schoolId) {
+    await loadGradeOptions(detail.schoolId)
+  }
+  if (detail.gradeId) {
+    await loadClassOptions(detail.gradeId)
   }
   dialogVisible.value = true
 }
@@ -617,12 +675,29 @@ const handleSubmit = async () => {
     if (formData.id) {
       await updateExam(data)
       ElMessage.success('更新成功')
+      await fetchData()
     } else {
-      await createExam(data)
-      ElMessage.success('创建成功')
+      const res = await createExam(data)
+      const createdExam: Exam = {
+        id: res.data,
+        schoolId: data.schoolId!,
+        name: data.name!,
+        code: data.code || '',
+        type: data.type!,
+        academicYear: data.academicYear!,
+        semester: data.semester!,
+        gradeId: data.gradeId,
+        status: 0,
+        totalScore: 0,
+        studentCount: 0,
+      }
+      ElMessage.success('创建成功，请继续配置考试科目')
+      currentExam.value = createdExam
+      subjectDialogVisible.value = true
+      await loadSubjectList()
+      await fetchData()
     }
     dialogVisible.value = false
-    fetchData()
   } finally {
     submitLoading.value = false
   }
@@ -656,6 +731,25 @@ const handlePublish = async (row: Exam) => {
   await publishExam(row.id)
   ElMessage.success('发布成功')
   fetchData()
+}
+
+const handleCheckPublish = async (row: Exam) => {
+  const res = await getExamPublishCheck(row.id)
+  const check: ExamPublishCheck = res.data
+  if (check.canPublish) {
+    await ElMessageBox.alert(
+      `参考班级 ${check.classCount} 个，考试科目 ${check.subjectCount} 个，已完成试卷 ${check.completedPaperCount} 个，已发布模板 ${check.publishedTemplateCount} 个。`,
+      '检查通过',
+      { type: 'success' }
+    )
+    return
+  }
+
+  const content = check.missingItems.map((item) => `- ${item}`).join('<br/>')
+  await ElMessageBox.alert(content, '配置未完成', {
+    type: 'warning',
+    dangerouslyUseHTMLString: true,
+  })
 }
 
 // 撤回发布
@@ -723,6 +817,7 @@ const handleSubjectSubmit = async () => {
     }
     subjectFormVisible.value = false
     await loadSubjectList()
+    await fetchData()
   } finally {
     subjectSubmitLoading.value = false
   }
@@ -735,6 +830,7 @@ const handleDeleteSubject = async (row: ExamSubject) => {
   await deleteExamSubject(row.id)
   ElMessage.success('删除成功')
   await loadSubjectList()
+  await fetchData()
 }
 
 onMounted(() => {

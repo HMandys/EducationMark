@@ -36,9 +36,11 @@
           <el-tab-pane label="答题区域" name="regions">
             <RegionList
               v-model="templateForm.regions"
+              :selected-index="selectedRegionIndex"
               @add="handleAddRegion"
               @edit="handleEditRegion"
               @delete="handleDeleteRegion"
+              @select="handleSelectRegion"
             />
           </el-tab-pane>
         </el-tabs>
@@ -46,7 +48,13 @@
 
       <!-- 右侧预览面板 -->
       <div class="editor-preview">
-        <PreviewPanel :template="templateForm" />
+        <PreviewPanel
+          :template="templateForm"
+          :editable="true"
+          :selected-region-index="selectedRegionIndex"
+          @select-region="handleSelectRegion"
+          @update-region="handlePreviewRegionUpdate"
+        />
       </div>
     </div>
 
@@ -74,6 +82,7 @@ import {
   createTemplate,
   updateTemplate,
   publishTemplate,
+  validateTemplate,
   type AnswerSheetTemplate,
   type AnswerSheetRegion,
 } from '@/api/answerSheetTemplate'
@@ -113,6 +122,15 @@ const templateForm = reactive<Partial<AnswerSheetTemplate>>({
 const regionDialogVisible = ref(false)
 const currentRegion = ref<AnswerSheetRegion | null>(null)
 const editingRegionIndex = ref(-1)
+const selectedRegionIndex = ref(-1)
+
+const cloneRegion = (region: AnswerSheetRegion): AnswerSheetRegion => ({
+  ...region,
+  questionIds: region.questionIds ? [...region.questionIds] : undefined,
+  config: {
+    ...(region.config || {}),
+  },
+})
 
 // 获取模板详情
 const fetchTemplateDetail = async (id: number) => {
@@ -164,6 +182,19 @@ const handlePublish = async () => {
     return
   }
 
+  const validation = await validateTemplate(templateForm.id)
+  if (!validation.data.passed) {
+    await ElMessageBox.alert(
+      validation.data.issues.map((item, index) => `${index + 1}. ${item.message}`).join('<br>'),
+      '模板校验未通过',
+      {
+        dangerouslyUseHTMLString: true,
+        confirmButtonText: '我知道了',
+      },
+    )
+    return
+  }
+
   await ElMessageBox.confirm('确定要发布模板吗？发布后将生成PDF文件。', '提示', {
     type: 'warning',
   })
@@ -191,6 +222,13 @@ const handleAddRegion = () => {
     questionStart: 1,
     questionEnd: 10,
     config: {
+      boxX: 8,
+      boxY: 22,
+      boxWidth: 84,
+      boxHeight: 20,
+      regionRole: 'choice_block',
+      anchorType: 'none',
+      cropMode: 'range-question',
       optionCount: 4,
       questionsPerRow: 5,
     },
@@ -201,8 +239,9 @@ const handleAddRegion = () => {
 
 // 编辑区域
 const handleEditRegion = (region: AnswerSheetRegion, index: number) => {
-  currentRegion.value = { ...region }
+  currentRegion.value = cloneRegion(region)
   editingRegionIndex.value = index
+  selectedRegionIndex.value = index
   regionDialogVisible.value = true
 }
 
@@ -212,21 +251,39 @@ const handleDeleteRegion = async (index: number) => {
     type: 'warning',
   })
   templateForm.regions?.splice(index, 1)
+  if (selectedRegionIndex.value === index) {
+    selectedRegionIndex.value = -1
+  } else if (selectedRegionIndex.value > index) {
+    selectedRegionIndex.value -= 1
+  }
 }
 
 // 区域配置确认
 const handleRegionConfirm = (region: AnswerSheetRegion) => {
   if (editingRegionIndex.value >= 0) {
     // 编辑
-    templateForm.regions![editingRegionIndex.value] = region
+    templateForm.regions![editingRegionIndex.value] = cloneRegion(region)
+    selectedRegionIndex.value = editingRegionIndex.value
   } else {
     // 新增
     if (!templateForm.regions) {
       templateForm.regions = []
     }
-    templateForm.regions.push(region)
+    templateForm.regions.push(cloneRegion(region))
+    selectedRegionIndex.value = templateForm.regions.length - 1
   }
   regionDialogVisible.value = false
+}
+
+const handleSelectRegion = (index: number) => {
+  selectedRegionIndex.value = index
+}
+
+const handlePreviewRegionUpdate = ({ index, region }: { index: number; region: AnswerSheetRegion }) => {
+  if (!templateForm.regions || !templateForm.regions[index]) {
+    return
+  }
+  templateForm.regions.splice(index, 1, cloneRegion(region))
 }
 
 onMounted(async () => {

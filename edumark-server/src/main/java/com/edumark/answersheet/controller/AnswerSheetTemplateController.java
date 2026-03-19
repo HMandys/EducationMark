@@ -4,6 +4,7 @@ import com.edumark.answersheet.dto.AnswerSheetTemplateDTO;
 import com.edumark.answersheet.dto.AnswerSheetTemplateQueryDTO;
 import com.edumark.answersheet.service.AnswerSheetTemplateService;
 import com.edumark.answersheet.vo.AnswerSheetTemplateVO;
+import com.edumark.answersheet.vo.AnswerSheetTemplateValidateVO;
 import com.edumark.common.result.PageResult;
 import com.edumark.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -68,6 +69,12 @@ public class AnswerSheetTemplateController {
     @PostMapping("/generate/{paperId}")
     public Result<Long> generateFromPaper(@PathVariable Long paperId) {
         return Result.success(templateService.generateFromPaper(paperId));
+    }
+
+    @Operation(summary = "校验模板完整性")
+    @GetMapping("/{id}/validate")
+    public Result<AnswerSheetTemplateValidateVO> validate(@PathVariable Long id) {
+        return Result.success(templateService.validateTemplate(id));
     }
 
     @Operation(summary = "发布模板（生成PDF）")

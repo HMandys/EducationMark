@@ -3,23 +3,39 @@
     :model-value="visible"
     @update:model-value="emit('update:visible', $event)"
     :title="region?.id ? '编辑区域' : '添加区域'"
-    width="600px"
+    width="760px"
     destroy-on-close
   >
     <el-form
       ref="formRef"
       :model="formData"
       :rules="formRules"
-      label-width="100px"
+      label-width="110px"
     >
-      <el-form-item label="区域类型" prop="regionType">
-        <el-select v-model="formData.regionType" @change="handleTypeChange">
-          <el-option label="选择题" :value="1" />
-          <el-option label="填空题" :value="2" />
-          <el-option label="解答题" :value="3" />
-          <el-option label="作文题" :value="4" />
-        </el-select>
-      </el-form-item>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="区域类型" prop="regionType">
+            <el-select v-model="formData.regionType" @change="handleTypeChange">
+              <el-option label="选择题" :value="1" />
+              <el-option label="填空题" :value="2" />
+              <el-option label="解答题" :value="3" />
+              <el-option label="作文题" :value="4" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="区域用途">
+            <el-select v-model="formData.config!.regionRole" placeholder="请选择区域用途">
+              <el-option
+                v-for="item in regionRoleOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
 
       <el-form-item label="区域名称" prop="regionName">
         <el-input v-model="formData.regionName" placeholder="请输入区域名称" />
@@ -27,24 +43,91 @@
 
       <el-row :gutter="20">
         <el-col :span="12">
-          <el-form-item label="起始题号" prop="questionStart">
-            <el-input-number v-model="formData.questionStart" :min="1" />
+          <el-form-item label="页码">
+            <el-input-number v-model="formData.pageNo" :min="1" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="结束题号" prop="questionEnd">
-            <el-input-number v-model="formData.questionEnd" :min="formData.questionStart || 1" />
+          <el-form-item label="裁题模式">
+            <el-select v-model="formData.config!.cropMode" placeholder="请选择裁题模式" clearable>
+              <el-option label="单题裁切" value="single-question" />
+              <el-option label="题段裁切" value="range-question" />
+              <el-option label="整块裁切" value="full-region" />
+            </el-select>
           </el-form-item>
         </el-col>
       </el-row>
 
-      <el-form-item label="页码">
-        <el-input-number v-model="formData.pageNo" :min="1" />
-      </el-form-item>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="起始题号">
+            <el-input-number v-model="formData.questionStart" :min="1" :disabled="!requiresQuestionRange" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="结束题号">
+            <el-input-number
+              v-model="formData.questionEnd"
+              :min="formData.questionStart || 1"
+              :disabled="!requiresQuestionRange"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-divider content-position="left">坐标标注</el-divider>
+
+      <div class="coordinate-toolbar">
+        <span class="coordinate-tip">坐标统一按当前整页百分比保存，支持在右侧预览区继续拖拽微调。</span>
+        <el-button text type="primary" @click="fillDefaultBounds">填充默认框</el-button>
+      </div>
+
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="X(%)">
+            <el-input-number v-model="formData.config!.boxX" :min="0" :max="100" :precision="1" :step="0.5" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="Y(%)">
+            <el-input-number v-model="formData.config!.boxY" :min="0" :max="100" :precision="1" :step="0.5" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="宽度(%)">
+            <el-input-number v-model="formData.config!.boxWidth" :min="1" :max="100" :precision="1" :step="0.5" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="高度(%)">
+            <el-input-number v-model="formData.config!.boxHeight" :min="1" :max="100" :precision="1" :step="0.5" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="锚点类型">
+            <el-select v-model="formData.config!.anchorType" placeholder="请选择锚点类型">
+              <el-option label="无锚点" value="none" />
+              <el-option label="角标" value="corner" />
+              <el-option label="定位标记" value="marker" />
+              <el-option label="条码锚点" value="barcode" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="锚点标识">
+            <el-input v-model="formData.config!.anchorKey" placeholder="例如 left-top-marker" />
+          </el-form-item>
+        </el-col>
+      </el-row>
 
       <el-divider content-position="left">区域配置</el-divider>
 
-      <!-- 选择题配置 -->
       <template v-if="formData.regionType === 1">
         <el-row :gutter="20">
           <el-col :span="12">
@@ -69,7 +152,6 @@
         </el-form-item>
       </template>
 
-      <!-- 填空题配置 -->
       <template v-if="formData.regionType === 2">
         <el-row :gutter="20">
           <el-col :span="12">
@@ -91,10 +173,9 @@
         </el-form-item>
       </template>
 
-      <!-- 解答题配置 -->
       <template v-if="formData.regionType === 3">
         <el-form-item label="区域高度(mm)">
-          <el-input-number v-model="formData.config!.height" :min="50" :max="500" :step="10" />
+          <el-input-number v-model="formData.config!.height" :min="10" :max="500" :step="10" />
         </el-form-item>
         <el-form-item label="显示边框">
           <el-switch v-model="formData.config!.showBorder" />
@@ -109,7 +190,6 @@
         </el-form-item>
       </template>
 
-      <!-- 作文题配置 -->
       <template v-if="formData.regionType === 4">
         <el-form-item label="格子类型">
           <el-radio-group v-model="formData.config!.gridType">
@@ -140,9 +220,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
-import type { FormInstance, FormRules } from 'element-plus'
-import type { AnswerSheetRegion, RegionConfig } from '@/api/answerSheetTemplate'
+import { computed, reactive, ref, watch } from 'vue'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import type {
+  AnswerSheetRegion,
+  RegionConfig,
+  RegionRole,
+} from '@/api/answerSheetTemplate'
 
 const props = defineProps<{
   visible: boolean
@@ -156,20 +240,16 @@ const emit = defineEmits<{
 
 const formRef = ref<FormInstance>()
 
-const getDefaultConfig = (type: number): RegionConfig => {
-  switch (type) {
-    case 1:
-      return { optionCount: 4, questionsPerRow: 5, bubbleStyle: 'circle', hasMultipleChoice: false }
-    case 2:
-      return { lineHeight: 30, linesPerQuestion: 1, lineStyle: 'underline' }
-    case 3:
-      return { height: 100, showBorder: true, scoreBoxPosition: 'top-right' }
-    case 4:
-      return { gridType: 'square', gridSize: 10, wordCount: 800 }
-    default:
-      return {}
-  }
-}
+const regionRoleOptions: Array<{ label: string; value: RegionRole }> = [
+  { label: '客观题涂卡区', value: 'choice_block' },
+  { label: '主观题裁题区', value: 'subjective_crop' },
+  { label: '作文裁题区', value: 'essay_crop' },
+  { label: '评分框', value: 'score_box' },
+  { label: '学号识别区', value: 'student_id' },
+  { label: '姓名识别区', value: 'student_name' },
+  { label: '班级识别区', value: 'class_name' },
+  { label: '条码区', value: 'barcode' },
+]
 
 const regionTypeNames: Record<number, string> = {
   1: '选择题',
@@ -177,6 +257,85 @@ const regionTypeNames: Record<number, string> = {
   3: '解答题',
   4: '作文题',
 }
+
+const getDefaultBounds = (type: number) => {
+  switch (type) {
+    case 1:
+      return { boxX: 8, boxY: 22, boxWidth: 84, boxHeight: 20 }
+    case 2:
+      return { boxX: 8, boxY: 44, boxWidth: 84, boxHeight: 14 }
+    case 3:
+      return { boxX: 8, boxY: 60, boxWidth: 84, boxHeight: 18 }
+    case 4:
+      return { boxX: 8, boxY: 22, boxWidth: 84, boxHeight: 58 }
+    default:
+      return { boxX: 8, boxY: 22, boxWidth: 84, boxHeight: 16 }
+  }
+}
+
+const getDefaultRole = (type: number): RegionRole => {
+  switch (type) {
+    case 1:
+      return 'choice_block'
+    case 4:
+      return 'essay_crop'
+    default:
+      return 'subjective_crop'
+  }
+}
+
+const getDefaultConfig = (type: number): RegionConfig => {
+  const bounds = getDefaultBounds(type)
+  const base: RegionConfig = {
+    ...bounds,
+    regionRole: getDefaultRole(type),
+    anchorType: 'none',
+    cropMode: type === 1 ? 'range-question' : type === 4 ? 'full-region' : 'single-question',
+  }
+
+  switch (type) {
+    case 1:
+      return {
+        ...base,
+        optionCount: 4,
+        questionsPerRow: 5,
+        bubbleStyle: 'circle',
+        hasMultipleChoice: false,
+      }
+    case 2:
+      return {
+        ...base,
+        lineHeight: 30,
+        linesPerQuestion: 1,
+        lineStyle: 'underline',
+      }
+    case 3:
+      return {
+        ...base,
+        height: 100,
+        showBorder: true,
+        scoreBoxPosition: 'top-right',
+      }
+    case 4:
+      return {
+        ...base,
+        gridType: 'square',
+        gridSize: 10,
+        wordCount: 800,
+      }
+    default:
+      return base
+  }
+}
+
+const cloneRegion = (region: AnswerSheetRegion): AnswerSheetRegion => ({
+  ...region,
+  questionIds: region.questionIds ? [...region.questionIds] : undefined,
+  config: {
+    ...getDefaultConfig(region.regionType),
+    ...(region.config || {}),
+  },
+})
 
 const formData = reactive<AnswerSheetRegion>({
   regionType: 1,
@@ -191,39 +350,151 @@ const formData = reactive<AnswerSheetRegion>({
 const formRules: FormRules = {
   regionType: [{ required: true, message: '请选择区域类型', trigger: 'change' }],
   regionName: [{ required: true, message: '请输入区域名称', trigger: 'blur' }],
-  questionStart: [{ required: true, message: '请输入起始题号', trigger: 'blur' }],
-  questionEnd: [{ required: true, message: '请输入结束题号', trigger: 'blur' }],
 }
+
+const requiresQuestionRange = computed(() => {
+  const role = formData.config?.regionRole
+  return role === 'choice_block' || role === 'subjective_crop' || role === 'essay_crop' || !role
+})
 
 watch(
   () => props.visible,
   (val) => {
-    if (val && props.region) {
-      Object.assign(formData, props.region)
-      if (!formData.config) {
-        formData.config = getDefaultConfig(formData.regionType)
-      }
+    if (!val) {
+      return
     }
-  }
+
+    const nextRegion = props.region
+      ? cloneRegion(props.region)
+      : {
+          regionType: 1,
+          regionName: '选择题',
+          pageNo: 1,
+          sortOrder: 0,
+          questionStart: 1,
+          questionEnd: 10,
+          config: getDefaultConfig(1),
+        }
+
+    Object.assign(formData, nextRegion)
+  },
 )
 
+const fillDefaultBounds = () => {
+  Object.assign(formData.config!, getDefaultBounds(formData.regionType))
+}
+
 const handleTypeChange = (type: number) => {
-  formData.regionName = regionTypeNames[type] || '未知'
-  formData.config = getDefaultConfig(type)
+  const commonConfig: RegionConfig = {
+    boxX: formData.config?.boxX,
+    boxY: formData.config?.boxY,
+    boxWidth: formData.config?.boxWidth,
+    boxHeight: formData.config?.boxHeight,
+    anchorType: formData.config?.anchorType,
+    anchorKey: formData.config?.anchorKey,
+  }
+
+  formData.regionName = regionTypeNames[type] || '未知区域'
+  formData.config = {
+    ...getDefaultConfig(type),
+    ...commonConfig,
+  }
+
+  if (
+    commonConfig.boxX === undefined
+    || commonConfig.boxY === undefined
+    || commonConfig.boxWidth === undefined
+    || commonConfig.boxHeight === undefined
+  ) {
+    fillDefaultBounds()
+  }
+}
+
+const validateBounds = () => {
+  const config = formData.config || {}
+  const values = [
+    { key: 'boxX', label: 'X', value: config.boxX },
+    { key: 'boxY', label: 'Y', value: config.boxY },
+    { key: 'boxWidth', label: '宽度', value: config.boxWidth },
+    { key: 'boxHeight', label: '高度', value: config.boxHeight },
+  ]
+
+  const hasAny = values.some(item => item.value !== undefined && item.value !== null)
+  if (!hasAny) {
+    return
+  }
+
+  const missing = values.find(item => item.value === undefined || item.value === null)
+  if (missing) {
+    throw new Error(`请补全${missing.label}坐标`)
+  }
+
+  values.forEach((item) => {
+    if (typeof item.value !== 'number' || Number.isNaN(item.value)) {
+      throw new Error(`${item.label}坐标格式不正确`)
+    }
+    if (item.value < 0 || item.value > 100) {
+      throw new Error(`${item.label}坐标必须在 0 到 100 之间`)
+    }
+  })
+
+  if ((config.boxWidth || 0) <= 0 || (config.boxHeight || 0) <= 0) {
+    throw new Error('区域宽高必须大于 0')
+  }
+
+  if (
+    (config.boxX || 0) + (config.boxWidth || 0) > 100
+    || (config.boxY || 0) + (config.boxHeight || 0) > 100
+  ) {
+    throw new Error('区域坐标超出页面范围，请调整坐标或尺寸')
+  }
+}
+
+const validateQuestionRange = () => {
+  if (!requiresQuestionRange.value) {
+    return
+  }
+  if (!formData.questionStart || !formData.questionEnd) {
+    throw new Error('当前区域用途需要填写起止题号')
+  }
+  if (formData.questionStart > formData.questionEnd) {
+    throw new Error('结束题号不能小于起始题号')
+  }
 }
 
 const handleConfirm = async () => {
-  await formRef.value?.validate()
-  emit('confirm', { ...formData })
+  try {
+    await formRef.value?.validate()
+    validateQuestionRange()
+    validateBounds()
+    emit('confirm', cloneRegion(formData))
+  } catch (error) {
+    if (error instanceof Error) {
+      ElMessage.warning(error.message)
+    }
+  }
 }
 </script>
 
 <style scoped>
-.el-input-number {
+.el-input-number,
+.el-select {
   width: 100%;
 }
 
-.el-select {
-  width: 100%;
+.coordinate-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #f6f8fb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.coordinate-tip {
+  font-size: 12px;
+  color: #606266;
 }
 </style>

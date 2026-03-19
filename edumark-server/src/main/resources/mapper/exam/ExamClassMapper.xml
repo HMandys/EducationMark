@@ -10,7 +10,7 @@
 
     <select id="selectListByExamId" resultMap="ExamClassVOMap">
         SELECT ec.class_id,
-            c.name AS class_name,
+            c.class_name AS class_name,
             (SELECT COUNT(1) FROM student st WHERE st.class_id = ec.class_id AND st.deleted = 0) AS student_count
         FROM exam_class ec
         LEFT JOIN class_info c ON c.id = ec.class_id

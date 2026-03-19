@@ -5,6 +5,7 @@ import com.edumark.answersheet.dto.AnswerSheetTemplateDTO;
 import com.edumark.answersheet.dto.AnswerSheetTemplateQueryDTO;
 import com.edumark.answersheet.entity.AnswerSheetTemplate;
 import com.edumark.answersheet.vo.AnswerSheetTemplateVO;
+import com.edumark.answersheet.vo.AnswerSheetTemplateValidateVO;
 import com.edumark.common.result.PageResult;
 
 /**
@@ -48,6 +49,11 @@ public interface AnswerSheetTemplateService extends IService<AnswerSheetTemplate
      * 根据试卷自动生成模板
      */
     Long generateFromPaper(Long paperId);
+
+    /**
+     * 校验模板完整性
+     */
+    AnswerSheetTemplateValidateVO validateTemplate(Long id);
 
     /**
      * 发布模板（生成PDF）

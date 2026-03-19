@@ -51,7 +51,29 @@ export interface AnswerSheetRegion {
   config?: RegionConfig
 }
 
+export type RegionRole =
+  | 'student_id'
+  | 'student_name'
+  | 'class_name'
+  | 'barcode'
+  | 'choice_block'
+  | 'subjective_crop'
+  | 'essay_crop'
+  | 'score_box'
+
+export type AnchorType = 'corner' | 'marker' | 'barcode' | 'none'
+
+export type CropMode = 'single-question' | 'range-question' | 'full-region'
+
 export interface RegionConfig {
+  boxX?: number
+  boxY?: number
+  boxWidth?: number
+  boxHeight?: number
+  regionRole?: RegionRole
+  anchorType?: AnchorType
+  anchorKey?: string
+  cropMode?: CropMode
   // 选择题配置
   optionCount?: number
   questionsPerRow?: number
@@ -69,6 +91,20 @@ export interface RegionConfig {
   gridType?: 'square' | 'line'
   gridSize?: number
   wordCount?: number
+}
+
+export interface TemplateValidationIssue {
+  regionName?: string
+  field?: string
+  message: string
+}
+
+export interface TemplateValidationResult {
+  passed: boolean
+  totalRegionCount: number
+  annotatedRegionCount: number
+  issueCount: number
+  issues: TemplateValidationIssue[]
 }
 
 export interface TemplateQuery {
@@ -113,6 +149,10 @@ export function generateTemplateFromPaper(paperId: number) {
 
 export function publishTemplate(id: number) {
   return request.post<void>(`/answer-sheet-template/${id}/publish`)
+}
+
+export function validateTemplate(id: number) {
+  return request.get<TemplateValidationResult>(`/answer-sheet-template/${id}/validate`)
 }
 
 export function getTemplatePreviewUrl(id: number) {

@@ -13,6 +13,7 @@ import com.edumark.answersheet.service.AnswerSheetTemplateService;
 import com.edumark.answersheet.service.PdfGeneratorService;
 import com.edumark.answersheet.vo.AnswerSheetRegionVO;
 import com.edumark.answersheet.vo.AnswerSheetTemplateVO;
+import com.edumark.answersheet.vo.AnswerSheetTemplateValidateVO;
 import com.edumark.common.exception.BusinessException;
 import com.edumark.common.result.PageResult;
 import com.edumark.exam.entity.Paper;
@@ -255,6 +256,111 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
         return template.getId();
     }
 
+    @Override
+    public AnswerSheetTemplateValidateVO validateTemplate(Long id) {
+        AnswerSheetTemplate template = getById(id);
+        if (template == null) {
+            throw new BusinessException("模板不存在");
+        }
+
+        List<AnswerSheetRegionVO> regions = regionMapper.selectListByTemplateId(id);
+        AnswerSheetTemplateValidateVO result = new AnswerSheetTemplateValidateVO();
+        result.setTotalRegionCount(regions.size());
+
+        List<AnswerSheetTemplateValidateVO.ValidationIssue> issues = new ArrayList<>();
+        int annotatedRegionCount = 0;
+
+        if (regions.isEmpty()) {
+            issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(null, "regions", "请至少配置一个答题区域"));
+        }
+
+        for (AnswerSheetRegionVO region : regions) {
+            Map<String, Object> config = region.getConfig() != null ? region.getConfig() : Collections.emptyMap();
+            String regionLabel = buildRegionLabel(region);
+
+            Double boxX = getConfigNumber(config, "boxX", "x");
+            Double boxY = getConfigNumber(config, "boxY", "y");
+            Double boxWidth = getConfigNumber(config, "boxWidth", "width");
+            Double boxHeight = getConfigNumber(config, "boxHeight");
+
+            boolean hasAnyBounds = boxX != null || boxY != null || boxWidth != null || boxHeight != null;
+            boolean hasAllBounds = boxX != null && boxY != null && boxWidth != null && boxHeight != null;
+            if (hasAllBounds) {
+                annotatedRegionCount++;
+            } else {
+                issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                        regionLabel,
+                        "bounds",
+                        regionLabel + " 未完成坐标标注，请补充 X/Y/宽/高"
+                ));
+            }
+
+            if (hasAllBounds) {
+                validateBounds(issues, regionLabel, boxX, boxY, boxWidth, boxHeight);
+            } else if (hasAnyBounds) {
+                issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                        regionLabel,
+                        "bounds",
+                        regionLabel + " 坐标信息不完整，必须同时提供 X/Y/宽/高"
+                ));
+            }
+
+            String regionRole = getConfigString(config, "regionRole");
+            if (regionRole == null || regionRole.isBlank()) {
+                issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                        regionLabel,
+                        "regionRole",
+                        regionLabel + " 未设置区域用途"
+                ));
+            }
+
+            if (requiresQuestionRange(regionRole, region.getRegionType())) {
+                if (region.getQuestionStart() == null || region.getQuestionEnd() == null) {
+                    issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                            regionLabel,
+                            "questionRange",
+                            regionLabel + " 缺少题号范围"
+                    ));
+                } else if (region.getQuestionStart() > region.getQuestionEnd()) {
+                    issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                            regionLabel,
+                            "questionRange",
+                            regionLabel + " 的结束题号不能小于起始题号"
+                    ));
+                }
+            }
+
+            if (requiresCropMode(regionRole)) {
+                String cropMode = getConfigString(config, "cropMode");
+                if (cropMode == null || cropMode.isBlank()) {
+                    issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                            regionLabel,
+                            "cropMode",
+                            regionLabel + " 未设置裁题模式"
+                    ));
+                }
+            }
+
+            String anchorType = getConfigString(config, "anchorType");
+            if (anchorType != null && !"none".equals(anchorType)) {
+                String anchorKey = getConfigString(config, "anchorKey");
+                if (anchorKey == null || anchorKey.isBlank()) {
+                    issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                            regionLabel,
+                            "anchorKey",
+                            regionLabel + " 已设置锚点类型，但缺少锚点标识"
+                    ));
+                }
+            }
+        }
+
+        result.setAnnotatedRegionCount(annotatedRegionCount);
+        result.setIssues(issues);
+        result.setIssueCount(issues.size());
+        result.setPassed(issues.isEmpty());
+        return result;
+    }
+
     private void generateRegionsFromQuestions(Long templateId, List<PaperQuestion> questions) {
         // 按大题号分组
         Map<Integer, List<PaperQuestion>> sectionMap = questions.stream()
@@ -318,6 +424,9 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
                 config.put("optionCount", 4); // 默认4个选项
                 config.put("questionsPerRow", 5); // 每行5题
                 config.put("bubbleStyle", "circle"); // 涂卡样式: circle, square
+                config.put("regionRole", "choice_block");
+                config.put("anchorType", "none");
+                config.put("cropMode", "range-question");
                 boolean hasMultiple = questions.stream()
                         .anyMatch(q -> q.getQuestionType() != null && q.getQuestionType() == 2);
                 config.put("hasMultipleChoice", hasMultiple);
@@ -326,6 +435,9 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
                 config.put("lineHeight", 30); // 行高(mm)
                 config.put("linesPerQuestion", 1); // 每题行数
                 config.put("lineStyle", "underline"); // 下划线样式
+                config.put("regionRole", "subjective_crop");
+                config.put("anchorType", "none");
+                config.put("cropMode", "single-question");
             }
             case 3 -> { // 解答题
                 int totalScore = questions.stream()
@@ -334,6 +446,9 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
                 config.put("height", Math.max(80, totalScore * 5)); // 区域高度
                 config.put("showBorder", true); // 显示边框
                 config.put("scoreBoxPosition", "top-right"); // 评分框位置
+                config.put("regionRole", "subjective_crop");
+                config.put("anchorType", "none");
+                config.put("cropMode", "single-question");
             }
             case 4 -> { // 作文题
                 int totalScore = questions.stream()
@@ -343,6 +458,9 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
                 config.put("gridType", "square"); // 格子类型: square, line
                 config.put("gridSize", 10); // 格子大小(mm)
                 config.put("wordCount", wordCount); // 总字数
+                config.put("regionRole", "essay_crop");
+                config.put("anchorType", "none");
+                config.put("cropMode", "full-region");
             }
         }
 
@@ -357,10 +475,13 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
             throw new BusinessException("模板不存在");
         }
 
-        // 查询区域配置
-        List<AnswerSheetRegionVO> regions = regionMapper.selectListByTemplateId(id);
-        if (regions.isEmpty()) {
-            throw new BusinessException("请先配置答题区域");
+        AnswerSheetTemplateValidateVO validateResult = validateTemplate(id);
+        if (!Boolean.TRUE.equals(validateResult.getPassed())) {
+            String message = validateResult.getIssues().stream()
+                    .limit(3)
+                    .map(AnswerSheetTemplateValidateVO.ValidationIssue::getMessage)
+                    .collect(Collectors.joining("；"));
+            throw new BusinessException("模板校验未通过: " + message);
         }
 
         // 生成PDF
@@ -402,5 +523,79 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
     @Override
     public String getDownloadUrl(Long id) {
         return getPreviewUrl(id);
+    }
+
+    private void validateBounds(List<AnswerSheetTemplateValidateVO.ValidationIssue> issues,
+                                String regionLabel,
+                                Double boxX,
+                                Double boxY,
+                                Double boxWidth,
+                                Double boxHeight) {
+        List<Double> values = List.of(boxX, boxY, boxWidth, boxHeight);
+        boolean outOfRange = values.stream().anyMatch(value -> value < 0 || value > 100);
+        if (outOfRange) {
+            issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                    regionLabel,
+                    "bounds",
+                    regionLabel + " 的坐标范围必须在 0 到 100 之间"
+            ));
+        }
+
+        if (boxWidth <= 0 || boxHeight <= 0) {
+            issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                    regionLabel,
+                    "bounds",
+                    regionLabel + " 的区域宽高必须大于 0"
+            ));
+        }
+
+        if (boxX + boxWidth > 100 || boxY + boxHeight > 100) {
+            issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                    regionLabel,
+                    "bounds",
+                    regionLabel + " 超出了页面范围"
+            ));
+        }
+    }
+
+    private boolean requiresQuestionRange(String regionRole, Integer regionType) {
+        if (regionRole != null && !regionRole.isBlank()) {
+            return Set.of("choice_block", "subjective_crop", "essay_crop").contains(regionRole);
+        }
+        return regionType != null && regionType >= 1 && regionType <= 4;
+    }
+
+    private boolean requiresCropMode(String regionRole) {
+        if (regionRole == null || regionRole.isBlank()) {
+            return false;
+        }
+        return Set.of("choice_block", "subjective_crop", "essay_crop").contains(regionRole);
+    }
+
+    private String buildRegionLabel(AnswerSheetRegionVO region) {
+        String pageText = region.getPageNo() != null ? "第" + region.getPageNo() + "页" : "未分页";
+        return pageText + " " + (region.getRegionName() != null ? region.getRegionName() : "未命名区域");
+    }
+
+    private String getConfigString(Map<String, Object> config, String key) {
+        Object value = config.get(key);
+        return value != null ? String.valueOf(value) : null;
+    }
+
+    private Double getConfigNumber(Map<String, Object> config, String... keys) {
+        for (String key : keys) {
+            Object value = config.get(key);
+            if (value instanceof Number number) {
+                return number.doubleValue();
+            }
+            if (value instanceof String string && !string.isBlank()) {
+                try {
+                    return Double.parseDouble(string);
+                } catch (NumberFormatException ignored) {
+                    continue;
+                }
+            }
+        }
+        return null;
     }
 }

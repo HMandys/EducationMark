@@ -69,9 +69,10 @@
           </template>
         </el-table-column>
         <el-table-column prop="createTime" label="创建时间" width="170" />
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+            <el-button type="warning" link @click="handleValidate(row)">校验</el-button>
             <el-button type="success" link @click="handlePublish(row)" v-if="row.status === 0">发布</el-button>
             <el-button type="primary" link @click="handlePreview(row)" v-if="row.status === 1">预览</el-button>
             <el-button type="primary" link @click="handleDownload(row)" v-if="row.status === 1">下载</el-button>
@@ -169,7 +170,9 @@ import {
   publishTemplate,
   getTemplatePreviewUrl,
   getTemplateDownloadUrl,
+  validateTemplate,
   type AnswerSheetTemplate,
+  type TemplateValidationResult,
 } from '@/api/answerSheetTemplate'
 import { getExamPage, getExamSubjectList, type Exam, type ExamSubject } from '@/api/exam'
 
@@ -336,12 +339,38 @@ const handleEdit = (row: AnswerSheetTemplate) => {
 
 // 发布
 const handlePublish = async (row: AnswerSheetTemplate) => {
+  const validation = await validateTemplate(row.id)
+  if (!validation.data.passed) {
+    await showValidationResult(row.name, validation.data)
+    return
+  }
+
   await ElMessageBox.confirm(`确定要发布模板【${row.name}】吗？发布后将生成PDF文件。`, '提示', {
     type: 'warning',
   })
   await publishTemplate(row.id)
   ElMessage.success('发布成功')
   fetchData()
+}
+
+const showValidationResult = async (templateName: string, validation: TemplateValidationResult) => {
+  const summary = validation.passed
+    ? `模板【${templateName}】校验通过。已标注 ${validation.annotatedRegionCount}/${validation.totalRegionCount} 个区域。`
+    : [
+        `模板【${templateName}】校验未通过。`,
+        `已标注 ${validation.annotatedRegionCount}/${validation.totalRegionCount} 个区域。`,
+        ...validation.issues.map((item, index) => `${index + 1}. ${item.message}`),
+      ].join('<br>')
+
+  await ElMessageBox.alert(summary, validation.passed ? '模板校验通过' : '模板校验未通过', {
+    dangerouslyUseHTMLString: true,
+    confirmButtonText: '我知道了',
+  })
+}
+
+const handleValidate = async (row: AnswerSheetTemplate) => {
+  const validation = await validateTemplate(row.id)
+  await showValidationResult(row.name, validation.data)
 }
 
 // 预览

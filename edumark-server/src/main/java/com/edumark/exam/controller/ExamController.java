@@ -5,6 +5,7 @@ import com.edumark.common.result.Result;
 import com.edumark.exam.dto.ExamDTO;
 import com.edumark.exam.dto.ExamQueryDTO;
 import com.edumark.exam.service.ExamService;
+import com.edumark.exam.vo.ExamPublishCheckVO;
 import com.edumark.exam.vo.ExamVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -80,6 +81,12 @@ public class ExamController {
     public Result<Void> publish(@PathVariable Long id) {
         examService.publish(id);
         return Result.success();
+    }
+
+    @Operation(summary = "发布前检查")
+    @GetMapping("/{id}/publish-check")
+    public Result<ExamPublishCheckVO> publishCheck(@PathVariable Long id) {
+        return Result.success(examService.publishCheck(id));
     }
 
     @Operation(summary = "撤回发布")

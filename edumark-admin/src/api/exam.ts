@@ -68,6 +68,17 @@ export interface ExamSubject {
   createTime?: string
 }
 
+export interface ExamPublishCheck {
+  examId: number
+  canPublish: boolean
+  classCount: number
+  subjectCount: number
+  completedPaperCount: number
+  publishedTemplateCount: number
+  subjectWithQuestionCount: number
+  missingItems: string[]
+}
+
 // 知识点类型定义
 export interface KnowledgePoint {
   id: number
@@ -129,6 +140,10 @@ export function updateExamStatus(id: number, status: number) {
 
 export function publishExam(id: number) {
   return request.post<void>(`/exam/${id}/publish`)
+}
+
+export function getExamPublishCheck(id: number) {
+  return request.get<ExamPublishCheck>(`/exam/${id}/publish-check`)
 }
 
 export function unpublishExam(id: number) {

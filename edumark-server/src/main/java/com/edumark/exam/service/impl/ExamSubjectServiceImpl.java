@@ -3,8 +3,10 @@ package com.edumark.exam.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.edumark.common.exception.BusinessException;
 import com.edumark.exam.dto.ExamSubjectDTO;
+import com.edumark.exam.entity.Exam;
 import com.edumark.exam.entity.ExamSubject;
 import com.edumark.exam.entity.Paper;
+import com.edumark.exam.mapper.ExamMapper;
 import com.edumark.exam.mapper.ExamSubjectMapper;
 import com.edumark.exam.mapper.PaperMapper;
 import com.edumark.exam.service.ExamSubjectService;
@@ -29,6 +31,9 @@ public class ExamSubjectServiceImpl extends ServiceImpl<ExamSubjectMapper, ExamS
 
     @Resource
     private PaperMapper paperMapper;
+
+    @Resource
+    private ExamMapper examMapper;
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -90,6 +95,7 @@ public class ExamSubjectServiceImpl extends ServiceImpl<ExamSubjectMapper, ExamS
 
         // 自动创建试卷
         createDefaultPaper(subject);
+        refreshExamSummary(subject.getExamId());
 
         return subject.getId();
     }
@@ -139,6 +145,7 @@ public class ExamSubjectServiceImpl extends ServiceImpl<ExamSubjectMapper, ExamS
             subject.setEndTime(LocalDateTime.parse(dto.getEndTime(), DTF));
         }
         updateById(subject);
+        refreshExamSummary(subject.getExamId());
     }
 
     @Override
@@ -149,6 +156,7 @@ public class ExamSubjectServiceImpl extends ServiceImpl<ExamSubjectMapper, ExamS
             throw new BusinessException("科目不存在");
         }
         removeById(id);
+        refreshExamSummary(subject.getExamId());
     }
 
     @Override
@@ -163,5 +171,24 @@ public class ExamSubjectServiceImpl extends ServiceImpl<ExamSubjectMapper, ExamS
             dto.setSort(sort++);
             create(dto);
         }
+    }
+
+    private void refreshExamSummary(Long examId) {
+        if (examId == null) {
+            return;
+        }
+        Integer totalScore = lambdaQuery()
+                .eq(ExamSubject::getExamId, examId)
+                .eq(ExamSubject::getDeleted, 0)
+                .list()
+                .stream()
+                .map(ExamSubject::getFullScore)
+                .filter(java.util.Objects::nonNull)
+                .reduce(0, Integer::sum);
+
+        Exam exam = new Exam();
+        exam.setId(examId);
+        exam.setTotalScore(totalScore);
+        examMapper.updateById(exam);
     }
 }

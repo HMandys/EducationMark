@@ -155,6 +155,12 @@
     <el-dialog v-model="previewDialogVisible" title="PDF预览" width="80%" destroy-on-close>
       <iframe v-if="previewUrl" :src="previewUrl" style="width: 100%; height: 70vh; border: none;"></iframe>
     </el-dialog>
+
+    <TemplateValidationDialog
+      v-model:visible="validationDialogVisible"
+      :template-name="currentValidationTemplateName"
+      :result="currentValidationResult"
+    />
   </div>
 </template>
 
@@ -175,6 +181,7 @@ import {
   type TemplateValidationResult,
 } from '@/api/answerSheetTemplate'
 import { getExamPage, getExamSubjectList, type Exam, type ExamSubject } from '@/api/exam'
+import TemplateValidationDialog from './components/TemplateValidationDialog.vue'
 
 interface Paper {
   id: number
@@ -224,6 +231,9 @@ const createFormRules: FormRules = {
 // 预览对话框
 const previewDialogVisible = ref(false)
 const previewUrl = ref('')
+const validationDialogVisible = ref(false)
+const currentValidationTemplateName = ref('')
+const currentValidationResult = ref<TemplateValidationResult | null>(null)
 
 // 加载考试列表
 const loadExamList = async () => {
@@ -341,7 +351,7 @@ const handleEdit = (row: AnswerSheetTemplate) => {
 const handlePublish = async (row: AnswerSheetTemplate) => {
   const validation = await validateTemplate(row.id)
   if (!validation.data.passed) {
-    await showValidationResult(row.name, validation.data)
+    openValidationResult(row.name, validation.data)
     return
   }
 
@@ -353,24 +363,15 @@ const handlePublish = async (row: AnswerSheetTemplate) => {
   fetchData()
 }
 
-const showValidationResult = async (templateName: string, validation: TemplateValidationResult) => {
-  const summary = validation.passed
-    ? `模板【${templateName}】校验通过。已标注 ${validation.annotatedRegionCount}/${validation.totalRegionCount} 个区域。`
-    : [
-        `模板【${templateName}】校验未通过。`,
-        `已标注 ${validation.annotatedRegionCount}/${validation.totalRegionCount} 个区域。`,
-        ...validation.issues.map((item, index) => `${index + 1}. ${item.message}`),
-      ].join('<br>')
-
-  await ElMessageBox.alert(summary, validation.passed ? '模板校验通过' : '模板校验未通过', {
-    dangerouslyUseHTMLString: true,
-    confirmButtonText: '我知道了',
-  })
+const openValidationResult = (templateName: string, validation: TemplateValidationResult) => {
+  currentValidationTemplateName.value = templateName
+  currentValidationResult.value = validation
+  validationDialogVisible.value = true
 }
 
 const handleValidate = async (row: AnswerSheetTemplate) => {
   const validation = await validateTemplate(row.id)
-  await showValidationResult(row.name, validation.data)
+  openValidationResult(row.name, validation.data)
 }
 
 // 预览

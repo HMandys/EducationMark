@@ -5,9 +5,14 @@
         <div class="preview-toolbar-title">模板标注预览</div>
         <div class="preview-toolbar-tip">点击区域选中，拖动区域框可调整位置，右下角拖点可调整尺寸。</div>
       </div>
-      <el-tag v-if="selectedRegionIndex >= 0" type="primary" effect="plain">
-        当前区域：{{ template.regions?.[selectedRegionIndex]?.regionName || '未命名区域' }}
-      </el-tag>
+      <div class="preview-toolbar-right">
+        <el-tag v-if="sampleImageVisible && sampleImageUrl" type="success" effect="plain">
+          样张叠加中
+        </el-tag>
+        <el-tag v-if="selectedRegionIndex >= 0" type="primary" effect="plain">
+          当前区域：{{ template.regions?.[selectedRegionIndex]?.regionName || '未命名区域' }}
+        </el-tag>
+      </div>
     </div>
 
     <div
@@ -16,6 +21,10 @@
       :style="pageStyle"
       @click="handleBlankClick"
     >
+      <div v-if="sampleImageVisible && sampleImageUrl" class="sample-image-layer" :style="{ opacity: sampleImageOpacity }">
+        <img :src="sampleImageUrl" alt="答题卡样张" class="sample-image" />
+      </div>
+
       <div class="preview-base">
         <div class="preview-header" v-if="template.headerConfig?.showTitle">
           <h2 class="preview-title">{{ template.headerConfig.title || template.name }}</h2>
@@ -212,9 +221,15 @@ const props = withDefaults(defineProps<{
   template: Partial<AnswerSheetTemplate>
   editable?: boolean
   selectedRegionIndex?: number
+  sampleImageUrl?: string
+  sampleImageVisible?: boolean
+  sampleImageOpacity?: number
 }>(), {
   editable: false,
   selectedRegionIndex: -1,
+  sampleImageUrl: '',
+  sampleImageVisible: false,
+  sampleImageOpacity: 0.35,
 })
 
 const emit = defineEmits<{
@@ -438,6 +453,12 @@ onBeforeUnmount(() => {
   background: #fff;
 }
 
+.preview-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .preview-toolbar-title {
   font-size: 15px;
   font-weight: 600;
@@ -456,6 +477,19 @@ onBeforeUnmount(() => {
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
   font-family: 'SimSun', serif;
   user-select: none;
+}
+
+.sample-image-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.sample-image {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
 }
 
 .preview-base {

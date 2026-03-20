@@ -55,7 +55,12 @@ export interface AnswerSheetQuestionDetail {
   regionRoleName?: string
   cropMode?: string
   pageNo?: number
+  optionCount?: number
   previewAvailable?: boolean
+}
+
+export interface AnswerSheetObjectiveAnswerDTO {
+  studentAnswer?: string
 }
 
 export interface AnswerSheetQuery {
@@ -104,6 +109,14 @@ export function getAnswerSheetQuestionDetails(id: number) {
 
 export function getAnswerSheetQuestionPreview(id: number, questionId: number) {
   return request.get<string>(`/answer-sheet/${id}/details/${questionId}/preview`)
+}
+
+export function recognizeObjectiveAnswers(id: number) {
+  return request.post<AnswerSheetQuestionDetail[]>(`/answer-sheet/${id}/objective-recognize`)
+}
+
+export function updateObjectiveAnswer(id: number, questionId: number, data: AnswerSheetObjectiveAnswerDTO) {
+  return request.put<AnswerSheetQuestionDetail>(`/answer-sheet/${id}/details/${questionId}/objective-answer`, data)
 }
 
 export function createAnswerSheet(data: Partial<AnswerSheet>) {

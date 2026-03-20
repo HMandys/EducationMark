@@ -201,49 +201,7 @@ public class MarkingServiceImpl implements MarkingService {
      * 更新答题卡得分
      */
     private void updateAnswerSheetScore(Long answerSheetId, Long questionId, Integer score) {
-        // 更新或插入答题卡明细
-        AnswerSheetDetail detail = answerSheetDetailMapper.selectOne(
-                new LambdaQueryWrapper<AnswerSheetDetail>()
-                        .eq(AnswerSheetDetail::getAnswerSheetId, answerSheetId)
-                        .eq(AnswerSheetDetail::getQuestionId, questionId)
-        );
-
-        if (detail != null) {
-            detail.setScore(score);
-            detail.setStatus(1); // 已阅
-            answerSheetDetailMapper.updateById(detail);
-        } else {
-            detail = new AnswerSheetDetail();
-            detail.setAnswerSheetId(answerSheetId);
-            detail.setQuestionId(questionId);
-            detail.setScore(score);
-            detail.setStatus(1);
-            answerSheetDetailMapper.insert(detail);
-        }
-
-        // 重新计算答题卡总分
-        recalculateAnswerSheetTotalScore(answerSheetId);
-    }
-
-    /**
-     * 重新计算答题卡总分
-     */
-    private void recalculateAnswerSheetTotalScore(Long answerSheetId) {
-        List<AnswerSheetDetail> details = answerSheetDetailMapper.selectList(
-                new LambdaQueryWrapper<AnswerSheetDetail>()
-                        .eq(AnswerSheetDetail::getAnswerSheetId, answerSheetId)
-        );
-
-        int totalScore = details.stream()
-                .filter(d -> d.getScore() != null)
-                .mapToInt(AnswerSheetDetail::getScore)
-                .sum();
-
-        AnswerSheet answerSheet = answerSheetMapper.selectById(answerSheetId);
-        if (answerSheet != null) {
-            answerSheet.setTotalScore(totalScore);
-            answerSheetMapper.updateById(answerSheet);
-        }
+        answerSheetDetailService.updateQuestionScore(answerSheetId, questionId, score, true);
     }
 
     @Override
@@ -316,28 +274,7 @@ public class MarkingServiceImpl implements MarkingService {
 
         // 为每份答题卡的每道客观题评分
         for (AnswerSheet answerSheet : answerSheets) {
-            for (PaperQuestion question : questions) {
-                // 查询学生答案
-                AnswerSheetDetail detail = answerSheetDetailMapper.selectOne(
-                        new LambdaQueryWrapper<AnswerSheetDetail>()
-                                .eq(AnswerSheetDetail::getAnswerSheetId, answerSheet.getId())
-                                .eq(AnswerSheetDetail::getQuestionId, question.getId())
-                );
-
-                if (detail != null && detail.getStudentAnswer() != null) {
-                    // 比对答案
-                    int score = 0;
-                    if (detail.getStudentAnswer().equals(question.getCorrectAnswer())) {
-                        score = question.getScore();
-                    }
-                    detail.setScore(score);
-                    detail.setStatus(1);
-                    answerSheetDetailMapper.updateById(detail);
-                }
-            }
-
-            // 重新计算总分
-            recalculateAnswerSheetTotalScore(answerSheet.getId());
+            answerSheetDetailService.recognizeObjectiveAnswers(answerSheet.getId());
         }
     }
 

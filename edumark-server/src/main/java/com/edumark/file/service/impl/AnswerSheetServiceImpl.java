@@ -528,6 +528,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
             return;
         }
         answerSheetDetailService.initializeQuestionDetails(answerSheet.getId());
+        answerSheetDetailService.recognizeObjectiveAnswers(answerSheet.getId());
     }
 
     private record RecognitionOutcome(Student matchedStudent, String candidateStudentNumber, String remark) {

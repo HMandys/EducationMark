@@ -110,6 +110,12 @@ export const authRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/answer-sheet/index.vue'),
         meta: { title: '答题卡管理', icon: 'Picture', permission: 'exam:answer:list' },
       },
+      {
+        path: 'answer-sheet/objective-review/:id',
+        name: 'AnswerSheetObjectiveReview',
+        component: () => import('@/views/answer-sheet/objective-review.vue'),
+        meta: { title: '客观题复核', icon: 'Checked', hidden: true, permission: 'exam:answer:list' },
+      },
     ],
   },
   {

@@ -126,6 +126,7 @@
           <template #default="{ row }">
             <el-button type="primary" link @click="handleView(row)">查看</el-button>
             <el-button type="primary" link @click="handleQuestionDetails(row)">识别明细</el-button>
+            <el-button type="success" link @click="handleObjectiveReview(row)">客观题复核</el-button>
             <el-button type="primary" link @click="handleAddImages(row)">补传</el-button>
             <el-button v-if="row.status === 5" type="info" link @click="handleRerunRecognition(row)">重新识别</el-button>
             <el-button v-if="row.status === 5" type="warning" link @click="handleResolve(row)">处理异常</el-button>
@@ -386,7 +387,7 @@
 import { computed, ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type UploadFile } from 'element-plus'
 import { Search, Refresh, Upload, Delete, Plus } from '@element-plus/icons-vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   getAnswerSheetPage,
   getAnswerSheetDetail,
@@ -407,6 +408,7 @@ import {
 import { getExamPage, getExamSubjectList, type Exam, type ExamSubject } from '@/api/exam'
 
 const route = useRoute()
+const router = useRouter()
 
 // 下拉列表数据
 const examList = ref<Exam[]>([])
@@ -672,6 +674,16 @@ const handleQuestionDetails = async (row: AnswerSheet) => {
   } finally {
     questionDetailsLoading.value = false
   }
+}
+
+const handleObjectiveReview = (row: AnswerSheet) => {
+  router.push({
+    name: 'AnswerSheetObjectiveReview',
+    params: { id: row.id },
+    query: {
+      examId: row.examId,
+    },
+  })
 }
 
 const handleQuestionCurrentChange = async (row?: AnswerSheetQuestionDetail) => {

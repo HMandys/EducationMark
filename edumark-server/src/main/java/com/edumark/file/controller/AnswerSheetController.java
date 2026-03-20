@@ -73,6 +73,21 @@ public class AnswerSheetController {
         return Result.success(answerSheetDetailService.updateObjectiveAnswer(id, questionId, dto.getStudentAnswer()));
     }
 
+    @Operation(summary = "更新主观题核验状态")
+    @PutMapping("/{id}/details/{questionId}/subjective-review-status")
+    public Result<AnswerSheetQuestionDetailVO> updateSubjectiveReviewStatus(
+            @PathVariable Long id,
+            @PathVariable Long questionId,
+            @RequestParam Integer status) {
+        return Result.success(answerSheetDetailService.updateSubjectiveReviewStatus(id, questionId, status));
+    }
+
+    @Operation(summary = "批量重跑主观题核验")
+    @PostMapping("/{id}/subjective-review/rerun")
+    public Result<List<AnswerSheetQuestionDetailVO>> rerunSubjectiveReview(@PathVariable Long id) {
+        return Result.success(answerSheetDetailService.rerunSubjectiveReview(id));
+    }
+
     @Operation(summary = "创建答题卡")
     @PostMapping
     public Result<Long> create(@RequestBody AnswerSheetDTO dto) {

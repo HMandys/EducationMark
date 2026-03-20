@@ -54,6 +54,24 @@ public interface AnswerSheetDetailService {
     AnswerSheetQuestionDetailVO updateObjectiveAnswer(Long answerSheetId, Long questionId, String studentAnswer);
 
     /**
+     * 更新主观题核验状态
+     *
+     * @param answerSheetId 答题卡ID
+     * @param questionId 题目ID
+     * @param status 状态：0-待处理 2-已核验通过 3-待修正
+     * @return 更新后的题目明细
+     */
+    AnswerSheetQuestionDetailVO updateSubjectiveReviewStatus(Long answerSheetId, Long questionId, Integer status);
+
+    /**
+     * 批量重跑主观题核验
+     *
+     * @param answerSheetId 答题卡ID
+     * @return 最新题目明细
+     */
+    List<AnswerSheetQuestionDetailVO> rerunSubjectiveReview(Long answerSheetId);
+
+    /**
      * 更新题目得分并同步答题卡总分
      *
      * @param answerSheetId 答题卡ID

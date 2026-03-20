@@ -217,6 +217,7 @@ const queryForm = reactive({
   pageNum: 1,
   pageSize: 10,
   examId: undefined as number | undefined,
+  examSubjectId: undefined as number | undefined,
   status: undefined as number | undefined
 })
 
@@ -272,17 +273,22 @@ function handleSearch() {
 
 function handleReset() {
   queryForm.examId = undefined
+  queryForm.examSubjectId = undefined
   queryForm.status = undefined
   handleSearch()
 }
 
 async function syncRouteExam() {
   const routeExamId = Number(route.query.examId)
+  const routeExamSubjectId = Number(route.query.examSubjectId)
   if (Number.isFinite(routeExamId) && routeExamId > 0) {
     queryForm.examId = routeExamId
   } else {
     queryForm.examId = undefined
   }
+  queryForm.examSubjectId = Number.isFinite(routeExamSubjectId) && routeExamSubjectId > 0
+    ? routeExamSubjectId
+    : undefined
   queryForm.pageNum = 1
   await loadData()
 }
@@ -432,7 +438,7 @@ onMounted(async () => {
   await syncRouteExam()
 })
 
-watch(() => route.query.examId, () => {
+watch(() => [route.query.examId, route.query.examSubjectId], () => {
   syncRouteExam()
 })
 

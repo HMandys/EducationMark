@@ -82,6 +82,9 @@
             <el-radio-button value="statistics">统计分析</el-radio-button>
           </el-radio-group>
           <div class="header-actions">
+            <el-button :icon="Search" @click="handleOpenPublishCheck" :disabled="!queryForm.examId">
+              出分检查
+            </el-button>
             <el-button
               v-if="currentExam && currentExam.status === 4"
               type="success"
@@ -306,7 +309,7 @@
 import { ref, reactive, onMounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Download, Upload } from '@element-plus/icons-vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import * as echarts from 'echarts'
 import {
@@ -325,6 +328,7 @@ import { getExamPage, getExamDetail, getExamSubjectList, type Exam, type ExamSub
 
 const userStore = useUserStore()
 const route = useRoute()
+const router = useRouter()
 
 // 查询表单
 const queryForm = reactive({
@@ -579,6 +583,17 @@ const handlePublish = async () => {
   } catch (error) {
     console.error('发布失败', error)
   }
+}
+
+const handleOpenPublishCheck = () => {
+  if (!queryForm.examId) {
+    ElMessage.warning('请先选择考试')
+    return
+  }
+  router.push({
+    name: 'ScorePublishCheck',
+    params: { id: queryForm.examId },
+  })
 }
 
 // 撤回成绩

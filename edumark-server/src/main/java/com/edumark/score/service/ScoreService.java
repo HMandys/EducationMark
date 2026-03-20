@@ -3,6 +3,7 @@ package com.edumark.score.service;
 import com.edumark.common.result.PageResult;
 import com.edumark.score.dto.ScoreQueryDTO;
 import com.edumark.score.vo.ExamScoreVO;
+import com.edumark.score.vo.ScorePublishCheckVO;
 import com.edumark.score.vo.ScoreStatisticsVO;
 import com.edumark.score.vo.SubjectScoreVO;
 
@@ -49,6 +50,11 @@ public interface ScoreService {
      * 查询统计数据
      */
     List<ScoreStatisticsVO> getStatistics(Long examId, Long examSubjectId, Long classId);
+
+    /**
+     * 查询成绩发布前检查结果
+     */
+    ScorePublishCheckVO getPublishCheck(Long examId);
 
     /**
      * 发布成绩

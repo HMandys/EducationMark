@@ -40,6 +40,8 @@ import java.util.List;
 @Service
 public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, MarkingTask> implements MarkingTaskService {
 
+    private static final int DETAIL_STATUS_SUBJECTIVE_ANOMALY = 3;
+
     @Resource
     private MarkingTaskAssignMapper markingTaskAssignMapper;
 
@@ -219,10 +221,16 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
             throw new BusinessException("请先分配阅卷教师");
         }
 
-        // 生成阅卷记录
-        generateMarkingRecords(task);
+        // 生成阅卷记录，并同步可进入阅卷的有效数量
+        int eligibleCount = generateMarkingRecords(task);
+        if (eligibleCount <= 0) {
+            throw new BusinessException("当前没有可进入阅卷的主观题明细，请先处理异常项");
+        }
 
         // 更新状态为进行中
+        task.setTotalCount(eligibleCount);
+        task.setCompletedCount(0);
+        task.setPendingCount(eligibleCount);
         task.setStatus(1);
         updateById(task);
     }
@@ -230,11 +238,12 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
     /**
      * 生成阅卷记录
      */
-    private void generateMarkingRecords(MarkingTask task) {
+    private int generateMarkingRecords(MarkingTask task) {
         List<AnswerSheetDetail> details = answerSheetDetailMapper.selectList(
                 new LambdaQueryWrapper<AnswerSheetDetail>()
                         .eq(AnswerSheetDetail::getQuestionId, task.getQuestionId())
                         .eq(AnswerSheetDetail::getDeleted, 0)
+                        .ne(AnswerSheetDetail::getStatus, DETAIL_STATUS_SUBJECTIVE_ANOMALY)
                         .orderByAsc(AnswerSheetDetail::getAnswerSheetId)
                         .orderByAsc(AnswerSheetDetail::getId)
         );
@@ -265,12 +274,14 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
 
         int firstIndex = 0;
         int secondIndex = 0;
+        int eligibleCount = 0;
 
         for (AnswerSheetDetail detail : details) {
             AnswerSheet answerSheet = answerSheetMapper.selectById(detail.getAnswerSheetId());
             if (answerSheet == null || answerSheet.getStudentId() == null) {
                 continue;
             }
+            eligibleCount++;
 
             // 一评
             MarkingTaskAssign firstAssign = firstMarkers.get(firstIndex % firstMarkers.size());
@@ -288,6 +299,7 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
                 secondIndex++;
             }
         }
+        return eligibleCount;
     }
 
     /**

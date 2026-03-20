@@ -56,6 +56,8 @@ export interface AnswerSheetQuestionDetail {
   cropMode?: string
   pageNo?: number
   optionCount?: number
+  anomalyFlag?: boolean
+  anomalyReason?: string
   previewAvailable?: boolean
 }
 
@@ -117,6 +119,18 @@ export function recognizeObjectiveAnswers(id: number) {
 
 export function updateObjectiveAnswer(id: number, questionId: number, data: AnswerSheetObjectiveAnswerDTO) {
   return request.put<AnswerSheetQuestionDetail>(`/answer-sheet/${id}/details/${questionId}/objective-answer`, data)
+}
+
+export function updateSubjectiveReviewStatus(id: number, questionId: number, status: number) {
+  return request.put<AnswerSheetQuestionDetail>(
+    `/answer-sheet/${id}/details/${questionId}/subjective-review-status`,
+    null,
+    { params: { status } }
+  )
+}
+
+export function rerunSubjectiveReview(id: number) {
+  return request.post<AnswerSheetQuestionDetail[]>(`/answer-sheet/${id}/subjective-review/rerun`)
 }
 
 export function createAnswerSheet(data: Partial<AnswerSheet>) {

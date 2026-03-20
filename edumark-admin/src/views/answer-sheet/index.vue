@@ -127,6 +127,7 @@
             <el-button type="primary" link @click="handleView(row)">查看</el-button>
             <el-button type="primary" link @click="handleQuestionDetails(row)">识别明细</el-button>
             <el-button type="success" link @click="handleObjectiveReview(row)">客观题复核</el-button>
+            <el-button type="warning" link @click="handleSubjectiveReview(row)">主观题核验</el-button>
             <el-button type="primary" link @click="handleAddImages(row)">补传</el-button>
             <el-button v-if="row.status === 5" type="info" link @click="handleRerunRecognition(row)">重新识别</el-button>
             <el-button v-if="row.status === 5" type="warning" link @click="handleResolve(row)">处理异常</el-button>
@@ -686,6 +687,16 @@ const handleObjectiveReview = (row: AnswerSheet) => {
   })
 }
 
+const handleSubjectiveReview = (row: AnswerSheet) => {
+  router.push({
+    name: 'AnswerSheetSubjectiveReview',
+    params: { id: row.id },
+    query: {
+      examId: row.examId,
+    },
+  })
+}
+
 const handleQuestionCurrentChange = async (row?: AnswerSheetQuestionDetail) => {
   if (!row || !row.previewAvailable) {
     activeQuestionDetail.value = row || null
@@ -822,10 +833,15 @@ const handleBatchDelete = async () => {
 
 const syncRouteExam = async () => {
   const routeExamId = Number(route.query.examId)
+  const routeExamSubjectId = Number(route.query.examSubjectId)
+  const routeStatus = Number(route.query.status)
+  queryParams.status = Number.isFinite(routeStatus) && routeStatus >= 0 ? routeStatus : undefined
   if (Number.isFinite(routeExamId) && routeExamId > 0) {
     queryParams.examId = routeExamId
-    queryParams.examSubjectId = undefined
     await loadSubjectListByExam(routeExamId)
+    queryParams.examSubjectId = Number.isFinite(routeExamSubjectId) && routeExamSubjectId > 0
+      ? routeExamSubjectId
+      : undefined
     await fetchData()
     return
   }
@@ -836,7 +852,7 @@ const syncRouteExam = async () => {
   await fetchData()
 }
 
-watch(() => route.query.examId, () => {
+watch(() => [route.query.examId, route.query.examSubjectId, route.query.status], () => {
   syncRouteExam()
 })
 

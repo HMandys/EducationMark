@@ -27,7 +27,7 @@ public class AnswerSheetDetail extends BaseEntity {
     @Schema(description = "得分")
     private Integer score;
 
-    @Schema(description = "状态：0-待阅，1-已阅")
+    @Schema(description = "状态：0-待处理/待阅卷，1-已完成评分，2-主观题已核验通过，3-主观题待修正")
     private Integer status;
 
     // Getters and Setters

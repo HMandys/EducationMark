@@ -116,6 +116,12 @@ export const authRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/answer-sheet/objective-review.vue'),
         meta: { title: '客观题复核', icon: 'Checked', hidden: true, permission: 'exam:answer:list' },
       },
+      {
+        path: 'answer-sheet/subjective-review/:id',
+        name: 'AnswerSheetSubjectiveReview',
+        component: () => import('@/views/answer-sheet/subjective-review.vue'),
+        meta: { title: '主观题裁题核验', icon: 'Crop', hidden: true, permission: 'exam:answer:list' },
+      },
     ],
   },
   {
@@ -169,6 +175,12 @@ export const authRoutes: RouteRecordRaw[] = [
         name: 'ScoreList',
         component: () => import('@/views/score/index.vue'),
         meta: { title: '成绩查询', icon: 'List', permission: 'score:summary:view' },
+      },
+      {
+        path: 'publish-check/:id',
+        name: 'ScorePublishCheck',
+        component: () => import('@/views/score/publish-check.vue'),
+        meta: { title: '出分检查', icon: 'CircleCheck', hidden: true, permission: 'score:summary:view' },
       },
     ],
   },

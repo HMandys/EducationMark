@@ -10,6 +10,10 @@ import com.edumark.exam.entity.ExamSubject;
 import com.edumark.exam.mapper.ExamClassMapper;
 import com.edumark.exam.mapper.ExamMapper;
 import com.edumark.exam.mapper.ExamSubjectMapper;
+import com.edumark.marking.entity.MarkingArbitration;
+import com.edumark.marking.entity.MarkingTask;
+import com.edumark.marking.mapper.MarkingArbitrationMapper;
+import com.edumark.marking.mapper.MarkingTaskMapper;
 import com.edumark.exam.vo.ExamVO;
 import com.edumark.file.entity.AnswerSheet;
 import com.edumark.file.mapper.AnswerSheetMapper;
@@ -20,6 +24,7 @@ import com.edumark.score.entity.*;
 import com.edumark.score.mapper.*;
 import com.edumark.score.service.ScoreService;
 import com.edumark.score.vo.ExamScoreVO;
+import com.edumark.score.vo.ScorePublishCheckVO;
 import com.edumark.score.vo.ScoreStatisticsVO;
 import com.edumark.score.vo.SubjectScoreVO;
 import jakarta.annotation.Resource;
@@ -67,6 +72,12 @@ public class ScoreServiceImpl implements ScoreService {
 
     @Resource
     private StudentMapper studentMapper;
+
+    @Resource
+    private MarkingTaskMapper markingTaskMapper;
+
+    @Resource
+    private MarkingArbitrationMapper markingArbitrationMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -477,6 +488,119 @@ public class ScoreServiceImpl implements ScoreService {
     }
 
     @Override
+    public ScorePublishCheckVO getPublishCheck(Long examId) {
+        Exam exam = examMapper.selectById(examId);
+        if (exam == null) {
+            throw new BusinessException("考试不存在");
+        }
+
+        int subjectCount = Math.toIntExact(examSubjectMapper.selectCount(
+                new LambdaQueryWrapper<ExamSubject>()
+                        .eq(ExamSubject::getExamId, examId)
+                        .eq(ExamSubject::getDeleted, 0)
+        ));
+
+        int answerSheetCount = countAnswerSheets(examId, null);
+        int completedAnswerSheetCount = countAnswerSheets(examId, 4);
+        int pendingRecognitionCount = countAnswerSheets(examId, 0);
+        int recognitionExceptionCount = countAnswerSheets(examId, 5);
+        int pendingMarkingAnswerSheetCount = Math.toIntExact(answerSheetMapper.selectCount(
+                new LambdaQueryWrapper<AnswerSheet>()
+                        .eq(AnswerSheet::getExamId, examId)
+                        .in(AnswerSheet::getStatus, 1, 2, 3)
+        ));
+
+        List<MarkingTask> markingTasks = markingTaskMapper.selectList(
+                new LambdaQueryWrapper<MarkingTask>()
+                        .eq(MarkingTask::getExamId, examId)
+                        .eq(MarkingTask::getDeleted, 0)
+        );
+        int markingTaskCount = markingTasks.size();
+        int unfinishedTaskCount = (int) markingTasks.stream()
+                .filter(task -> task.getStatus() == null || task.getStatus() != 2
+                        || (task.getPendingCount() != null && task.getPendingCount() > 0))
+                .count();
+
+        List<Long> taskIds = markingTasks.stream()
+                .map(MarkingTask::getId)
+                .toList();
+        int pendingArbitrationCount = taskIds.isEmpty() ? 0 : Math.toIntExact(markingArbitrationMapper.selectCount(
+                new LambdaQueryWrapper<MarkingArbitration>()
+                        .in(MarkingArbitration::getTaskId, taskIds)
+                        .eq(MarkingArbitration::getStatus, 0)
+        ));
+
+        int examScoreCount = Math.toIntExact(examScoreMapper.selectCount(
+                new LambdaQueryWrapper<ExamScore>()
+                        .eq(ExamScore::getExamId, examId)
+        ));
+        int subjectScoreCount = Math.toIntExact(subjectScoreMapper.selectCount(
+                new LambdaQueryWrapper<SubjectScore>()
+                        .eq(SubjectScore::getExamId, examId)
+        ));
+        int statisticsCount = Math.toIntExact(statisticsMapper.selectCount(
+                new LambdaQueryWrapper<ScoreStatistics>()
+                        .eq(ScoreStatistics::getExamId, examId)
+        ));
+
+        List<String> blockingItems = new ArrayList<>();
+        List<String> warningItems = new ArrayList<>();
+
+        if (exam.getStatus() == null || exam.getStatus() < 4) {
+            blockingItems.add("考试状态尚未到“已完成”，当前还不能正式出分");
+        }
+        if (pendingRecognitionCount > 0) {
+            blockingItems.add("仍有 " + pendingRecognitionCount + " 份答题卡处于识别中");
+        }
+        if (recognitionExceptionCount > 0) {
+            blockingItems.add("仍有 " + recognitionExceptionCount + " 份答题卡在异常池");
+        }
+        if (pendingMarkingAnswerSheetCount > 0) {
+            blockingItems.add("仍有 " + pendingMarkingAnswerSheetCount + " 份答题卡未完成阅卷");
+        }
+        if (unfinishedTaskCount > 0) {
+            blockingItems.add("仍有 " + unfinishedTaskCount + " 个阅卷任务未完成");
+        }
+        if (pendingArbitrationCount > 0) {
+            blockingItems.add("仍有 " + pendingArbitrationCount + " 条仲裁待处理");
+        }
+
+        if (answerSheetCount == 0) {
+            warningItems.add("当前考试还没有答题卡数据");
+        }
+        if (examScoreCount == 0) {
+            warningItems.add("尚未生成总分汇总记录，发布时会自动执行汇总");
+        }
+        if (subjectScoreCount == 0) {
+            warningItems.add("尚未生成科目成绩记录，发布时会自动计算");
+        }
+        if (statisticsCount == 0) {
+            warningItems.add("尚未生成统计分析，发布时会自动计算");
+        }
+
+        ScorePublishCheckVO vo = new ScorePublishCheckVO();
+        vo.setExamId(examId);
+        vo.setExamName(exam.getName());
+        vo.setExamStatus(exam.getStatus());
+        vo.setCanPublish(blockingItems.isEmpty());
+        vo.setSubjectCount(subjectCount);
+        vo.setAnswerSheetCount(answerSheetCount);
+        vo.setCompletedAnswerSheetCount(completedAnswerSheetCount);
+        vo.setPendingRecognitionCount(pendingRecognitionCount);
+        vo.setRecognitionExceptionCount(recognitionExceptionCount);
+        vo.setPendingMarkingAnswerSheetCount(pendingMarkingAnswerSheetCount);
+        vo.setMarkingTaskCount(markingTaskCount);
+        vo.setUnfinishedTaskCount(unfinishedTaskCount);
+        vo.setPendingArbitrationCount(pendingArbitrationCount);
+        vo.setExamScoreCount(examScoreCount);
+        vo.setSubjectScoreCount(subjectScoreCount);
+        vo.setStatisticsCount(statisticsCount);
+        vo.setBlockingItems(blockingItems);
+        vo.setWarningItems(warningItems);
+        return vo;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void publish(Long examId, Long userId) {
         Exam exam = examMapper.selectById(examId);
@@ -511,6 +635,15 @@ public class ScoreServiceImpl implements ScoreService {
         record.setPublishBy(userId);
         record.setCreateTime(LocalDateTime.now());
         publishRecordMapper.insert(record);
+    }
+
+    private int countAnswerSheets(Long examId, Integer status) {
+        LambdaQueryWrapper<AnswerSheet> wrapper = new LambdaQueryWrapper<AnswerSheet>()
+                .eq(AnswerSheet::getExamId, examId);
+        if (status != null) {
+            wrapper.eq(AnswerSheet::getStatus, status);
+        }
+        return Math.toIntExact(answerSheetMapper.selectCount(wrapper));
     }
 
     @Override

@@ -64,6 +64,12 @@ public class AnswerSheetQuestionDetailVO {
     @Schema(description = "选项数量")
     private Integer optionCount;
 
+    @Schema(description = "是否异常")
+    private Boolean anomalyFlag;
+
+    @Schema(description = "异常原因")
+    private String anomalyReason;
+
     @Schema(description = "是否可生成预览")
     private Boolean previewAvailable;
 
@@ -209,6 +215,22 @@ public class AnswerSheetQuestionDetailVO {
 
     public void setOptionCount(Integer optionCount) {
         this.optionCount = optionCount;
+    }
+
+    public Boolean getAnomalyFlag() {
+        return anomalyFlag;
+    }
+
+    public void setAnomalyFlag(Boolean anomalyFlag) {
+        this.anomalyFlag = anomalyFlag;
+    }
+
+    public String getAnomalyReason() {
+        return anomalyReason;
+    }
+
+    public void setAnomalyReason(String anomalyReason) {
+        this.anomalyReason = anomalyReason;
     }
 
     public Boolean getPreviewAvailable() {

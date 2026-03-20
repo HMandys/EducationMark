@@ -5,6 +5,7 @@ import com.edumark.common.result.Result;
 import com.edumark.score.dto.ScoreQueryDTO;
 import com.edumark.score.service.ScoreService;
 import com.edumark.score.vo.ExamScoreVO;
+import com.edumark.score.vo.ScorePublishCheckVO;
 import com.edumark.score.vo.ScoreStatisticsVO;
 import com.edumark.score.vo.SubjectScoreVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -59,6 +60,12 @@ public class ScoreController {
             @Parameter(description = "科目ID") @RequestParam(required = false) Long examSubjectId,
             @Parameter(description = "班级ID") @RequestParam(required = false) Long classId) {
         return Result.success(scoreService.getStatistics(examId, examSubjectId, classId));
+    }
+
+    @Operation(summary = "查询成绩发布前检查")
+    @GetMapping("/publish-check/{examId}")
+    public Result<ScorePublishCheckVO> getPublishCheck(@PathVariable Long examId) {
+        return Result.success(scoreService.getPublishCheck(examId));
     }
 
     @Operation(summary = "汇总成绩")

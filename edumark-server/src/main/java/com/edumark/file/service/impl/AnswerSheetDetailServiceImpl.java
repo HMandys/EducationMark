@@ -47,6 +47,11 @@ import java.util.stream.Collectors;
 @Service
 public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
+    private static final int DETAIL_STATUS_PENDING = 0;
+    private static final int DETAIL_STATUS_COMPLETED = 1;
+    private static final int DETAIL_STATUS_SUBJECTIVE_VERIFIED = 2;
+    private static final int DETAIL_STATUS_SUBJECTIVE_ANOMALY = 3;
+
     private static final Map<Integer, String> QUESTION_TYPE_NAME_MAP = Map.of(
             1, "单选题",
             2, "多选题",
@@ -122,7 +127,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             AnswerSheetDetail detail = new AnswerSheetDetail();
             detail.setAnswerSheetId(answerSheetId);
             detail.setQuestionId(question.getId());
-            detail.setStatus(0);
+            detail.setStatus(DETAIL_STATUS_PENDING);
             detail.setScore(0);
             answerSheetDetailMapper.insert(detail);
         }
@@ -244,6 +249,68 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
     }
 
     @Override
+    public AnswerSheetQuestionDetailVO updateSubjectiveReviewStatus(Long answerSheetId, Long questionId, Integer status) {
+        if (!isAllowedSubjectiveReviewStatus(status)) {
+            throw new BusinessException("主观题核验状态无效");
+        }
+
+        AnswerSheetContext context = loadContext(answerSheetId, true);
+        PaperQuestion question = context.questionMap().get(questionId);
+        if (question == null) {
+            throw new BusinessException("题目不存在");
+        }
+        if (isObjectiveQuestion(question)) {
+            throw new BusinessException("当前题目不是主观题");
+        }
+
+        AnswerSheetDetail detail = context.detailMap().get(questionId);
+        if (detail == null) {
+            detail = new AnswerSheetDetail();
+            detail.setAnswerSheetId(answerSheetId);
+            detail.setQuestionId(questionId);
+            detail.setScore(0);
+            detail.setStatus(status);
+            answerSheetDetailMapper.insert(detail);
+            context.detailMap().put(questionId, detail);
+        } else {
+            detail.setStatus(status);
+            answerSheetDetailMapper.updateById(detail);
+        }
+
+        AnswerSheetContext refreshedContext = loadContext(answerSheetId, false);
+        return buildQuestionDetailVO(refreshedContext, refreshedContext.questionMap().get(questionId));
+    }
+
+    @Override
+    public List<AnswerSheetQuestionDetailVO> rerunSubjectiveReview(Long answerSheetId) {
+        AnswerSheetContext context = loadContext(answerSheetId, true);
+        Map<Long, AnswerSheetDetail> detailMap = context.detailMap();
+
+        for (PaperQuestion question : context.questions()) {
+            if (isObjectiveQuestion(question)) {
+                continue;
+            }
+
+            AnswerSheetDetail detail = detailMap.get(question.getId());
+            if (detail != null
+                    && detail.getStatus() != null
+                    && (detail.getStatus() == DETAIL_STATUS_SUBJECTIVE_VERIFIED
+                    || detail.getStatus() == DETAIL_STATUS_SUBJECTIVE_ANOMALY)) {
+                detail.setStatus(DETAIL_STATUS_PENDING);
+                answerSheetDetailMapper.updateById(detail);
+            }
+
+            try {
+                getQuestionPreviewUrl(answerSheetId, question.getId());
+            } catch (BusinessException ignored) {
+                // 主观题异常判定在明细查询阶段实时计算，这里只负责重跑题图生成。
+            }
+        }
+
+        return listQuestionDetails(answerSheetId);
+    }
+
+    @Override
     public void updateQuestionScore(Long answerSheetId, Long questionId, Integer score, boolean completed) {
         if (answerSheetId == null || questionId == null) {
             return;
@@ -261,11 +328,11 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             detail.setAnswerSheetId(answerSheetId);
             detail.setQuestionId(questionId);
             detail.setScore(score != null ? score : 0);
-            detail.setStatus(completed ? 1 : 0);
+            detail.setStatus(completed ? DETAIL_STATUS_COMPLETED : DETAIL_STATUS_PENDING);
             answerSheetDetailMapper.insert(detail);
         } else {
             detail.setScore(score != null ? score : 0);
-            detail.setStatus(completed ? 1 : 0);
+            detail.setStatus(completed ? DETAIL_STATUS_COMPLETED : DETAIL_STATUS_PENDING);
             answerSheetDetailMapper.updateById(detail);
         }
 
@@ -304,6 +371,10 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
     private AnswerSheetQuestionDetailVO buildQuestionDetailVO(AnswerSheetContext context, PaperQuestion question) {
         AnswerSheetDetail detail = context.detailMap().get(question.getId());
         QuestionRegionBinding binding = findQuestionBinding(context.template(), context.questions(), question);
+        String detectedAnomalyReason = resolveQuestionAnomalyReason(context, question, binding);
+        boolean previewAvailable = binding.region() != null && supportsPreview(binding.regionRole());
+        String anomalyReason = resolveActiveAnomalyReason(detail, detectedAnomalyReason, question);
+        boolean anomalyFlag = isActiveAnomaly(detail, detectedAnomalyReason, question);
 
         AnswerSheetQuestionDetailVO vo = new AnswerSheetQuestionDetailVO();
         vo.setId(detail != null ? detail.getId() : null);
@@ -324,7 +395,9 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         vo.setCropMode(binding.cropMode());
         vo.setPageNo(binding.region() != null ? binding.region().getPageNo() : null);
         vo.setOptionCount(binding.region() != null ? getConfigInteger(binding.region().getConfig(), "optionCount") : null);
-        vo.setPreviewAvailable(binding.region() != null && supportsPreview(binding.regionRole()));
+        vo.setAnomalyFlag(anomalyFlag);
+        vo.setAnomalyReason(anomalyReason);
+        vo.setPreviewAvailable(previewAvailable);
         return vo;
     }
 
@@ -390,7 +463,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             detail.setQuestionId(question.getId());
             detail.setStudentAnswer(studentAnswer);
             detail.setScore(scoreObjectiveQuestion(question, studentAnswer));
-            detail.setStatus(reviewed && studentAnswer != null ? 1 : 0);
+            detail.setStatus(reviewed && studentAnswer != null ? DETAIL_STATUS_COMPLETED : DETAIL_STATUS_PENDING);
             answerSheetDetailMapper.insert(detail);
             detailMap.put(question.getId(), detail);
             return;
@@ -398,7 +471,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
         detail.setStudentAnswer(studentAnswer);
         detail.setScore(scoreObjectiveQuestion(question, studentAnswer));
-        detail.setStatus(reviewed && studentAnswer != null ? 1 : 0);
+        detail.setStatus(reviewed && studentAnswer != null ? DETAIL_STATUS_COMPLETED : DETAIL_STATUS_PENDING);
         answerSheetDetailMapper.updateById(detail);
     }
 
@@ -529,13 +602,73 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         if (detail == null) {
             return isObjectiveQuestion(question) ? "待识别" : "待裁题";
         }
-        if (detail.getStatus() != null && detail.getStatus() == 1) {
+        Integer status = detail.getStatus();
+        if (status != null && status == DETAIL_STATUS_COMPLETED) {
             return "已完成";
         }
         if (isObjectiveQuestion(question)) {
             return detail.getStudentAnswer() == null || detail.getStudentAnswer().isBlank() ? "待识别" : "待复核";
         }
+        if (status != null && status == DETAIL_STATUS_SUBJECTIVE_VERIFIED) {
+            return "已核验通过";
+        }
+        if (status != null && status == DETAIL_STATUS_SUBJECTIVE_ANOMALY) {
+            return "待修正";
+        }
         return "待阅卷";
+    }
+
+    private boolean isActiveAnomaly(AnswerSheetDetail detail, String detectedAnomalyReason, PaperQuestion question) {
+        if (isObjectiveQuestion(question)) {
+            return detectedAnomalyReason != null;
+        }
+        if (detail != null && detail.getStatus() != null) {
+            if (detail.getStatus() == DETAIL_STATUS_SUBJECTIVE_VERIFIED) {
+                return false;
+            }
+            if (detail.getStatus() == DETAIL_STATUS_SUBJECTIVE_ANOMALY) {
+                return true;
+            }
+        }
+        return detectedAnomalyReason != null;
+    }
+
+    private String resolveActiveAnomalyReason(AnswerSheetDetail detail, String detectedAnomalyReason, PaperQuestion question) {
+        if (isObjectiveQuestion(question)) {
+            return detectedAnomalyReason;
+        }
+        if (detail != null && detail.getStatus() != null && detail.getStatus() == DETAIL_STATUS_SUBJECTIVE_ANOMALY) {
+            return detectedAnomalyReason != null ? detectedAnomalyReason : "人工标记为裁题异常";
+        }
+        return detectedAnomalyReason;
+    }
+
+    private boolean isAllowedSubjectiveReviewStatus(Integer status) {
+        return status != null
+                && (status == DETAIL_STATUS_PENDING
+                || status == DETAIL_STATUS_SUBJECTIVE_VERIFIED
+                || status == DETAIL_STATUS_SUBJECTIVE_ANOMALY);
+    }
+
+    private String resolveQuestionAnomalyReason(AnswerSheetContext context, PaperQuestion question, QuestionRegionBinding binding) {
+        if (question == null) {
+            return null;
+        }
+
+        if (binding == null || binding.region() == null) {
+            return isObjectiveQuestion(question) ? "未绑定客观题识别区域" : "未绑定主观题裁题区域";
+        }
+
+        if (!supportsPreview(binding.regionRole())) {
+            return isObjectiveQuestion(question) ? "当前区域不支持识别预览" : "当前区域不支持裁题预览";
+        }
+
+        AnswerSheetImageVO image = pickImageForRegion(context.images(), binding.region().getPageNo());
+        if (image == null || image.getImagePath() == null || image.getImagePath().isBlank()) {
+            return "缺少题目对应页扫描图片";
+        }
+
+        return null;
     }
 
     private boolean supportsPreview(String regionRole) {

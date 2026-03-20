@@ -76,6 +76,27 @@ export interface ScoreStatistics {
   segmentList?: ScoreSegment[]
 }
 
+export interface ScorePublishCheck {
+  examId: number
+  examName?: string
+  examStatus?: number
+  canPublish: boolean
+  subjectCount: number
+  answerSheetCount: number
+  completedAnswerSheetCount: number
+  pendingRecognitionCount: number
+  recognitionExceptionCount: number
+  pendingMarkingAnswerSheetCount: number
+  markingTaskCount: number
+  unfinishedTaskCount: number
+  pendingArbitrationCount: number
+  examScoreCount: number
+  subjectScoreCount: number
+  statisticsCount: number
+  blockingItems: string[]
+  warningItems: string[]
+}
+
 // 分页查询考试成绩
 export function getExamScorePage(params: ScoreQuery) {
   return request.get<PageResult<ExamScore>>('/score/exam/page', { params })
@@ -96,6 +117,10 @@ export function getScoreStatistics(examId: number, examSubjectId?: number, class
   return request.get<ScoreStatistics[]>(`/score/statistics/${examId}`, {
     params: { examSubjectId, classId },
   })
+}
+
+export function getScorePublishCheck(examId: number) {
+  return request.get<ScorePublishCheck>(`/score/publish-check/${examId}`)
 }
 
 // 汇总成绩

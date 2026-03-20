@@ -12,7 +12,10 @@ import com.edumark.exam.mapper.ExamSubjectMapper;
 import com.edumark.exam.mapper.PaperMapper;
 import com.edumark.exam.mapper.PaperQuestionMapper;
 import com.edumark.file.entity.AnswerSheet;
+import com.edumark.file.entity.AnswerSheetDetail;
+import com.edumark.file.mapper.AnswerSheetDetailMapper;
 import com.edumark.file.mapper.AnswerSheetMapper;
+import com.edumark.file.service.AnswerSheetDetailService;
 import com.edumark.marking.dto.MarkingTaskAssignDTO;
 import com.edumark.marking.dto.MarkingTaskQueryDTO;
 import com.edumark.marking.entity.MarkingRecord;
@@ -54,6 +57,12 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
 
     @Resource
     private AnswerSheetMapper answerSheetMapper;
+
+    @Resource
+    private AnswerSheetDetailMapper answerSheetDetailMapper;
+
+    @Resource
+    private AnswerSheetDetailService answerSheetDetailService;
 
     @Override
     public PageResult<MarkingTaskVO> pageQuery(MarkingTaskQueryDTO query) {
@@ -108,24 +117,38 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
                         .eq(PaperQuestion::getIsObjective, 0) // 主观题
         );
 
-        // 统计需要阅卷的答题卡数量
-        Long answerSheetCount = answerSheetMapper.selectCount(
+        // 确保已识别成功的答题卡都初始化了题目明细
+        List<AnswerSheet> readyAnswerSheets = answerSheetMapper.selectList(
                 new LambdaQueryWrapper<AnswerSheet>()
                         .eq(AnswerSheet::getExamSubjectId, examSubjectId)
                         .eq(AnswerSheet::getDeleted, 0)
+                        .eq(AnswerSheet::getStatus, 2)
+                        .isNotNull(AnswerSheet::getStudentId)
         );
+        for (AnswerSheet answerSheet : readyAnswerSheets) {
+            answerSheetDetailService.initializeQuestionDetails(answerSheet.getId());
+        }
 
         // 为每道主观题创建阅卷任务
         for (PaperQuestion question : questions) {
+            Long detailCount = answerSheetDetailMapper.selectCount(
+                    new LambdaQueryWrapper<AnswerSheetDetail>()
+                            .eq(AnswerSheetDetail::getQuestionId, question.getId())
+                            .eq(AnswerSheetDetail::getDeleted, 0)
+            );
+            if (detailCount == 0) {
+                continue;
+            }
+
             MarkingTask task = new MarkingTask();
             task.setExamId(examSubject.getExamId());
             task.setExamSubjectId(examSubjectId);
             task.setQuestionId(question.getId());
             task.setName("第" + question.getQuestionNo() + "题阅卷任务");
             task.setTaskType(2); // 主观题
-            task.setTotalCount(answerSheetCount.intValue());
+            task.setTotalCount(detailCount.intValue());
             task.setCompletedCount(0);
-            task.setPendingCount(answerSheetCount.intValue());
+            task.setPendingCount(detailCount.intValue());
             task.setEnableDoubleMarking(question.getEnableDoubleMarking() != null ? question.getEnableDoubleMarking() : 0);
             task.setDoubleMarkingThreshold(question.getDoubleMarkingThreshold());
             task.setStatus(0); // 未开始
@@ -208,11 +231,12 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
      * 生成阅卷记录
      */
     private void generateMarkingRecords(MarkingTask task) {
-        // 查询该科目的所有答题卡
-        List<AnswerSheet> answerSheets = answerSheetMapper.selectList(
-                new LambdaQueryWrapper<AnswerSheet>()
-                        .eq(AnswerSheet::getExamSubjectId, task.getExamSubjectId())
-                        .eq(AnswerSheet::getDeleted, 0)
+        List<AnswerSheetDetail> details = answerSheetDetailMapper.selectList(
+                new LambdaQueryWrapper<AnswerSheetDetail>()
+                        .eq(AnswerSheetDetail::getQuestionId, task.getQuestionId())
+                        .eq(AnswerSheetDetail::getDeleted, 0)
+                        .orderByAsc(AnswerSheetDetail::getAnswerSheetId)
+                        .orderByAsc(AnswerSheetDetail::getId)
         );
 
         // 查询分配的教师列表（按角色分组）
@@ -242,7 +266,12 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         int firstIndex = 0;
         int secondIndex = 0;
 
-        for (AnswerSheet answerSheet : answerSheets) {
+        for (AnswerSheetDetail detail : details) {
+            AnswerSheet answerSheet = answerSheetMapper.selectById(detail.getAnswerSheetId());
+            if (answerSheet == null || answerSheet.getStudentId() == null) {
+                continue;
+            }
+
             // 一评
             MarkingTaskAssign firstAssign = firstMarkers.get(firstIndex % firstMarkers.size());
             createMarkingRecord(task, answerSheet, firstAssign.getTeacherId(), 1, fullScore);

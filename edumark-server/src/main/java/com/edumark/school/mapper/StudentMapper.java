@@ -40,6 +40,11 @@ public interface StudentMapper extends BaseMapper<Student> {
     Student selectByNumberAndName(@Param("studentNumber") String studentNumber, @Param("name") String name);
 
     /**
+     * 根据学校和学号查询学生
+     */
+    Student selectBySchoolAndStudentNumber(@Param("schoolId") Long schoolId, @Param("studentNumber") String studentNumber);
+
+    /**
      * 根据用户ID查询学生
      */
     Student selectByUserId(@Param("userId") Long userId);

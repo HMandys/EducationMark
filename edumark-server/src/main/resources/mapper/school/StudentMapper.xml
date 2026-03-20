@@ -117,6 +117,15 @@
         AND deleted = 0
     </select>
 
+    <select id="selectBySchoolAndStudentNumber" resultType="com.edumark.school.entity.Student">
+        SELECT *
+        FROM student
+        WHERE school_id = #{schoolId}
+          AND student_code = #{studentNumber}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
     <select id="selectByUserId" resultType="com.edumark.school.entity.Student">
         SELECT * FROM student WHERE user_id = #{userId} AND deleted = 0
     </select>

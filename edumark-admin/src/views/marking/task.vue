@@ -187,8 +187,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRoute } from 'vue-router'
 import {
   pageMarkingTasks,
   getMarkingTaskDetail,
@@ -202,6 +203,8 @@ import {
 } from '@/api/marking'
 import { getExamPage, getExamSubjectList } from '@/api/exam'
 import { getTeacherPage } from '@/api/school'
+
+const route = useRoute()
 
 const loading = ref(false)
 const tableData = ref<MarkingTaskVO[]>([])
@@ -233,12 +236,6 @@ const assignForm = reactive({
 })
 
 const detailVisible = ref(false)
-
-onMounted(() => {
-  loadData()
-  loadExams()
-  loadTeachers()
-})
 
 async function loadData() {
   loading.value = true
@@ -277,6 +274,17 @@ function handleReset() {
   queryForm.examId = undefined
   queryForm.status = undefined
   handleSearch()
+}
+
+async function syncRouteExam() {
+  const routeExamId = Number(route.query.examId)
+  if (Number.isFinite(routeExamId) && routeExamId > 0) {
+    queryForm.examId = routeExamId
+  } else {
+    queryForm.examId = undefined
+  }
+  queryForm.pageNum = 1
+  await loadData()
 }
 
 function handleGenerate() {
@@ -418,6 +426,15 @@ function getStatusType(status: number): 'info' | 'warning' | 'success' {
     default: return 'info'
   }
 }
+
+onMounted(async () => {
+  await Promise.all([loadExams(), loadTeachers()])
+  await syncRouteExam()
+})
+
+watch(() => route.query.examId, () => {
+  syncRouteExam()
+})
 
 function getStatusText(status: number) {
   switch (status) {

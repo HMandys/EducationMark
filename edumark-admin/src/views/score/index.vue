@@ -306,6 +306,7 @@
 import { ref, reactive, onMounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Download, Upload } from '@element-plus/icons-vue'
+import { useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import * as echarts from 'echarts'
 import {
@@ -323,6 +324,7 @@ import {
 import { getExamPage, getExamDetail, getExamSubjectList, type Exam, type ExamSubject, type ExamClass } from '@/api/exam'
 
 const userStore = useUserStore()
+const route = useRoute()
 
 // 查询表单
 const queryForm = reactive({
@@ -369,6 +371,18 @@ const loadExamList = async () => {
     examList.value = [...examList.value, ...res2.data.list]
   } catch (error) {
     console.error('加载考试列表失败', error)
+  }
+}
+
+const ensureExamInList = async (examId: number) => {
+  if (examList.value.some((item) => item.id === examId)) {
+    return
+  }
+  try {
+    const res = await getExamDetail(examId)
+    examList.value = [res.data, ...examList.value]
+  } catch (error) {
+    console.error('补充考试选项失败', error)
   }
 }
 
@@ -605,8 +619,34 @@ watch([() => viewMode.value, () => queryForm.examSubjectId, () => queryForm.clas
   }
 })
 
-onMounted(() => {
-  loadExamList()
+const syncRouteState = async () => {
+  viewMode.value = route.query.viewMode === 'statistics' ? 'statistics' : 'score'
+
+  const routeExamId = Number(route.query.examId)
+  if (Number.isFinite(routeExamId) && routeExamId > 0) {
+    queryForm.examId = routeExamId
+    await ensureExamInList(routeExamId)
+    await handleExamChange()
+    return
+  }
+
+  currentExam.value = null
+  queryForm.examId = undefined
+  queryForm.examSubjectId = undefined
+  queryForm.classId = undefined
+  examScoreList.value = []
+  subjectScoreList.value = []
+  statisticsList.value = []
+  gradeStats.value = null
+}
+
+watch(() => [route.query.examId, route.query.viewMode], () => {
+  syncRouteState()
+})
+
+onMounted(async () => {
+  await loadExamList()
+  await syncRouteState()
 })
 </script>
 

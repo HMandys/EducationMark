@@ -77,4 +77,9 @@ public interface AnswerSheetService extends IService<AnswerSheet> {
      * 更新答题卡状态
      */
     void updateStatus(Long id, Integer status);
+
+    /**
+     * 重新执行识别与匹配
+     */
+    void reRecognize(Long id);
 }

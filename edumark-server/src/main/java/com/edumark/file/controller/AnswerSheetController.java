@@ -3,9 +3,12 @@ package com.edumark.file.controller;
 import com.edumark.common.result.PageResult;
 import com.edumark.common.result.Result;
 import com.edumark.file.dto.AnswerSheetDTO;
+import com.edumark.file.dto.AnswerSheetObjectiveAnswerDTO;
 import com.edumark.file.dto.AnswerSheetQueryDTO;
 import com.edumark.file.dto.AnswerSheetUploadDTO;
+import com.edumark.file.service.AnswerSheetDetailService;
 import com.edumark.file.service.AnswerSheetService;
+import com.edumark.file.vo.AnswerSheetQuestionDetailVO;
 import com.edumark.file.vo.AnswerSheetVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,6 +31,9 @@ public class AnswerSheetController {
     @Resource
     private AnswerSheetService answerSheetService;
 
+    @Resource
+    private AnswerSheetDetailService answerSheetDetailService;
+
     @Operation(summary = "分页查询答题卡")
     @GetMapping("/page")
     public Result<PageResult<AnswerSheetVO>> page(AnswerSheetQueryDTO query) {
@@ -38,6 +44,33 @@ public class AnswerSheetController {
     @GetMapping("/{id}")
     public Result<AnswerSheetVO> getDetail(@PathVariable Long id) {
         return Result.success(answerSheetService.getDetail(id));
+    }
+
+    @Operation(summary = "获取答题卡题目明细")
+    @GetMapping("/{id}/details")
+    public Result<List<AnswerSheetQuestionDetailVO>> getQuestionDetails(@PathVariable Long id) {
+        return Result.success(answerSheetDetailService.listQuestionDetails(id));
+    }
+
+    @Operation(summary = "获取题目裁题预览地址")
+    @GetMapping("/{id}/details/{questionId}/preview")
+    public Result<String> getQuestionPreviewUrl(@PathVariable Long id, @PathVariable Long questionId) {
+        return Result.success(answerSheetDetailService.getQuestionPreviewUrl(id, questionId));
+    }
+
+    @Operation(summary = "重新识别客观题")
+    @PostMapping("/{id}/objective-recognize")
+    public Result<List<AnswerSheetQuestionDetailVO>> recognizeObjectiveAnswers(@PathVariable Long id) {
+        return Result.success(answerSheetDetailService.recognizeObjectiveAnswers(id));
+    }
+
+    @Operation(summary = "更新客观题答案")
+    @PutMapping("/{id}/details/{questionId}/objective-answer")
+    public Result<AnswerSheetQuestionDetailVO> updateObjectiveAnswer(
+            @PathVariable Long id,
+            @PathVariable Long questionId,
+            @RequestBody AnswerSheetObjectiveAnswerDTO dto) {
+        return Result.success(answerSheetDetailService.updateObjectiveAnswer(id, questionId, dto.getStudentAnswer()));
     }
 
     @Operation(summary = "创建答题卡")
@@ -100,6 +133,13 @@ public class AnswerSheetController {
             @PathVariable Long id,
             @RequestParam Integer status) {
         answerSheetService.updateStatus(id, status);
+        return Result.success();
+    }
+
+    @Operation(summary = "重新识别答题卡")
+    @PostMapping("/{id}/recognize")
+    public Result<Void> reRecognize(@PathVariable Long id) {
+        answerSheetService.reRecognize(id);
         return Result.success();
     }
 }

@@ -330,6 +330,35 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
                 }
             }
 
+            if ("choice_block".equals(regionRole)) {
+                Integer optionCount = getConfigInteger(config, "optionCount");
+                int questionCount = region.getQuestionStart() != null && region.getQuestionEnd() != null
+                        ? region.getQuestionEnd() - region.getQuestionStart() + 1
+                        : 0;
+                int expectedBubbleCount = optionCount != null && questionCount > 0 ? optionCount * questionCount : 0;
+                int actualBubbleCount = getConfigListSize(config, "bubbleMap");
+
+                if (expectedBubbleCount <= 0) {
+                    issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                            regionLabel,
+                            "bubbleMap",
+                            regionLabel + " 缺少客观题选项配置，无法自动生成选项坐标"
+                    ));
+                } else if (actualBubbleCount <= 0) {
+                    issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                            regionLabel,
+                            "bubbleMap",
+                            regionLabel + " 尚未完成客观题选项自动识别"
+                    ));
+                } else if (actualBubbleCount < expectedBubbleCount) {
+                    issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                            regionLabel,
+                            "bubbleMap",
+                            regionLabel + " 仅识别到 " + actualBubbleCount + "/" + expectedBubbleCount + " 个选项坐标"
+                    ));
+                }
+            }
+
             if (requiresCropMode(regionRole)) {
                 String cropMode = getConfigString(config, "cropMode");
                 if (cropMode == null || cropMode.isBlank()) {
@@ -597,5 +626,18 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
             }
         }
         return null;
+    }
+
+    private Integer getConfigInteger(Map<String, Object> config, String key) {
+        Double number = getConfigNumber(config, key);
+        return number != null ? number.intValue() : null;
+    }
+
+    private int getConfigListSize(Map<String, Object> config, String key) {
+        Object value = config.get(key);
+        if (value instanceof Collection<?> collection) {
+            return collection.size();
+        }
+        return 0;
     }
 }

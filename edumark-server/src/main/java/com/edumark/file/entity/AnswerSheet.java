@@ -32,7 +32,7 @@ public class AnswerSheet extends BaseEntity {
     @Schema(description = "图片数量")
     private Integer imageCount;
 
-    @Schema(description = "状态: 0-待识别 1-已识别 2-待阅卷 3-阅卷中 4-已完成")
+    @Schema(description = "状态: 0-识别中 1-已识别 2-待阅卷 3-阅卷中 4-已完成 5-识别异常")
     private Integer status;
 
     @Schema(description = "客观题得分")

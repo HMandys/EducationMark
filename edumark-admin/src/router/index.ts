@@ -93,6 +93,12 @@ export const authRoutes: RouteRecordRaw[] = [
         meta: { title: '考试管理', icon: 'Tickets', permission: 'exam:exam:list' },
       },
       {
+        path: 'workbench/:id',
+        name: 'ExamWorkbench',
+        component: () => import('@/views/exam/workbench.vue'),
+        meta: { title: '考试工作台', icon: 'Monitor', hidden: true, permission: 'exam:exam:list' },
+      },
+      {
         path: 'knowledge-point',
         name: 'KnowledgePointList',
         component: () => import('@/views/exam/knowledge-point/index.vue'),

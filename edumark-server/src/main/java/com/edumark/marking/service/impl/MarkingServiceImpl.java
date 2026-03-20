@@ -12,6 +12,7 @@ import com.edumark.file.entity.AnswerSheet;
 import com.edumark.file.entity.AnswerSheetDetail;
 import com.edumark.file.mapper.AnswerSheetDetailMapper;
 import com.edumark.file.mapper.AnswerSheetMapper;
+import com.edumark.file.service.AnswerSheetDetailService;
 import com.edumark.marking.dto.ArbitrationSubmitDTO;
 import com.edumark.marking.dto.MarkingSubmitDTO;
 import com.edumark.marking.entity.MarkingArbitration;
@@ -69,6 +70,9 @@ public class MarkingServiceImpl implements MarkingService {
     @Resource
     private PaperQuestionMapper paperQuestionMapper;
 
+    @Resource
+    private AnswerSheetDetailService answerSheetDetailService;
+
     @Override
     public List<MarkingTaskAssignVO> getMyAssigns(Long teacherId) {
         return markingTaskAssignMapper.selectListByTeacherId(teacherId);
@@ -83,12 +87,16 @@ public class MarkingServiceImpl implements MarkingService {
 
     @Override
     public MarkingRecordVO getNextPending(Long taskId, Long teacherId) {
-        return markingRecordMapper.selectNextPending(taskId, teacherId);
+        MarkingRecordVO vo = markingRecordMapper.selectNextPending(taskId, teacherId);
+        fillQuestionPreview(vo);
+        return vo;
     }
 
     @Override
     public MarkingRecordVO getRecordDetail(Long recordId) {
-        return markingRecordMapper.selectVOById(recordId);
+        MarkingRecordVO vo = markingRecordMapper.selectVOById(recordId);
+        fillQuestionPreview(vo);
+        return vo;
     }
 
     @Override
@@ -330,6 +338,20 @@ public class MarkingServiceImpl implements MarkingService {
 
             // 重新计算总分
             recalculateAnswerSheetTotalScore(answerSheet.getId());
+        }
+    }
+
+    private void fillQuestionPreview(MarkingRecordVO vo) {
+        if (vo == null || vo.getAnswerSheetId() == null || vo.getQuestionId() == null) {
+            return;
+        }
+        try {
+            String previewUrl = answerSheetDetailService.getQuestionPreviewUrl(vo.getAnswerSheetId(), vo.getQuestionId());
+            if (previewUrl != null && !previewUrl.isBlank()) {
+                vo.setAnswerImageUrl(previewUrl);
+            }
+        } catch (BusinessException ignored) {
+            // 题图预览不存在时退回原始整卷图
         }
     }
 }

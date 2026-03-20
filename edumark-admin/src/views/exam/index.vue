@@ -101,10 +101,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="createTime" label="创建时间" width="170" />
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-            <el-button type="primary" link @click="handleSubjects(row)">继续配置</el-button>
+            <el-button type="success" link @click="handleWorkbench(row)">工作台</el-button>
+            <el-button type="primary" link @click="handleSubjects(row)">科目</el-button>
             <el-button type="info" link @click="handleCheckPublish(row)">检查</el-button>
             <el-button
               v-if="row.status === 4"
@@ -370,6 +371,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Delete } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import {
   getExamPage,
   getExamDetail,
@@ -389,6 +391,8 @@ import {
   type ExamSubject,
 } from '@/api/exam'
 import { getSchoolSelectList, getGradeListBySchool, getClassListByGrade, type School, type Grade, type ClassInfo } from '@/api/school'
+
+const router = useRouter()
 
 // 下拉列表数据
 const schoolList = ref<School[]>([])
@@ -760,6 +764,13 @@ const handleUnpublish = async (row: Exam) => {
   await unpublishExam(row.id)
   ElMessage.success('撤回成功')
   fetchData()
+}
+
+const handleWorkbench = (row: Exam) => {
+  router.push({
+    name: 'ExamWorkbench',
+    params: { id: row.id },
+  })
 }
 
 // 科目管理

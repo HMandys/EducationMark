@@ -30,6 +30,9 @@ public class AnswerSheetUploadDTO {
     @Schema(description = "图片对象名称列表")
     private List<String> imageObjectNames;
 
+    @Schema(description = "图片原始文件名列表")
+    private List<String> imageOriginalNames;
+
     // Getters and Setters
     public Long getExamId() { return examId; }
     public void setExamId(Long examId) { this.examId = examId; }
@@ -48,4 +51,7 @@ public class AnswerSheetUploadDTO {
 
     public List<String> getImageObjectNames() { return imageObjectNames; }
     public void setImageObjectNames(List<String> imageObjectNames) { this.imageObjectNames = imageObjectNames; }
+
+    public List<String> getImageOriginalNames() { return imageOriginalNames; }
+    public void setImageOriginalNames(List<String> imageOriginalNames) { this.imageOriginalNames = imageOriginalNames; }
 }

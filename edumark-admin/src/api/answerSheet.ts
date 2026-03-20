@@ -37,6 +37,27 @@ export interface AnswerSheetImage {
   sort: number
 }
 
+export interface AnswerSheetQuestionDetail {
+  id?: number
+  answerSheetId: number
+  questionId: number
+  questionNo?: string
+  questionType?: number
+  questionTypeName?: string
+  isObjective?: number
+  fullScore?: number
+  correctAnswer?: string
+  studentAnswer?: string
+  score?: number
+  status?: number
+  statusName?: string
+  regionRole?: string
+  regionRoleName?: string
+  cropMode?: string
+  pageNo?: number
+  previewAvailable?: boolean
+}
+
 export interface AnswerSheetQuery {
   pageNum: number
   pageSize: number
@@ -56,6 +77,7 @@ export interface AnswerSheetUploadDTO {
   studentNumber?: string
   seatNumber?: string
   imageObjectNames: string[]
+  imageOriginalNames?: string[]
 }
 
 export interface FileUploadResult {
@@ -74,6 +96,14 @@ export function getAnswerSheetPage(params: AnswerSheetQuery) {
 
 export function getAnswerSheetDetail(id: number) {
   return request.get<AnswerSheet>(`/answer-sheet/${id}`)
+}
+
+export function getAnswerSheetQuestionDetails(id: number) {
+  return request.get<AnswerSheetQuestionDetail[]>(`/answer-sheet/${id}/details`)
+}
+
+export function getAnswerSheetQuestionPreview(id: number, questionId: number) {
+  return request.get<string>(`/answer-sheet/${id}/details/${questionId}/preview`)
 }
 
 export function createAnswerSheet(data: Partial<AnswerSheet>) {
@@ -112,6 +142,10 @@ export function getAnswerSheetListByExamSubject(examSubjectId: number) {
 
 export function updateAnswerSheetStatus(id: number, status: number) {
   return request.put<void>(`/answer-sheet/${id}/status`, null, { params: { status } })
+}
+
+export function rerunAnswerSheetRecognition(id: number) {
+  return request.post<void>(`/answer-sheet/${id}/recognize`)
 }
 
 // ============ 文件上传 API ============

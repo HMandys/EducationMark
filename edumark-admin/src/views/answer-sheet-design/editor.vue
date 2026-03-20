@@ -94,7 +94,7 @@
               <div class="tools-actions">
                 <el-button
                   type="primary"
-                  @click="handleDetectChoiceBubbles"
+                  @click="handleDetectChoiceBubbles()"
                   :disabled="!canDetectChoiceBubbles"
                   :loading="bubbleDetectLoading"
                 >
@@ -151,10 +151,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import { ArrowLeft, DocumentChecked, Upload } from '@element-plus/icons-vue'
+import { useDebounceFn } from '@vueuse/core'
 import PageSettingPanel from './components/PageSettingPanel.vue'
 import StudentInfoPanel from './components/StudentInfoPanel.vue'
 import RegionList from './components/RegionList.vue'
@@ -216,6 +217,8 @@ const sampleImageName = ref('')
 const sampleImageVisible = ref(false)
 const sampleImageOpacity = ref(35)
 const bubbleDetectLoading = ref(false)
+const autoDetecting = ref(false)
+const lastAutoDetectSignature = ref('')
 
 const cloneRegion = (region: AnswerSheetRegion): AnswerSheetRegion => ({
   ...region,
@@ -279,11 +282,35 @@ const choiceBubbleSummary = computed(() => {
     return '请先上传样张图片，再基于图像识别选项。'
   }
 
+  if (autoDetecting.value || bubbleDetectLoading.value) {
+    return '系统正在自动识别当前客观题选项，请稍候。'
+  }
+
   if (!detectedCount) {
-    return `当前预期识别 ${expectedCount} 个选项气泡，识别后会自动生成 bubbleMap 子坐标。`
+    return `当前预期识别 ${expectedCount} 个选项气泡，系统会自动生成 bubbleMap 子坐标。`
   }
 
   return `已识别 ${detectedCount}/${expectedCount} 个选项气泡，并生成子框。`
+})
+
+const autoDetectSignature = computed(() => {
+  const region = selectedChoiceRegion.value
+  if (!region || !sampleImageUrl.value) {
+    return ''
+  }
+
+  return JSON.stringify({
+    sampleImageName: sampleImageName.value,
+    sampleImageVisible: sampleImageVisible.value,
+    boxX: region.config?.boxX,
+    boxY: region.config?.boxY,
+    boxWidth: region.config?.boxWidth,
+    boxHeight: region.config?.boxHeight,
+    questionStart: region.questionStart,
+    questionEnd: region.questionEnd,
+    optionCount: region.config?.optionCount,
+    questionsPerRow: region.config?.questionsPerRow,
+  })
 })
 
 const revokeSampleImage = () => {
@@ -469,6 +496,7 @@ const handleSampleImageChange = (file: UploadFile) => {
   }
 
   revokeSampleImage()
+  lastAutoDetectSignature.value = ''
   sampleImageUrl.value = URL.createObjectURL(file.raw)
   sampleImageName.value = file.name
   sampleImageVisible.value = true
@@ -476,6 +504,7 @@ const handleSampleImageChange = (file: UploadFile) => {
 
 const clearSampleImage = () => {
   revokeSampleImage()
+  lastAutoDetectSignature.value = ''
   sampleImageUrl.value = ''
   sampleImageName.value = ''
   sampleImageVisible.value = false
@@ -695,11 +724,13 @@ const pickBestWindow = (components: DetectedComponent[], expectedCount: number) 
   return bestWindow
 }
 
-const handleDetectChoiceBubbles = async () => {
+const handleDetectChoiceBubbles = async (silent: boolean = false) => {
   const region = selectedChoiceRegion.value
   if (!region || !sampleImageUrl.value) {
-    ElMessage.warning('请先选择客观题区域并上传样张')
-    return
+    if (!silent) {
+      ElMessage.warning('请先选择客观题区域并上传样张')
+    }
+    return false
   }
 
   bubbleDetectLoading.value = true
@@ -842,15 +873,21 @@ const handleDetectChoiceBubbles = async () => {
     })
 
     if (bubbleMap.length < expectedBubbleCount) {
-      ElMessage.warning(`仅识别到 ${bubbleMap.length}/${expectedBubbleCount} 个选项，请检查样张清晰度或适当缩小总框`)
-      return
+      if (!silent) {
+        ElMessage.warning(`仅识别到 ${bubbleMap.length}/${expectedBubbleCount} 个选项，请检查样张清晰度或适当缩小总框`)
+      }
+      return false
     }
 
-    ElMessage.success(`已识别 ${bubbleMap.length} 个选项气泡`)
+    if (!silent) {
+      ElMessage.success(`已识别 ${bubbleMap.length} 个选项气泡`)
+    }
+    return true
   } catch (error) {
-    if (error instanceof Error) {
+    if (!silent && error instanceof Error) {
       ElMessage.warning(error.message)
     }
+    return false
   } finally {
     bubbleDetectLoading.value = false
   }
@@ -868,11 +905,39 @@ const clearDetectedChoiceBubbles = () => {
     bubbleMap: [],
     detectedBubbleCount: 0,
   }
+  lastAutoDetectSignature.value = ''
   handlePreviewRegionUpdate({
     index: selectedRegionIndex.value,
     region: nextRegion,
   })
 }
+
+const runAutoDetectChoiceBubbles = useDebounceFn(async (signature: string) => {
+  if (!signature || !canDetectChoiceBubbles.value || signature === lastAutoDetectSignature.value) {
+    return
+  }
+
+  autoDetecting.value = true
+  try {
+    const success = await handleDetectChoiceBubbles(true)
+    if (success) {
+      lastAutoDetectSignature.value = signature
+    }
+  } finally {
+    autoDetecting.value = false
+  }
+}, 500)
+
+watch(
+  autoDetectSignature,
+  async (signature) => {
+    if (!signature) {
+      return
+    }
+    await runAutoDetectChoiceBubbles(signature)
+  },
+  { flush: 'post' },
+)
 
 onMounted(async () => {
   const id = route.params.id as string

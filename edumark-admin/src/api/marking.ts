@@ -1,4 +1,5 @@
-import request from '@/utils/request'
+import { request } from '@/utils/request'
+import type { PageResult } from './types'
 
 // 阅卷任务相关接口
 export interface MarkingTaskQuery {
@@ -129,137 +130,75 @@ export interface ArbitrationSubmitDTO {
 
 // 阅卷任务管理 API
 export function pageMarkingTasks(params: MarkingTaskQuery) {
-  return request({
-    url: '/api/marking/task/page',
-    method: 'get',
-    params
-  })
+  return request.get<PageResult<MarkingTaskVO>>('/marking/task/page', { params })
 }
 
 export function getMarkingTaskDetail(id: number) {
-  return request({
-    url: `/api/marking/task/${id}`,
-    method: 'get'
-  })
+  return request.get<MarkingTaskVO>(`/marking/task/${id}`)
 }
 
 export function generateMarkingTasks(examSubjectId: number) {
-  return request({
-    url: `/api/marking/task/generate/${examSubjectId}`,
-    method: 'post'
-  })
+  return request.post<void>(`/marking/task/generate/${examSubjectId}`)
 }
 
 export function deleteMarkingTask(id: number) {
-  return request({
-    url: `/api/marking/task/${id}`,
-    method: 'delete'
-  })
+  return request.delete<void>(`/marking/task/${id}`)
 }
 
 export function assignMarkingTask(data: MarkingTaskAssignDTO) {
-  return request({
-    url: '/api/marking/task/assign',
-    method: 'post',
-    data
-  })
+  return request.post<void>('/marking/task/assign', data)
 }
 
 export function startMarkingTask(id: number) {
-  return request({
-    url: `/api/marking/task/start/${id}`,
-    method: 'post'
-  })
+  return request.post<void>(`/marking/task/start/${id}`)
 }
 
 export function completeMarkingTask(id: number) {
-  return request({
-    url: `/api/marking/task/complete/${id}`,
-    method: 'post'
-  })
+  return request.post<void>(`/marking/task/complete/${id}`)
 }
 
 export function listMarkingTasksByExamSubject(examSubjectId: number) {
-  return request({
-    url: `/api/marking/task/list/${examSubjectId}`,
-    method: 'get'
-  })
+  return request.get<MarkingTaskVO[]>(`/marking/task/list/${examSubjectId}`)
 }
 
 // 阅卷工作台 API
 export function getMyAssigns() {
-  return request({
-    url: '/api/marking/my-assigns',
-    method: 'get'
-  })
+  return request.get<MarkingTaskAssignVO[]>('/marking/my-assigns')
 }
 
 export function pageMarkingRecords(params: { taskId: number; status?: number; pageNum?: number; pageSize?: number }) {
-  return request({
-    url: '/api/marking/records',
-    method: 'get',
-    params
-  })
+  return request.get<PageResult<MarkingRecordVO>>('/marking/records', { params })
 }
 
 export function getNextPendingRecord(taskId: number) {
-  return request({
-    url: '/api/marking/next-pending',
-    method: 'get',
-    params: { taskId }
-  })
+  return request.get<MarkingRecordVO>('/marking/next-pending', { params: { taskId } })
 }
 
 export function getMarkingRecordDetail(recordId: number) {
-  return request({
-    url: `/api/marking/record/${recordId}`,
-    method: 'get'
-  })
+  return request.get<MarkingRecordVO>(`/marking/record/${recordId}`)
 }
 
 export function submitMarkingScore(data: MarkingSubmitDTO) {
-  return request({
-    url: '/api/marking/submit',
-    method: 'post',
-    data
-  })
+  return request.post<void>('/marking/submit', data)
 }
 
 // 仲裁 API
 export function pageArbitrations(params: { taskId: number; status?: number; pageNum?: number; pageSize?: number }) {
-  return request({
-    url: '/api/marking/arbitrations',
-    method: 'get',
-    params
-  })
+  return request.get<PageResult<MarkingArbitrationVO>>('/marking/arbitrations', { params })
 }
 
 export function getNextArbitration(taskId: number) {
-  return request({
-    url: '/api/marking/next-arbitration',
-    method: 'get',
-    params: { taskId }
-  })
+  return request.get<MarkingArbitrationVO>('/marking/next-arbitration', { params: { taskId } })
 }
 
 export function getArbitrationDetail(arbitrationId: number) {
-  return request({
-    url: `/api/marking/arbitration/${arbitrationId}`,
-    method: 'get'
-  })
+  return request.get<MarkingArbitrationVO>(`/marking/arbitration/${arbitrationId}`)
 }
 
 export function submitArbitration(data: ArbitrationSubmitDTO) {
-  return request({
-    url: '/api/marking/arbitration/submit',
-    method: 'post',
-    data
-  })
+  return request.post<void>('/marking/arbitration/submit', data)
 }
 
 export function autoMarkObjective(examSubjectId: number) {
-  return request({
-    url: `/api/marking/auto-mark/${examSubjectId}`,
-    method: 'post'
-  })
+  return request.post<void>(`/marking/auto-mark/${examSubjectId}`)
 }

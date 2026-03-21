@@ -242,6 +242,9 @@ public class MarkingServiceImpl implements MarkingService {
 
         // 更新答题卡得分
         updateAnswerSheetScore(arbitration.getAnswerSheetId(), arbitration.getQuestionId(), dto.getScore());
+
+        // 更新任务进度
+        markingTaskService.updateProgress(arbitration.getTaskId());
     }
 
     @Override

@@ -244,6 +244,10 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
         persistObjectiveAnswer(answerSheetId, question, context.detailMap(), normalizeAnswer(studentAnswer), true);
         recalculateAnswerSheetScores(answerSheetId);
+
+        // 客观题复核后，检查是否可以自动推进答题卡状态
+        tryAdvanceAnswerSheetStatus(answerSheetId, context);
+
         AnswerSheetContext refreshedContext = loadContext(answerSheetId, false);
         return buildQuestionDetailVO(refreshedContext, refreshedContext.questionMap().get(questionId));
     }
@@ -275,6 +279,11 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         } else {
             detail.setStatus(status);
             answerSheetDetailMapper.updateById(detail);
+        }
+
+        // 核验通过后，检查是否可以自动推进答题卡状态
+        if (status == DETAIL_STATUS_SUBJECTIVE_VERIFIED) {
+            tryAdvanceAnswerSheetStatus(answerSheetId, context);
         }
 
         AnswerSheetContext refreshedContext = loadContext(answerSheetId, false);
@@ -973,6 +982,57 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
     private int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(value, max));
+    }
+
+    /**
+     * 尝试推进答题卡状态
+     * 当所有题目都没有阻塞时，将答题卡状态从"已识别"推进到"待阅卷"
+     */
+    private void tryAdvanceAnswerSheetStatus(Long answerSheetId, AnswerSheetContext context) {
+        AnswerSheet answerSheet = context.answerSheet();
+        // 只有"已识别"状态的答题卡可以自动推进到"待阅卷"
+        if (answerSheet.getStatus() == null || answerSheet.getStatus() != 1) {
+            return;
+        }
+
+        if (canAdvanceToReadyForMarking(context)) {
+            answerSheet.setStatus(2);
+            answerSheetMapper.updateById(answerSheet);
+        }
+    }
+
+    /**
+     * 检查答题卡是否可以推进到"待阅卷"状态
+     * 条件：所有题目都没有异常阻塞
+     */
+    private boolean canAdvanceToReadyForMarking(AnswerSheetContext context) {
+        for (PaperQuestion question : context.questions()) {
+            AnswerSheetDetail detail = context.detailMap().get(question.getId());
+
+            // 客观题检查：必须有答案
+            if (isObjectiveQuestion(question)) {
+                if (detail == null || detail.getStudentAnswer() == null || detail.getStudentAnswer().isBlank()) {
+                    return false;
+                }
+            }
+            // 主观题检查：必须是已核验通过状态
+            else {
+                boolean hasBlockingAnomaly = detail != null
+                        && detail.getStatus() != null
+                        && detail.getStatus() == DETAIL_STATUS_SUBJECTIVE_ANOMALY;
+                if (hasBlockingAnomaly) {
+                    return false;
+                }
+
+                // 检查是否有系统检测到的异常（未绑定区域、缺图等）
+                QuestionRegionBinding binding = findQuestionBinding(context.template(), context.questions(), question);
+                String detectedAnomalyReason = resolveQuestionAnomalyReason(context, question, binding);
+                if (detectedAnomalyReason != null) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private record AnswerSheetContext(

@@ -109,35 +109,66 @@ public class ScoreServiceImpl implements ScoreService {
         Map<Long, List<AnswerSheet>> studentSheets = answerSheets.stream()
                 .collect(Collectors.groupingBy(AnswerSheet::getStudentId));
 
+        // 查询考试的所有班级学生
+        List<Long> classIds = examClassMapper.selectList(
+                new LambdaQueryWrapper<com.edumark.exam.entity.ExamClass>()
+                        .eq(com.edumark.exam.entity.ExamClass::getExamId, examId)
+        ).stream().map(com.edumark.exam.entity.ExamClass::getClassId).toList();
+
+        // 查询所有应参加考试的学生
+        Set<Long> allStudentIds = new HashSet<>();
+        if (!classIds.isEmpty()) {
+            List<Student> allStudents = studentMapper.selectList(
+                    new LambdaQueryWrapper<Student>()
+                            .in(Student::getClassId, classIds)
+                            .eq(Student::getDeleted, 0)
+            );
+            allStudentIds = allStudents.stream().map(Student::getId).collect(Collectors.toSet());
+        }
+
         // 查询学生信息
-        Set<Long> studentIds = studentSheets.keySet();
         Map<Long, Student> studentMap = new HashMap<>();
-        if (!studentIds.isEmpty()) {
-            List<Student> students = studentMapper.selectBatchIds(studentIds);
+        if (!allStudentIds.isEmpty()) {
+            List<Student> students = studentMapper.selectBatchIds(allStudentIds);
             studentMap = students.stream().collect(Collectors.toMap(Student::getId, s -> s));
         }
 
-        // 汇总各科成绩和总分
-        for (Map.Entry<Long, List<AnswerSheet>> entry : studentSheets.entrySet()) {
-            Long studentId = entry.getKey();
-            List<AnswerSheet> sheets = entry.getValue();
+        // 汇总各科成绩和总分（包括缺考学生）
+        for (Long studentId : allStudentIds) {
             Student student = studentMap.get(studentId);
             if (student == null) continue;
+
+            List<AnswerSheet> sheets = studentSheets.getOrDefault(studentId, new ArrayList<>());
 
             BigDecimal totalScore = BigDecimal.ZERO;
             int subjectCount = 0;
 
-            // 保存各科成绩
-            for (AnswerSheet sheet : sheets) {
+            // 为每个科目保存成绩（有答题卡的用实际成绩，没有的记0分缺考）
+            for (ExamSubject subject : subjects) {
+                AnswerSheet sheet = sheets.stream()
+                        .filter(s -> subject.getId().equals(s.getExamSubjectId()))
+                        .findFirst()
+                        .orElse(null);
+
                 SubjectScore subjectScore = new SubjectScore();
                 subjectScore.setExamId(examId);
-                subjectScore.setExamSubjectId(sheet.getExamSubjectId());
+                subjectScore.setExamSubjectId(subject.getId());
                 subjectScore.setStudentId(studentId);
                 subjectScore.setClassId(student.getClassId());
-                subjectScore.setAnswerSheetId(sheet.getId());
-                subjectScore.setScore(BigDecimal.valueOf(sheet.getTotalScore() != null ? sheet.getTotalScore() : 0));
-                subjectScore.setObjectiveScore(BigDecimal.valueOf(sheet.getObjectiveScore() != null ? sheet.getObjectiveScore() : 0));
-                subjectScore.setSubjectiveScore(BigDecimal.valueOf(sheet.getSubjectiveScore() != null ? sheet.getSubjectiveScore() : 0));
+
+                if (sheet != null) {
+                    // 有答题卡，使用实际成绩
+                    subjectScore.setAnswerSheetId(sheet.getId());
+                    subjectScore.setScore(BigDecimal.valueOf(sheet.getTotalScore() != null ? sheet.getTotalScore() : 0));
+                    subjectScore.setObjectiveScore(BigDecimal.valueOf(sheet.getObjectiveScore() != null ? sheet.getObjectiveScore() : 0));
+                    subjectScore.setSubjectiveScore(BigDecimal.valueOf(sheet.getSubjectiveScore() != null ? sheet.getSubjectiveScore() : 0));
+                } else {
+                    // 缺考，记0分
+                    subjectScore.setAnswerSheetId(null);
+                    subjectScore.setScore(BigDecimal.ZERO);
+                    subjectScore.setObjectiveScore(BigDecimal.ZERO);
+                    subjectScore.setSubjectiveScore(BigDecimal.ZERO);
+                }
                 subjectScore.setCreateTime(LocalDateTime.now());
                 subjectScoreMapper.insert(subjectScore);
 
@@ -683,6 +714,15 @@ public class ScoreServiceImpl implements ScoreService {
         examScoreMapper.selectPageVO(page, query);
         List<ExamScoreVO> scores = page.getRecords();
 
+        // 查询考试科目列表（用于确定导出列顺序）
+        List<ExamSubject> subjects = examSubjectMapper.selectList(
+                new LambdaQueryWrapper<ExamSubject>()
+                        .eq(ExamSubject::getExamId, examId)
+                        .eq(ExamSubject::getStatus, 1)
+                        .orderByAsc(ExamSubject::getSort)
+                        .orderByAsc(ExamSubject::getId)
+        );
+
         // 查询各科成绩
         for (ExamScoreVO score : scores) {
             List<SubjectScoreVO> subjectScores = subjectScoreMapper.selectListByExamAndStudent(examId, score.getStudentId());
@@ -690,7 +730,7 @@ public class ScoreServiceImpl implements ScoreService {
         }
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            // 转换为导出数据
+            // 转换为导出数据（包含各科明细）
             List<ScoreExportData> exportData = scores.stream().map(s -> {
                 ScoreExportData data = new ScoreExportData();
                 data.setStudentName(s.getStudentName());
@@ -699,10 +739,62 @@ public class ScoreServiceImpl implements ScoreService {
                 data.setTotalScore(s.getTotalScore() != null ? s.getTotalScore().toString() : "");
                 data.setClassRank(s.getClassRank() != null ? s.getClassRank().toString() : "");
                 data.setGradeRank(s.getGradeRank() != null ? s.getGradeRank().toString() : "");
+
+                // 设置各科成绩
+                if (s.getSubjectScores() != null && !subjects.isEmpty()) {
+                    Map<Long, SubjectScoreVO> subjectScoreMap = s.getSubjectScores().stream()
+                            .collect(Collectors.toMap(SubjectScoreVO::getExamSubjectId, sc -> sc, (a, b) -> a));
+
+                    String[] subjectScores = new String[subjects.size()];
+                    for (int i = 0; i < subjects.size(); i++) {
+                        SubjectScoreVO ss = subjectScoreMap.get(subjects.get(i).getId());
+                        subjectScores[i] = ss != null && ss.getScore() != null ? ss.getScore().toString() : "0";
+                    }
+                    data.setSubjectScores(subjectScores);
+                }
                 return data;
             }).toList();
 
-            EasyExcel.write(baos, ScoreExportData.class).sheet("成绩").doWrite(exportData);
+            // 动态设置表头（包含各科目）
+            List<List<String>> headers = new ArrayList<>();
+            headers.add(Arrays.asList("基本信息", "姓名"));
+            headers.add(Arrays.asList("基本信息", "学号"));
+            headers.add(Arrays.asList("基本信息", "班级"));
+            // 各科成绩列
+            for (ExamSubject subject : subjects) {
+                headers.add(Arrays.asList("各科成绩", subject.getSubjectName()));
+            }
+            headers.add(Arrays.asList("汇总", "总分"));
+            headers.add(Arrays.asList("排名", "班级排名"));
+            headers.add(Arrays.asList("排名", "年级排名"));
+
+            // 写入Excel
+            ExcelWriterSheetBuilder sheetBuilder = EasyExcel.write(baos)
+                    .head(createDynamicHead(headers))
+                    .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy());
+
+            List<List<Object>> rows = exportData.stream().map(data -> {
+                List<Object> row = new ArrayList<>();
+                row.add(data.getStudentName());
+                row.add(data.getStudentNumber());
+                row.add(data.getClassName());
+                // 各科成绩
+                if (data.getSubjectScores() != null) {
+                    for (String score : data.getSubjectScores()) {
+                        row.add(score);
+                    }
+                } else {
+                    for (int i = 0; i < subjects.size(); i++) {
+                        row.add("0");
+                    }
+                }
+                row.add(data.getTotalScore());
+                row.add(data.getClassRank());
+                row.add(data.getGradeRank());
+                return row;
+            }).toList();
+
+            sheetBuilder.sheet("成绩").doWrite(rows);
             return baos.toByteArray();
         } catch (Exception e) {
             throw new BusinessException("导出失败: " + e.getMessage());
@@ -710,25 +802,22 @@ public class ScoreServiceImpl implements ScoreService {
     }
 
     /**
+     * 创建动态表头
+     */
+    private List<List<String>> createDynamicHead(List<List<String>> headers) {
+        return headers;
+    }
+
+    /**
      * 成绩导出数据类
      */
     public static class ScoreExportData {
-        @com.alibaba.excel.annotation.ExcelProperty("姓名")
         private String studentName;
-
-        @com.alibaba.excel.annotation.ExcelProperty("学号")
         private String studentNumber;
-
-        @com.alibaba.excel.annotation.ExcelProperty("班级")
         private String className;
-
-        @com.alibaba.excel.annotation.ExcelProperty("总分")
+        private String[] subjectScores;  // 各科成绩数组，顺序与科目列表一致
         private String totalScore;
-
-        @com.alibaba.excel.annotation.ExcelProperty("班级排名")
         private String classRank;
-
-        @com.alibaba.excel.annotation.ExcelProperty("年级排名")
         private String gradeRank;
 
         // Getters and Setters
@@ -740,6 +829,9 @@ public class ScoreServiceImpl implements ScoreService {
 
         public String getClassName() { return className; }
         public void setClassName(String className) { this.className = className; }
+
+        public String[] getSubjectScores() { return subjectScores; }
+        public void setSubjectScores(String[] subjectScores) { this.subjectScores = subjectScores; }
 
         public String getTotalScore() { return totalScore; }
         public void setTotalScore(String totalScore) { this.totalScore = totalScore; }

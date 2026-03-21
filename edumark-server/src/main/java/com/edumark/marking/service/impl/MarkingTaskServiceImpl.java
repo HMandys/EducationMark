@@ -341,6 +341,43 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
 
         task.setStatus(2);
         updateById(task);
+
+        // 任务完成后，检查并更新关联答题卡的状态
+        updateAnswerSheetsStatusAfterTaskComplete(task);
+    }
+
+    /**
+     * 阅卷任务完成后，更新关联答题卡的状态
+     * 检查答题卡的所有阅卷任务是否都已完成，如果是则将答题卡状态更新为"已完成"
+     */
+    private void updateAnswerSheetsStatusAfterTaskComplete(MarkingTask completedTask) {
+        // 查询该考试科目的所有阅卷任务
+        List<MarkingTask> allTasks = baseMapper.selectList(
+                new LambdaQueryWrapper<MarkingTask>()
+                        .eq(MarkingTask::getExamSubjectId, completedTask.getExamSubjectId())
+                        .eq(MarkingTask::getDeleted, 0)
+        );
+
+        // 检查是否所有任务都已完成
+        boolean allTasksCompleted = allTasks.stream()
+                .allMatch(t -> t.getStatus() != null && t.getStatus() == 2);
+
+        if (!allTasksCompleted) {
+            return;
+        }
+
+        // 所有任务都完成，将该科目的所有"阅卷中"答题卡更新为"已完成"
+        List<AnswerSheet> markingAnswerSheets = answerSheetMapper.selectList(
+                new LambdaQueryWrapper<AnswerSheet>()
+                        .eq(AnswerSheet::getExamSubjectId, completedTask.getExamSubjectId())
+                        .eq(AnswerSheet::getStatus, 3)
+                        .eq(AnswerSheet::getDeleted, 0)
+        );
+
+        for (AnswerSheet answerSheet : markingAnswerSheets) {
+            answerSheet.setStatus(4);
+            answerSheetMapper.updateById(answerSheet);
+        }
     }
 
     @Override

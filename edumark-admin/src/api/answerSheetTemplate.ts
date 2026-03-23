@@ -21,9 +21,21 @@ export interface AnswerSheetTemplate {
   status: number
   pdfObjectName?: string
   pdfUrl?: string
+  templateImagePath?: string
+  templateImageUrl?: string
+  cornerConfig?: CornerConfig
   createTime?: string
   updateTime?: string
   regions?: AnswerSheetRegion[]
+}
+
+export interface CornerConfig {
+  topLeft?: { x: number; y: number }
+  topRight?: { x: number; y: number }
+  bottomLeft?: { x: number; y: number }
+  bottomRight?: { x: number; y: number }
+  corrected?: boolean
+  angle?: number
 }
 
 export interface HeaderConfig {
@@ -82,6 +94,8 @@ export interface RegionConfig {
   bubbleMap?: BubbleMapItem[]
   detectedBubbleCount?: number
   expectedBubbleCount?: number
+  // 正确答案配置 {题号: 答案}
+  correctAnswers?: Record<string, string>
   // 填空题配置
   lineHeight?: number
   linesPerQuestion?: number
@@ -174,4 +188,115 @@ export function getTemplatePreviewUrl(id: Id) {
 
 export function getTemplateDownloadUrl(id: Id) {
   return request.get<string>(`/answer-sheet-template/${id}/download`)
+}
+
+// ============ 新增API - 答题卡设计重做 ============
+
+export interface CornerDetectionResult {
+  success: boolean
+  errorMessage?: string
+  topLeftX?: number
+  topLeftY?: number
+  topRightX?: number
+  topRightY?: number
+  bottomLeftX?: number
+  bottomLeftY?: number
+  bottomRightX?: number
+  bottomRightY?: number
+  angle?: number
+  imageWidth?: number
+  imageHeight?: number
+  correctedImagePath?: string
+  correctedImageUrl?: string
+}
+
+export interface BubbleDetectionResult {
+  success: boolean
+  errorMessage?: string
+  detectedCount?: number
+  expectedCount?: number
+  bubbleMap?: BubbleMapItem[]
+  rowCount?: number
+  bubblesPerRow?: number
+}
+
+// 上传模板图片
+export function uploadTemplateImage(id: Id, imagePath: string) {
+  return request.post<string>(`/answer-sheet-template/${id}/upload-image`, null, {
+    params: { imagePath },
+  })
+}
+
+// 保存四角定位配置
+export function saveCornerConfig(id: Id, cornerConfig: CornerConfig) {
+  return request.put<void>(`/answer-sheet-template/${id}/corner-config`, cornerConfig)
+}
+
+// 保存区域正确答案
+export function saveRegionAnswers(id: Id, regionId: Id, correctAnswers: Record<string, string>) {
+  return request.put<void>(`/answer-sheet-template/${id}/region/${regionId}/answers`, correctAnswers)
+}
+
+// 获取模板图片URL
+export function getTemplateImageUrl(id: Id) {
+  return request.get<string>(`/answer-sheet-template/${id}/image`)
+}
+
+// 检测四角定位点(上传文件)
+export function detectCorners(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<CornerDetectionResult>('/corner-detection/detect', formData)
+}
+
+// 检测四角定位点(已上传图片)
+export function detectCornersByPath(imagePath: string) {
+  return request.get<CornerDetectionResult>('/corner-detection/detect', {
+    params: { imagePath },
+  })
+}
+
+// 应用四角矫正
+export function correctImage(imagePath: string, cornerConfig: CornerConfig) {
+  return request.post<string>('/corner-detection/correct', cornerConfig, {
+    params: { imagePath },
+  })
+}
+
+// 检测气泡(上传文件)
+export function detectBubbles(
+  file: File,
+  params: {
+    boxX: number
+    boxY: number
+    boxWidth: number
+    boxHeight: number
+    questionStart: number
+    questionEnd: number
+    optionCount?: number
+    questionsPerRow?: number
+  },
+) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<BubbleDetectionResult>('/bubble-detection/detect', formData, { params })
+}
+
+// 检测气泡(已上传图片)
+export function detectBubblesByPath(
+  imagePath: string,
+  params: {
+    boxX: number
+    boxY: number
+    boxWidth: number
+    boxHeight: number
+    questionStart: number
+    questionEnd: number
+    optionCount?: number
+    questionsPerRow?: number
+  },
+) {
+  return request.get<BubbleDetectionResult>('/bubble-detection/detect', {
+    params: { imagePath, ...params },
+  })
 }

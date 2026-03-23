@@ -14,6 +14,8 @@ import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 /**
  * 答题卡模板控制器
  *
@@ -94,5 +96,38 @@ public class AnswerSheetTemplateController {
     @GetMapping("/{id}/download")
     public Result<String> download(@PathVariable Long id) {
         return Result.success(templateService.getDownloadUrl(id));
+    }
+
+    @Operation(summary = "上传模板图片")
+    @PostMapping("/{id}/upload-image")
+    public Result<String> uploadImage(
+            @PathVariable Long id,
+            @RequestParam String imagePath) {
+        return Result.success(templateService.uploadTemplateImage(id, imagePath));
+    }
+
+    @Operation(summary = "保存四角定位配置")
+    @PutMapping("/{id}/corner-config")
+    public Result<Void> saveCornerConfig(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> cornerConfig) {
+        templateService.saveCornerConfig(id, cornerConfig);
+        return Result.success();
+    }
+
+    @Operation(summary = "保存区域正确答案")
+    @PutMapping("/{id}/region/{regionId}/answers")
+    public Result<Void> saveRegionAnswers(
+            @PathVariable Long id,
+            @PathVariable Long regionId,
+            @RequestBody Map<String, String> correctAnswers) {
+        templateService.saveRegionCorrectAnswers(id, regionId, correctAnswers);
+        return Result.success();
+    }
+
+    @Operation(summary = "获取模板图片URL")
+    @GetMapping("/{id}/image")
+    public Result<String> getTemplateImage(@PathVariable Long id) {
+        return Result.success(templateService.getTemplateImageUrl(id));
     }
 }

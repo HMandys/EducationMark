@@ -30,6 +30,52 @@
       <!-- 左侧配置面板 -->
       <div class="editor-sidebar">
         <el-tabs v-model="activeTab">
+          <el-tab-pane label="模板图片" name="template-image">
+            <div class="template-image-panel">
+              <div class="panel-section">
+                <div class="panel-title">上传答题卡图片</div>
+                <div class="panel-desc">上传已设计好的答题卡图片，系统将自动检测四角定位点</div>
+                <el-upload
+                  class="template-upload"
+                  :auto-upload="false"
+                  :show-file-list="false"
+                  accept="image/*"
+                  :on-change="handleTemplateImageChange"
+                  drag
+                >
+                  <div class="upload-content">
+                    <el-icon class="upload-icon"><Upload /></el-icon>
+                    <div class="upload-text">点击或拖拽上传答题卡图片</div>
+                    <div class="upload-hint">支持 JPG、PNG 格式</div>
+                  </div>
+                </el-upload>
+                <div v-if="templateImageUrl || templateForm.templateImageUrl" class="current-image-info">
+                  <el-tag type="success">已上传模板图片</el-tag>
+                  <el-button text type="primary" @click="showCornerPanel = !showCornerPanel">
+                    {{ showCornerPanel ? '收起定位配置' : '查看定位配置' }}
+                  </el-button>
+                </div>
+              </div>
+
+              <CornerDetectPanel
+                v-if="showCornerPanel && (templateImageUrl || templateForm.templateImageUrl)"
+                :image-url="templateImageUrl || templateForm.templateImageUrl"
+                v-model:corner-config="cornerConfig"
+                @detect="handleAutoDetectCorners"
+              />
+
+              <div class="panel-section" v-if="templateImageUrl || templateForm.templateImageUrl">
+                <el-button
+                  type="primary"
+                  @click="handleSaveCornerConfig"
+                  :loading="cornerDetecting"
+                  :disabled="!templateForm.id"
+                >
+                  保存定位配置
+                </el-button>
+              </div>
+            </div>
+          </el-tab-pane>
           <el-tab-pane label="页面设置" name="page">
             <PageSettingPanel v-model="templateForm" />
           </el-tab-pane>
@@ -189,17 +235,23 @@ import RegionList from './components/RegionList.vue'
 import RegionConfigDialog from './components/RegionConfigDialog.vue'
 import PreviewPanel from './components/PreviewPanel.vue'
 import TemplateValidationDialog from './components/TemplateValidationDialog.vue'
+import CornerDetectPanel from './components/CornerDetectPanel.vue'
 import {
   getTemplateDetail,
   createTemplate,
   updateTemplate,
   publishTemplate,
   validateTemplate,
+  uploadTemplateImage,
+  saveCornerConfig,
+  detectCorners,
   type AnswerSheetTemplate,
   type AnswerSheetRegion,
   type BubbleMapItem,
   type TemplateValidationResult,
+  type CornerConfig,
 } from '@/api/answerSheetTemplate'
+import { request } from '@/utils/request'
 import type { Id } from '@/api/types'
 
 const route = useRoute()
@@ -248,6 +300,14 @@ const bubbleDetectLoading = ref(false)
 const autoDetecting = ref(false)
 const lastAutoDetectSignature = ref('')
 const drawMode = ref(false)
+
+// 模板图片模式
+const templateImageFile = ref<File | null>(null)
+const templateImageUrl = ref('')
+const templateImageUploading = ref(false)
+const cornerDetecting = ref(false)
+const cornerConfig = ref<CornerConfig>({})
+const showCornerPanel = ref(false)
 
 const cloneRegion = (region: AnswerSheetRegion): AnswerSheetRegion => ({
   ...region,
@@ -342,6 +402,17 @@ const autoDetectSignature = computed(() => {
   })
 })
 
+const currentExamId = computed(() => {
+  const examId = route.query.examId
+  if (typeof examId === 'string' && examId) {
+    return examId
+  }
+  if (Array.isArray(examId) && examId.length > 0) {
+    return String(examId[0])
+  }
+  return ''
+})
+
 const revokeSampleImage = () => {
   if (sampleImageUrl.value) {
     URL.revokeObjectURL(sampleImageUrl.value)
@@ -356,7 +427,10 @@ const fetchTemplateDetail = async (id: Id) => {
 
 // 返回
 const handleBack = () => {
-  router.push('/answer-sheet-design/list')
+  router.push({
+    path: '/answer-sheet-design/list',
+    query: currentExamId.value ? { examId: currentExamId.value } : undefined,
+  })
 }
 
 // 保存
@@ -379,7 +453,10 @@ const handleSave = async () => {
       const res = await createTemplate(templateForm)
       templateForm.id = res.data
       // 更新URL
-      router.replace(`/answer-sheet-design/edit/${res.data}`)
+      router.replace({
+        path: `/answer-sheet-design/edit/${res.data}`,
+        query: currentExamId.value ? { examId: currentExamId.value } : undefined,
+      })
       ElMessage.success('创建成功')
     }
   } finally {
@@ -414,7 +491,10 @@ const handlePublish = async () => {
     // 再发布
     await publishTemplate(templateForm.id)
     ElMessage.success('发布成功')
-    router.push('/answer-sheet-design/list')
+    router.push({
+      path: '/answer-sheet-design/list',
+      query: currentExamId.value ? { examId: currentExamId.value } : undefined,
+    })
   } finally {
     publishLoading.value = false
   }
@@ -568,6 +648,114 @@ const clearSampleImage = () => {
   sampleImageUrl.value = ''
   sampleImageName.value = ''
   sampleImageVisible.value = false
+}
+
+// 模板图片处理
+const handleTemplateImageChange = async (file: UploadFile) => {
+  if (!file.raw) return
+
+  templateImageFile.value = file.raw
+
+  // 创建本地预览URL
+  if (templateImageUrl.value) {
+    URL.revokeObjectURL(templateImageUrl.value)
+  }
+  templateImageUrl.value = URL.createObjectURL(file.raw)
+
+  // 同时设置为样张，方便拉框
+  revokeSampleImage()
+  sampleImageUrl.value = URL.createObjectURL(file.raw)
+  sampleImageName.value = file.name
+  sampleImageVisible.value = true
+
+  // 自动检测四角
+  await handleAutoDetectCorners()
+
+  // 如果模板已保存，自动上传图片
+  if (templateForm.id) {
+    await uploadTemplateImageToServer()
+  }
+}
+
+const uploadTemplateImageToServer = async () => {
+  if (!templateImageFile.value || !templateForm.id) return
+
+  templateImageUploading.value = true
+  try {
+    // 先上传到文件服务
+    const formData = new FormData()
+    formData.append('file', templateImageFile.value)
+    formData.append('directory', 'answer-sheet-template')
+
+    const uploadRes = await request.post<{ objectName: string; url: string }>('/file/upload', formData)
+    const imagePath = uploadRes.data.objectName
+
+    // 关联到模板
+    const imageUrl = await uploadTemplateImage(templateForm.id, imagePath)
+    templateForm.templateImagePath = imagePath
+    templateForm.templateImageUrl = imageUrl.data
+
+    ElMessage.success('模板图片已上传')
+  } catch (error) {
+    console.error('上传模板图片失败', error)
+    ElMessage.error('上传模板图片失败')
+  } finally {
+    templateImageUploading.value = false
+  }
+}
+
+const handleAutoDetectCorners = async () => {
+  if (!templateImageFile.value) return
+
+  cornerDetecting.value = true
+  try {
+    const result = await detectCorners(templateImageFile.value)
+    if (result.data.success) {
+      cornerConfig.value = {
+        topLeft: { x: result.data.topLeftX || 5, y: result.data.topLeftY || 5 },
+        topRight: { x: result.data.topRightX || 95, y: result.data.topRightY || 5 },
+        bottomLeft: { x: result.data.bottomLeftX || 5, y: result.data.bottomLeftY || 95 },
+        bottomRight: { x: result.data.bottomRightX || 95, y: result.data.bottomRightY || 95 },
+        angle: result.data.angle || 0,
+      }
+      showCornerPanel.value = true
+      ElMessage.success('四角定位点检测完成')
+    } else {
+      ElMessage.warning(result.data.errorMessage || '四角检测失败，请手动调整')
+      // 使用默认值
+      cornerConfig.value = {
+        topLeft: { x: 5, y: 5 },
+        topRight: { x: 95, y: 5 },
+        bottomLeft: { x: 5, y: 95 },
+        bottomRight: { x: 95, y: 95 },
+        angle: 0,
+      }
+    }
+  } catch (error) {
+    console.error('四角检测失败', error)
+    ElMessage.warning('四角检测失败，请手动设置定位点')
+  } finally {
+    cornerDetecting.value = false
+  }
+}
+
+const handleSaveCornerConfig = async () => {
+  if (!templateForm.id) {
+    ElMessage.warning('请先保存模板')
+    return
+  }
+
+  cornerDetecting.value = true
+  try {
+    await saveCornerConfig(templateForm.id, cornerConfig.value)
+    templateForm.cornerConfig = { ...cornerConfig.value }
+    ElMessage.success('定位配置已保存')
+  } catch (error) {
+    console.error('保存定位配置失败', error)
+    ElMessage.error('保存定位配置失败')
+  } finally {
+    cornerDetecting.value = false
+  }
 }
 
 const calculateExpectedBubbleCount = (region: AnswerSheetRegion) => {
@@ -1006,6 +1194,18 @@ onMounted(async () => {
   if (id) {
     // 编辑模式
     await fetchTemplateDetail(id)
+
+    // 加载四角配置
+    if (templateForm.cornerConfig) {
+      cornerConfig.value = templateForm.cornerConfig as CornerConfig
+    }
+
+    // 如果有模板图片，同时设置为样张
+    if (templateForm.templateImageUrl) {
+      sampleImageUrl.value = templateForm.templateImageUrl
+      sampleImageName.value = '模板图片'
+      sampleImageVisible.value = true
+    }
   } else if (paperId) {
     // 新建模式，关联试卷
     templateForm.paperId = paperId
@@ -1136,5 +1336,71 @@ onBeforeUnmount(() => {
   .preview-tools {
     grid-template-columns: 1fr;
   }
+}
+
+/* 模板图片面板样式 */
+.template-image-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel-section {
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.panel-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.template-upload {
+  margin-top: 12px;
+}
+
+.template-upload :deep(.el-upload-dragger) {
+  padding: 32px 20px;
+  border-radius: 12px;
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.upload-icon {
+  font-size: 40px;
+  color: #94a3b8;
+}
+
+.upload-text {
+  font-size: 14px;
+  color: #475569;
+}
+
+.upload-hint {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.current-image-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding: 12px;
+  background: #f0fdf4;
+  border-radius: 8px;
 }
 </style>

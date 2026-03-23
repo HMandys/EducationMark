@@ -69,6 +69,15 @@ public class AnswerSheetTemplateVO {
     @Schema(description = "PDF访问URL")
     private String pdfUrl;
 
+    @Schema(description = "模板图片路径")
+    private String templateImagePath;
+
+    @Schema(description = "模板图片访问URL")
+    private String templateImageUrl;
+
+    @Schema(description = "四角定位点配置")
+    private Map<String, Object> cornerConfig;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
@@ -134,6 +143,15 @@ public class AnswerSheetTemplateVO {
 
     public String getPdfUrl() { return pdfUrl; }
     public void setPdfUrl(String pdfUrl) { this.pdfUrl = pdfUrl; }
+
+    public String getTemplateImagePath() { return templateImagePath; }
+    public void setTemplateImagePath(String templateImagePath) { this.templateImagePath = templateImagePath; }
+
+    public String getTemplateImageUrl() { return templateImageUrl; }
+    public void setTemplateImageUrl(String templateImageUrl) { this.templateImageUrl = templateImageUrl; }
+
+    public Map<String, Object> getCornerConfig() { return cornerConfig; }
+    public void setCornerConfig(Map<String, Object> cornerConfig) { this.cornerConfig = cornerConfig; }
 
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }

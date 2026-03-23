@@ -156,6 +156,43 @@
         <el-form-item label="包含多选">
           <el-switch v-model="formData.config!.hasMultipleChoice" />
         </el-form-item>
+
+        <el-divider content-position="left">正确答案配置</el-divider>
+        <div class="answer-config-section">
+          <div class="answer-config-tip">
+            为每道题设置正确答案，多选题直接填写多个选项（如 AB、CD）
+          </div>
+          <div class="answer-grid">
+            <div
+              v-for="q in getQuestionRange()"
+              :key="q"
+              class="answer-item"
+            >
+              <span class="question-no">{{ q }}.</span>
+              <div class="option-group">
+                <button
+                  v-for="opt in getOptionLabels()"
+                  :key="opt"
+                  type="button"
+                  class="option-btn"
+                  :class="{ 'is-selected': isOptionSelected(q, opt) }"
+                  @click.prevent="toggleOption(q, opt)"
+                >
+                  {{ opt }}
+                </button>
+              </div>
+              <span class="answer-display">{{ getAnswer(q) || '-' }}</span>
+            </div>
+          </div>
+          <div class="quick-input-row">
+            <el-input
+              v-model="quickAnswerInput"
+              placeholder="快速输入: 1-A,2-B,3-CD"
+              size="small"
+            />
+            <el-button size="small" @click="applyQuickInput">应用</el-button>
+          </div>
+        </div>
       </template>
 
       <template v-if="formData.regionType === 2">
@@ -260,6 +297,7 @@ const isFromDrawMode = computed(() => {
 })
 
 const formRef = ref<FormInstance>()
+const quickAnswerInput = ref('')
 
 const regionRoleOptions: Array<{ label: string; value: RegionRole }> = [
   { label: '客观题涂卡区', value: 'choice_block' },
@@ -377,6 +415,73 @@ const requiresQuestionRange = computed(() => {
   const role = formData.config?.regionRole
   return role === 'choice_block' || role === 'subjective_crop' || role === 'essay_crop' || !role
 })
+
+// 正确答案配置相关方法
+const getQuestionRange = () => {
+  const start = formData.questionStart || 1
+  const end = formData.questionEnd || start
+  return Array.from({ length: Math.max(end - start + 1, 0) }, (_, i) => start + i)
+}
+
+const getOptionLabels = () => {
+  const count = formData.config?.optionCount || 4
+  return Array.from({ length: count }, (_, i) => String.fromCharCode(65 + i))
+}
+
+const getAnswer = (questionNo: number) => {
+  return formData.config?.correctAnswers?.[String(questionNo)] || ''
+}
+
+const isOptionSelected = (questionNo: number, option: string) => {
+  const answer = getAnswer(questionNo)
+  return answer.includes(option)
+}
+
+const toggleOption = (questionNo: number, option: string) => {
+  const key = String(questionNo)
+  const current = formData.config?.correctAnswers?.[key] || ''
+
+  let newAnswer: string
+  if (current.includes(option)) {
+    newAnswer = current.replace(option, '')
+  } else {
+    const chars = (current + option).split('').sort()
+    newAnswer = chars.join('')
+  }
+
+  if (!formData.config) {
+    formData.config = {}
+  }
+  if (!formData.config.correctAnswers) {
+    formData.config.correctAnswers = {}
+  }
+  formData.config.correctAnswers[key] = newAnswer
+}
+
+const applyQuickInput = () => {
+  const text = quickAnswerInput.value.trim()
+  if (!text) return
+
+  if (!formData.config) {
+    formData.config = {}
+  }
+  if (!formData.config.correctAnswers) {
+    formData.config.correctAnswers = {}
+  }
+
+  const parts = text.split(/[,，\s]+/)
+  for (const part of parts) {
+    const match = part.match(/^(\d+)\s*[-:：]\s*([A-Za-z]+)$/)
+    if (match) {
+      const questionNo = match[1]
+      const answer = match[2].toUpperCase().split('').sort().join('')
+      formData.config.correctAnswers[questionNo] = answer
+    }
+  }
+
+  quickAnswerInput.value = ''
+  ElMessage.success('已应用快速输入')
+}
 
 watch(
   () => props.visible,
@@ -537,5 +642,92 @@ const handleConfirm = async () => {
 
 :deep(.coord-filled .el-input-number__wrapper) {
   box-shadow: 0 0 0 1px #86efac inset;
+}
+
+/* 正确答案配置样式 */
+.answer-config-section {
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.answer-config-tip {
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.answer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.answer-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.answer-item .question-no {
+  min-width: 28px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.option-group {
+  display: flex;
+  gap: 3px;
+}
+
+.option-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.option-btn:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.option-btn.is-selected {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.answer-display {
+  margin-left: auto;
+  min-width: 32px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #059669;
+}
+
+.quick-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.quick-input-row .el-input {
+  flex: 1;
 }
 </style>

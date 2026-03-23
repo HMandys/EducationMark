@@ -59,6 +59,13 @@ public class AnswerSheetTemplate extends BaseEntity {
     @Schema(description = "PDF存储路径")
     private String pdfObjectName;
 
+    @Schema(description = "模板图片路径")
+    private String templateImagePath;
+
+    @TableField(typeHandler = JacksonTypeHandler.class)
+    @Schema(description = "四角定位点配置")
+    private Map<String, Object> cornerConfig;
+
     @TableField(exist = false)
     @Schema(description = "试卷名称")
     private String paperName;
@@ -114,6 +121,12 @@ public class AnswerSheetTemplate extends BaseEntity {
 
     public String getPdfObjectName() { return pdfObjectName; }
     public void setPdfObjectName(String pdfObjectName) { this.pdfObjectName = pdfObjectName; }
+
+    public String getTemplateImagePath() { return templateImagePath; }
+    public void setTemplateImagePath(String templateImagePath) { this.templateImagePath = templateImagePath; }
+
+    public Map<String, Object> getCornerConfig() { return cornerConfig; }
+    public void setCornerConfig(Map<String, Object> cornerConfig) { this.cornerConfig = cornerConfig; }
 
     public String getPaperName() { return paperName; }
     public void setPaperName(String paperName) { this.paperName = paperName; }

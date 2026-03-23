@@ -94,6 +94,11 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
             vo.setPdfUrl(fileService.getUrl(vo.getPdfObjectName()));
         }
 
+        // 设置模板图片URL
+        if (vo.getTemplateImagePath() != null) {
+            vo.setTemplateImageUrl(fileService.getUrl(vo.getTemplateImagePath()));
+        }
+
         return vo;
     }
 
@@ -109,6 +114,9 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
 
             if (vo.getPdfObjectName() != null) {
                 vo.setPdfUrl(fileService.getUrl(vo.getPdfObjectName()));
+            }
+            if (vo.getTemplateImagePath() != null) {
+                vo.setTemplateImageUrl(fileService.getUrl(vo.getTemplateImagePath()));
             }
         }
         return vo;
@@ -552,6 +560,77 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
     @Override
     public String getDownloadUrl(Long id) {
         return getPreviewUrl(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String uploadTemplateImage(Long id, String imagePath) {
+        AnswerSheetTemplate template = getById(id);
+        if (template == null) {
+            throw new BusinessException("模板不存在");
+        }
+
+        // 删除旧的模板图片
+        if (template.getTemplateImagePath() != null && !template.getTemplateImagePath().equals(imagePath)) {
+            try {
+                fileService.delete(template.getTemplateImagePath());
+            } catch (Exception ignored) {
+                // 忽略删除失败
+            }
+        }
+
+        // 更新模板图片路径
+        template.setTemplateImagePath(imagePath);
+        updateById(template);
+
+        return fileService.getUrl(imagePath);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveCornerConfig(Long id, Map<String, Object> cornerConfig) {
+        AnswerSheetTemplate template = getById(id);
+        if (template == null) {
+            throw new BusinessException("模板不存在");
+        }
+
+        template.setCornerConfig(cornerConfig);
+        updateById(template);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveRegionCorrectAnswers(Long templateId, Long regionId, Map<String, String> correctAnswers) {
+        AnswerSheetTemplate template = getById(templateId);
+        if (template == null) {
+            throw new BusinessException("模板不存在");
+        }
+
+        AnswerSheetRegion region = regionMapper.selectById(regionId);
+        if (region == null || !templateId.equals(region.getTemplateId())) {
+            throw new BusinessException("区域不存在或不属于该模板");
+        }
+
+        // 更新区域配置中的correctAnswers
+        Map<String, Object> config = region.getConfig();
+        if (config == null) {
+            config = new HashMap<>();
+        }
+        config.put("correctAnswers", correctAnswers);
+        region.setConfig(config);
+        regionMapper.updateById(region);
+    }
+
+    @Override
+    public String getTemplateImageUrl(Long id) {
+        AnswerSheetTemplate template = getById(id);
+        if (template == null) {
+            throw new BusinessException("模板不存在");
+        }
+        if (template.getTemplateImagePath() == null) {
+            return null;
+        }
+        return fileService.getUrl(template.getTemplateImagePath());
     }
 
     private void validateBounds(List<AnswerSheetTemplateValidateVO.ValidationIssue> issues,

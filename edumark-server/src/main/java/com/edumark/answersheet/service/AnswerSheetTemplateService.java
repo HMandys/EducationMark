@@ -69,4 +69,38 @@ public interface AnswerSheetTemplateService extends IService<AnswerSheetTemplate
      * 获取PDF下载URL
      */
     String getDownloadUrl(Long id);
+
+    /**
+     * 上传模板图片
+     *
+     * @param id 模板ID
+     * @param imagePath 图片路径
+     * @return 图片访问URL
+     */
+    String uploadTemplateImage(Long id, String imagePath);
+
+    /**
+     * 保存四角定位配置
+     *
+     * @param id 模板ID
+     * @param cornerConfig 四角配置
+     */
+    void saveCornerConfig(Long id, java.util.Map<String, Object> cornerConfig);
+
+    /**
+     * 保存区域正确答案
+     *
+     * @param templateId 模板ID
+     * @param regionId 区域ID
+     * @param correctAnswers 正确答案映射 {题号: 答案}
+     */
+    void saveRegionCorrectAnswers(Long templateId, Long regionId, java.util.Map<String, String> correctAnswers);
+
+    /**
+     * 获取模板图片URL
+     *
+     * @param id 模板ID
+     * @return 图片URL
+     */
+    String getTemplateImageUrl(Long id);
 }

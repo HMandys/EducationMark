@@ -162,7 +162,28 @@ const unpublishing = ref(false)
 const currentExam = ref<Exam | null>(null)
 const checkResult = ref<ScorePublishCheck | null>(null)
 
-const examId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
+const examId = computed(() => {
+  const id = route.params.id
+  if (typeof id === 'string' && id) {
+    return id
+  }
+  if (typeof id === 'number') {
+    return String(id)
+  }
+  if (Array.isArray(id) && id.length > 0) {
+    return String(id[0])
+  }
+
+  const queryExamId = route.query.examId
+  if (typeof queryExamId === 'string' && queryExamId) {
+    return queryExamId
+  }
+  if (Array.isArray(queryExamId) && queryExamId.length > 0) {
+    return String(queryExamId[0])
+  }
+
+  return ''
+})
 
 const resultDescription = computed(() => {
   if (!checkResult.value) {

@@ -56,6 +56,12 @@ public class AnswerSheetTemplateDTO {
     @Schema(description = "区域列表")
     private List<AnswerSheetRegionDTO> regions;
 
+    @Schema(description = "模板图片路径")
+    private String templateImagePath;
+
+    @Schema(description = "四角定位点配置")
+    private Map<String, Object> cornerConfig;
+
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -95,4 +101,10 @@ public class AnswerSheetTemplateDTO {
 
     public List<AnswerSheetRegionDTO> getRegions() { return regions; }
     public void setRegions(List<AnswerSheetRegionDTO> regions) { this.regions = regions; }
+
+    public String getTemplateImagePath() { return templateImagePath; }
+    public void setTemplateImagePath(String templateImagePath) { this.templateImagePath = templateImagePath; }
+
+    public Map<String, Object> getCornerConfig() { return cornerConfig; }
+    public void setCornerConfig(Map<String, Object> cornerConfig) { this.cornerConfig = cornerConfig; }
 }

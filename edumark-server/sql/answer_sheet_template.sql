@@ -45,3 +45,32 @@ CREATE TABLE `answer_sheet_region` (
     KEY `idx_template_id` (`template_id`),
     KEY `idx_page_sort` (`template_id`, `page_no`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='答题区域配置表';
+
+-- ==================================================
+-- 答题卡设计功能重做 - 数据库变更
+-- ==================================================
+
+-- 答题卡模板表新增字段
+ALTER TABLE `answer_sheet_template`
+ADD COLUMN `template_image_path` VARCHAR(500) DEFAULT NULL COMMENT '模板图片路径' AFTER `pdf_object_name`,
+ADD COLUMN `corner_config` JSON DEFAULT NULL COMMENT '四角定位点配置' AFTER `template_image_path`;
+
+-- corner_config JSON 结构示例:
+-- {
+--   "topLeft": { "x": 5.2, "y": 3.8 },
+--   "topRight": { "x": 94.5, "y": 4.0 },
+--   "bottomLeft": { "x": 5.0, "y": 96.2 },
+--   "bottomRight": { "x": 94.8, "y": 96.0 },
+--   "corrected": true,
+--   "angle": 0.5
+-- }
+
+-- 答题区域配置表新增正确答案字段（客观题用）
+-- 该字段存储在 config JSON 中，键名为 correctAnswers
+-- config.correctAnswers 结构示例:
+-- {
+--   "1": "A",
+--   "2": "B",
+--   "3": "CD",
+--   "4": "A"
+-- }

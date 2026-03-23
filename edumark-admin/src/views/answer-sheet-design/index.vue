@@ -165,8 +165,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus } from '@element-plus/icons-vue'
 import {
@@ -191,6 +191,7 @@ interface Paper {
 }
 
 const router = useRouter()
+const route = useRoute()
 
 // 下拉列表数据
 const examList = ref<Exam[]>([])
@@ -201,7 +202,7 @@ const paperList = ref<Paper[]>([])
 const queryParams = reactive({
   pageNum: 1,
   pageSize: 10,
-  examId: undefined as number | undefined,
+  examId: undefined as Id | undefined,
   subjectName: '',
   name: '',
   status: undefined as number | undefined,
@@ -217,9 +218,9 @@ const createDialogVisible = ref(false)
 const createFormRef = ref<FormInstance>()
 const createLoading = ref(false)
 const createForm = reactive({
-  examId: undefined as number | undefined,
-  subjectId: undefined as number | undefined,
-  paperId: undefined as number | undefined,
+  examId: undefined as Id | undefined,
+  subjectId: undefined as Id | undefined,
+  paperId: undefined as Id | undefined,
   mode: 'auto',
 })
 
@@ -241,6 +242,47 @@ const loadExamList = async () => {
   examList.value = res.data.list
 }
 
+const getRouteExamId = () => {
+  const examId = typeof route.query.examId === 'string' ? route.query.examId : undefined
+  return examId && /^\d+$/.test(examId) ? examId : undefined
+}
+
+const loadSubjectsByExam = async (examId: Id) => {
+  const res = await getExamSubjectList(examId)
+  subjectList.value = res.data
+}
+
+const syncPaperListBySubject = (subjectId?: Id) => {
+  createForm.paperId = undefined
+  paperList.value = []
+  if (!subjectId) {
+    return
+  }
+
+  const subject = subjectList.value.find(item => String(item.id) === String(subjectId))
+  if (!subject?.paperId) {
+    return
+  }
+
+  paperList.value = [{
+    id: subject.paperId,
+    name: `${subject.subjectName} - 试卷`,
+    examSubjectId: subject.id,
+  }]
+}
+
+const applyRouteExamContext = async () => {
+  const routeExamId = getRouteExamId()
+  queryParams.examId = routeExamId
+
+  if (!routeExamId) {
+    return
+  }
+
+  createForm.examId = routeExamId
+  await loadSubjectsByExam(routeExamId)
+}
+
 // 考试变化
 const handleExamChange = async () => {
   queryParams.subjectName = ''
@@ -248,33 +290,19 @@ const handleExamChange = async () => {
 }
 
 // 新建表单考试变化
-const handleCreateExamChange = async (examId: number) => {
+const handleCreateExamChange = async (examId?: Id) => {
   createForm.subjectId = undefined
   createForm.paperId = undefined
   subjectList.value = []
   paperList.value = []
   if (examId) {
-    const res = await getExamSubjectList(examId)
-    subjectList.value = res.data
+    await loadSubjectsByExam(examId)
   }
 }
 
 // 科目变化
-const handleSubjectChange = async (subjectId: number) => {
-  createForm.paperId = undefined
-  paperList.value = []
-  if (subjectId) {
-    // 获取该科目下的试卷列表
-    // TODO: 调用获取试卷列表的API
-    const subject = subjectList.value.find(s => s.id === subjectId)
-    if (subject && subject.paperId) {
-      paperList.value = [{
-        id: subject.paperId,
-        name: subject.subjectName + ' - 试卷',
-        examSubjectId: subject.id,
-      }]
-    }
-  }
+const handleSubjectChange = async (subjectId?: Id) => {
+  syncPaperListBySubject(subjectId)
 }
 
 // 获取数据
@@ -305,15 +333,19 @@ const handleReset = () => {
 }
 
 // 新增
-const handleAdd = () => {
+const handleAdd = async () => {
+  const routeExamId = getRouteExamId()
   Object.assign(createForm, {
-    examId: undefined,
+    examId: routeExamId,
     subjectId: undefined,
     paperId: undefined,
     mode: 'auto',
   })
   subjectList.value = []
   paperList.value = []
+  if (routeExamId) {
+    await loadSubjectsByExam(routeExamId)
+  }
   createDialogVisible.value = true
 }
 
@@ -337,7 +369,10 @@ const handleCreateSubmit = async () => {
       // 手动创建，跳转到编辑页
       router.push({
         path: '/answer-sheet-design/edit',
-        query: { paperId: createForm.paperId },
+        query: {
+          ...(createForm.paperId ? { paperId: String(createForm.paperId) } : {}),
+          ...(createForm.examId ? { examId: String(createForm.examId) } : {}),
+        },
       })
       createDialogVisible.value = false
     }
@@ -401,10 +436,35 @@ const handleDelete = async (row: AnswerSheetTemplate) => {
   fetchData()
 }
 
+const initializePage = async () => {
+  await loadExamList()
+  await applyRouteExamContext()
+  await fetchData()
+
+  if (route.query.action === 'create') {
+    await handleAdd()
+  }
+}
+
 onMounted(() => {
-  loadExamList()
-  fetchData()
+  initializePage()
 })
+
+watch(
+  () => [route.query.examId, route.query.action],
+  async ([examId, action], [prevExamId, prevAction]) => {
+    if (examId === prevExamId && action === prevAction) {
+      return
+    }
+
+    await applyRouteExamContext()
+    await fetchData()
+
+    if (action === 'create') {
+      await handleAdd()
+    }
+  }
+)
 </script>
 
 <style scoped>

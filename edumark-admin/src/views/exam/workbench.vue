@@ -36,7 +36,7 @@
           <el-button type="primary" @click="handleNextStep">
             {{ nextStep ? `推进到 ${nextStep.index}. ${nextStep.title}` : '查看成绩结果' }}
           </el-button>
-          <el-button @click="loadWorkbench">刷新工作台</el-button>
+          <el-button @click="handleRefresh">刷新工作台</el-button>
           <el-button @click="goExamList">返回考试列表</el-button>
         </div>
       </div>
@@ -167,25 +167,42 @@
         </div>
 
         <div class="side-card">
+          <div class="side-card__title">考试科目与答题卡</div>
+          <div class="side-card__desc">为每个科目设置答题卡模板，支持上传图片、定位和区域配置</div>
+          <el-empty v-if="subjectList.length === 0" description="还没有配置科目" :image-size="70" />
+          <div v-else class="subject-list">
+            <div v-for="subject in subjectList" :key="subject.id" class="subject-item-enhanced">
+              <div class="subject-info">
+                <div class="subject-name">{{ subject.subjectName }}</div>
+                <div class="subject-meta">满分 {{ subject.fullScore }} / 题目 {{ subject.questionCount || 0 }}</div>
+              </div>
+              <div class="subject-actions">
+                <el-tag
+                  :type="getSubjectTemplateStatus(subject.id) === 'published' ? 'success' : getSubjectTemplateStatus(subject.id) === 'draft' ? 'warning' : 'info'"
+                  size="small"
+                >
+                  {{ getSubjectTemplateStatusText(subject.id) }}
+                </el-tag>
+                <el-button
+                  type="primary"
+                  size="small"
+                  text
+                  bg
+                  @click="goSubjectAnswerSheet(subject)"
+                >
+                  {{ getSubjectTemplateStatus(subject.id) === 'none' ? '设置答题卡' : '编辑答题卡' }}
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="side-card">
           <div class="side-card__title">独立模块</div>
           <div class="module-card">
             <div class="module-title">答题卡设计</div>
             <div class="module-desc">设计模板、下载 PDF、打印使用，不和单场考试强绑定。</div>
             <el-button class="side-block-button" @click="goAnswerSheetDesign">进入模板设计</el-button>
-          </div>
-        </div>
-
-        <div class="side-card">
-          <div class="side-card__title">考试科目</div>
-          <el-empty v-if="subjectList.length === 0" description="还没有配置科目" :image-size="70" />
-          <div v-else class="subject-list">
-            <div v-for="subject in subjectList" :key="subject.id" class="subject-item">
-              <div>
-                <div class="subject-name">{{ subject.subjectName }}</div>
-                <div class="subject-meta">满分 {{ subject.fullScore }} / 题目 {{ subject.questionCount || 0 }}</div>
-              </div>
-              <el-tag size="small">{{ subject.duration || 0 }} 分钟</el-tag>
-            </div>
           </div>
         </div>
       </div>
@@ -257,9 +274,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
+import { onBeforeRouteUpdate, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import {
   getExamDetail,
   getExamSubjectList,
@@ -321,6 +338,13 @@ const examId = computed(() => {
   }
   if (Array.isArray(id) && id.length > 0) {
     return String(id[0])
+  }
+  const queryExamId = route.query.examId
+  if (typeof queryExamId === 'string' && queryExamId) {
+    return queryExamId
+  }
+  if (Array.isArray(queryExamId) && queryExamId.length > 0) {
+    return String(queryExamId[0])
   }
   return ''
 })
@@ -494,7 +518,11 @@ const flowSteps = computed<FlowStep[]>(() => {
         ? '空白模板已经补齐，下一步进入区域配置和模板发布。'
         : '先按科目把模板传全，别跳过模板层直接进扫描。',
       actions: [
-        { label: '去模板设计', to: { path: '/answer-sheet-design/list' }, primary: !templateUploaded },
+        {
+          label: '去模板设计',
+          to: { path: '/answer-sheet-design/list', query: { examId: String(examId.value), action: 'create' } },
+          primary: !templateUploaded,
+        },
       ],
     },
     {
@@ -512,7 +540,11 @@ const flowSteps = computed<FlowStep[]>(() => {
         ? '模板发布已通过校验，说明区域坐标、题号范围和裁题模式已经可用。'
         : '模板上传完不等于区域可用，必须完成标注并发布模板。',
       actions: [
-        { label: '编辑模板区域', to: { path: '/answer-sheet-design/list' }, primary: !regionConfigured },
+        {
+          label: '编辑模板区域',
+          to: { path: '/answer-sheet-design/list', query: { examId: String(examId.value) } },
+          primary: !regionConfigured,
+        },
       ],
     },
     {
@@ -678,15 +710,19 @@ onMounted(() => {
   loadWorkbench()
 })
 
-watch(
-  () => route.params.id,
-  () => {
-    loadWorkbench()
+onBeforeRouteUpdate((to) => {
+  if (to.name !== 'ExamWorkbench') {
+    return
   }
-)
+  const nextId = Array.isArray(to.params.id) ? to.params.id[0] : to.params.id
+  if (typeof nextId !== 'string' || !nextId) {
+    return
+  }
+  loadWorkbench(nextId)
+})
 
-async function loadWorkbench() {
-  if (!/^\d+$/.test(examId.value)) {
+async function loadWorkbench(targetExamId = examId.value) {
+  if (!/^\d+$/.test(targetExamId)) {
     ElMessage.error('考试参数无效')
     router.push({ name: 'ExamList' })
     return
@@ -695,18 +731,18 @@ async function loadWorkbench() {
   loading.value = true
   try {
     const [examRes, subjectRes] = await Promise.all([
-      getExamDetail(examId.value),
-      getExamSubjectList(examId.value),
+      getExamDetail(targetExamId),
+      getExamSubjectList(targetExamId),
     ])
     examDetail.value = examRes.data
     subjectList.value = subjectRes.data || []
 
     const [templateRes, examCheckRes, scoreCheckRes, sheetRes, taskRes] = await Promise.allSettled([
-      getTemplatePage({ pageNum: 1, pageSize: 200, examId: examId.value }),
-      request.get<ExamPublishCheck>(`/exam/${examId.value}/publish-check`, { silentError: true }),
-      request.get<ScorePublishCheck>(`/score/publish-check/${examId.value}`, { silentError: true }),
-      getAnswerSheetPage({ pageNum: 1, pageSize: 6, examId: examId.value }),
-      pageMarkingTasks({ pageNum: 1, pageSize: 200, examId: examId.value }),
+      getTemplatePage({ pageNum: 1, pageSize: 200, examId: targetExamId }),
+      request.get<ExamPublishCheck>(`/exam/${targetExamId}/publish-check`, { silentError: true }),
+      request.get<ScorePublishCheck>(`/score/publish-check/${targetExamId}`, { silentError: true }),
+      getAnswerSheetPage({ pageNum: 1, pageSize: 6, examId: targetExamId }),
+      pageMarkingTasks({ pageNum: 1, pageSize: 200, examId: targetExamId }),
     ])
 
     templateList.value = templateRes.status === 'fulfilled' ? templateRes.value.data.list || [] : []
@@ -730,6 +766,10 @@ function handleNextStep() {
   goScorePublishCheck()
 }
 
+function handleRefresh() {
+  loadWorkbench()
+}
+
 function navigate(to: RouteLocationRaw) {
   router.push(to)
 }
@@ -739,7 +779,54 @@ function goExamList() {
 }
 
 function goAnswerSheetDesign() {
-  router.push('/answer-sheet-design/list')
+  router.push({ path: '/answer-sheet-design/list', query: { examId: String(examId.value), action: 'create' } })
+}
+
+function getSubjectTemplateStatus(subjectId: string | number): 'published' | 'draft' | 'none' {
+  const template = templateList.value.find((t) => {
+    // 通过paperId或其他方式关联科目
+    // 这里假设模板的subjectName与科目名称匹配
+    const subject = subjectList.value.find((s) => s.id === subjectId)
+    return subject && t.subjectName === subject.subjectName
+  })
+
+  if (!template) return 'none'
+  return template.status === 1 ? 'published' : 'draft'
+}
+
+function getSubjectTemplateStatusText(subjectId: string | number): string {
+  const status = getSubjectTemplateStatus(subjectId)
+  switch (status) {
+    case 'published':
+      return '已发布'
+    case 'draft':
+      return '草稿'
+    default:
+      return '未配置'
+  }
+}
+
+function goSubjectAnswerSheet(subject: ExamSubject) {
+  // 查找该科目对应的模板
+  const template = templateList.value.find((t) => t.subjectName === subject.subjectName)
+
+  if (template) {
+    // 已有模板，进入编辑
+    router.push({
+      path: `/answer-sheet-design/edit/${template.id}`,
+      query: { examId: String(examId.value) },
+    })
+  } else {
+    // 没有模板，进入新建并关联科目
+    router.push({
+      path: '/answer-sheet-design/new',
+      query: {
+        examId: String(examId.value),
+        subjectName: subject.subjectName,
+        paperId: subject.paperId ? String(subject.paperId) : undefined,
+      },
+    })
+  }
 }
 
 function goAnswerSheetList() {
@@ -1374,6 +1461,33 @@ function getTaskProgress(task: MarkingTaskVO) {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+}
+
+.subject-item-enhanced {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.subject-item-enhanced .subject-info {
+  flex: 1;
+}
+
+.subject-item-enhanced .subject-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.side-card__desc {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
 }
 
 .subject-name,

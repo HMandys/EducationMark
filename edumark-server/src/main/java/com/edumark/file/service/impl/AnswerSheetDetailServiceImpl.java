@@ -162,6 +162,9 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             Map<Integer, List<BubbleDefinition>> bubbleMapByQuestionNo = bubbleDefinitions.stream()
                     .collect(Collectors.groupingBy(BubbleDefinition::questionNo, LinkedHashMap::new, Collectors.toList()));
 
+            // 获取区域配置中的正确答案（如果存在）
+            Map<String, String> regionCorrectAnswers = parseCorrectAnswers(region.getConfig());
+
             for (PaperQuestion question : resolveQuestionsForRegion(region, context.questions())) {
                 if (!isObjectiveQuestion(question)) {
                     continue;
@@ -178,7 +181,16 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
                 }
 
                 String recognizedAnswer = resolveRecognizedAnswer(question, pageImage, questionBubbles);
-                persistObjectiveAnswer(context.answerSheet().getId(), question, context.detailMap(), recognizedAnswer, false);
+
+                // 优先使用区域配置中的正确答案进行评分
+                String correctAnswer = regionCorrectAnswers.get(String.valueOf(questionOrderNo));
+                if (correctAnswer == null || correctAnswer.isBlank()) {
+                    correctAnswer = question.getCorrectAnswer();
+                }
+
+                persistObjectiveAnswerWithCorrectAnswer(
+                        context.answerSheet().getId(), question, context.detailMap(),
+                        recognizedAnswer, correctAnswer, false);
             }
         }
 
@@ -520,15 +532,67 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
     }
 
     private int scoreObjectiveQuestion(PaperQuestion question, String studentAnswer) {
+        return scoreObjectiveQuestion(question, studentAnswer, null);
+    }
+
+    private int scoreObjectiveQuestion(PaperQuestion question, String studentAnswer, String overrideCorrectAnswer) {
         if (question == null || question.getScore() == null) {
             return 0;
         }
         String normalizedStudentAnswer = normalizeAnswer(studentAnswer);
-        String normalizedCorrectAnswer = normalizeAnswer(question.getCorrectAnswer());
+        String correctAnswerToUse = overrideCorrectAnswer != null && !overrideCorrectAnswer.isBlank()
+                ? overrideCorrectAnswer : question.getCorrectAnswer();
+        String normalizedCorrectAnswer = normalizeAnswer(correctAnswerToUse);
         if (normalizedStudentAnswer == null || normalizedCorrectAnswer == null) {
             return 0;
         }
         return normalizedCorrectAnswer.equals(normalizedStudentAnswer) ? question.getScore() : 0;
+    }
+
+    /**
+     * 从区域配置中解析正确答案映射
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, String> parseCorrectAnswers(Map<String, Object> config) {
+        if (config == null) {
+            return Map.of();
+        }
+        Object correctAnswersValue = config.get("correctAnswers");
+        if (correctAnswersValue instanceof Map) {
+            Map<String, String> result = new HashMap<>();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) correctAnswersValue).entrySet()) {
+                String key = String.valueOf(entry.getKey());
+                String value = entry.getValue() != null ? String.valueOf(entry.getValue()) : "";
+                result.put(key, value);
+            }
+            return result;
+        }
+        return Map.of();
+    }
+
+    private void persistObjectiveAnswerWithCorrectAnswer(Long answerSheetId,
+                                                          PaperQuestion question,
+                                                          Map<Long, AnswerSheetDetail> detailMap,
+                                                          String studentAnswer,
+                                                          String correctAnswer,
+                                                          boolean reviewed) {
+        AnswerSheetDetail detail = detailMap.get(question.getId());
+        if (detail == null) {
+            detail = new AnswerSheetDetail();
+            detail.setAnswerSheetId(answerSheetId);
+            detail.setQuestionId(question.getId());
+            detail.setStudentAnswer(studentAnswer);
+            detail.setScore(scoreObjectiveQuestion(question, studentAnswer, correctAnswer));
+            detail.setStatus(reviewed && studentAnswer != null ? DETAIL_STATUS_COMPLETED : DETAIL_STATUS_PENDING);
+            answerSheetDetailMapper.insert(detail);
+            detailMap.put(question.getId(), detail);
+            return;
+        }
+
+        detail.setStudentAnswer(studentAnswer);
+        detail.setScore(scoreObjectiveQuestion(question, studentAnswer, correctAnswer));
+        detail.setStatus(reviewed && studentAnswer != null ? DETAIL_STATUS_COMPLETED : DETAIL_STATUS_PENDING);
+        answerSheetDetailMapper.updateById(detail);
     }
 
     private String resolveRecognizedAnswer(PaperQuestion question, BufferedImage pageImage, List<BubbleDefinition> questionBubbles) {

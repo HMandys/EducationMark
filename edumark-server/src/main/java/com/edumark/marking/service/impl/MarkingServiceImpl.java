@@ -28,6 +28,7 @@ import com.edumark.marking.service.MarkingTaskService;
 import com.edumark.marking.vo.MarkingArbitrationVO;
 import com.edumark.marking.vo.MarkingRecordVO;
 import com.edumark.marking.vo.MarkingTaskAssignVO;
+import com.edumark.marking.vo.ProblemRecordStatistics;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -168,8 +169,8 @@ public class MarkingServiceImpl implements MarkingService {
         Integer threshold = task.getDoubleMarkingThreshold() != null ? task.getDoubleMarkingThreshold() : 0;
 
         if (diff <= threshold) {
-            // 分差在阈值内，取平均分
-            int avgScore = (first.getScore() + second.getScore()) / 2;
+            // 分差在阈值内，四舍五入取平均分
+            int avgScore = (int) Math.round((first.getScore() + second.getScore()) / 2.0);
             updateAnswerSheetScore(currentRecord.getAnswerSheetId(), currentRecord.getQuestionId(), avgScore);
         } else {
             // 分差超过阈值，创建仲裁记录
@@ -293,5 +294,72 @@ public class MarkingServiceImpl implements MarkingService {
         } catch (BusinessException ignored) {
             // 题图预览不存在时退回原始整卷图
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markAsProblem(Long recordId, String problemReason, Long teacherId) {
+        MarkingRecord record = markingRecordMapper.selectById(recordId);
+        if (record == null) {
+            throw new BusinessException("阅卷记录不存在");
+        }
+        if (!record.getTeacherId().equals(teacherId)) {
+            throw new BusinessException("无权操作此记录");
+        }
+
+        record.setProblemFlag(1);
+        record.setProblemReason(problemReason);
+        markingRecordMapper.updateById(record);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unmarkProblem(Long recordId, Long teacherId) {
+        MarkingRecord record = markingRecordMapper.selectById(recordId);
+        if (record == null) {
+            throw new BusinessException("阅卷记录不存在");
+        }
+        if (!record.getTeacherId().equals(teacherId)) {
+            throw new BusinessException("无权操作此记录");
+        }
+
+        record.setProblemFlag(0);
+        record.setProblemReason(null);
+        markingRecordMapper.updateById(record);
+    }
+
+    @Override
+    public PageResult<MarkingRecordVO> pageProblemRecords(Long taskId, int pageNum, int pageSize) {
+        Page<MarkingRecordVO> page = new Page<>(pageNum, pageSize);
+        markingRecordMapper.selectProblemPageVO(page, taskId);
+        page.getRecords().forEach(this::fillQuestionPreview);
+        return PageResult.of(page);
+    }
+
+    @Override
+    public ProblemRecordStatistics getProblemStatistics(Long taskId) {
+        ProblemRecordStatistics stats = new ProblemRecordStatistics();
+        stats.setTaskId(taskId);
+
+        Long totalRecords = markingRecordMapper.selectCount(
+                new LambdaQueryWrapper<MarkingRecord>()
+                        .eq(MarkingRecord::getTaskId, taskId)
+        );
+        stats.setTotalRecords(totalRecords != null ? totalRecords.intValue() : 0);
+
+        Long problemRecords = markingRecordMapper.selectCount(
+                new LambdaQueryWrapper<MarkingRecord>()
+                        .eq(MarkingRecord::getTaskId, taskId)
+                        .eq(MarkingRecord::getProblemFlag, 1)
+        );
+        stats.setProblemRecords(problemRecords != null ? problemRecords.intValue() : 0);
+
+        if (stats.getTotalRecords() > 0) {
+            stats.setProblemPercent(Math.round(stats.getProblemRecords() * 10000.0 / stats.getTotalRecords()) / 100.0);
+        } else {
+            stats.setProblemPercent(0.0);
+        }
+
+        return stats;
     }
 }

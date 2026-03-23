@@ -37,4 +37,19 @@ public interface MarkingRecordMapper extends BaseMapper<MarkingRecord> {
      * 根据答题卡和题目查询阅卷记录
      */
     List<MarkingRecord> selectByAnswerSheetAndQuestion(@Param("answerSheetId") Long answerSheetId, @Param("questionId") Long questionId);
+
+    /**
+     * 获取任务下一条待评记录（阅卷码模式，不限制教师）
+     */
+    MarkingRecordVO selectNextPendingByTaskIdAndRole(@Param("taskId") Long taskId, @Param("markingRole") Integer markingRole);
+
+    /**
+     * 获取待评记录的序号
+     */
+    Long selectPendingIndexByRole(@Param("taskId") Long taskId, @Param("markingRole") Integer markingRole, @Param("recordId") Long recordId);
+
+    /**
+     * 分页查询问题卷记录
+     */
+    IPage<MarkingRecordVO> selectProblemPageVO(Page<MarkingRecordVO> page, @Param("taskId") Long taskId);
 }

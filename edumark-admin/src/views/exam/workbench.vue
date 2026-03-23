@@ -1,917 +1,791 @@
 <template>
-  <div class="exam-workbench" v-loading="loading">
-    <el-card class="hero-card" shadow="never">
-      <div class="hero-top">
-        <div class="hero-main">
-          <div class="hero-actions">
-            <el-button text @click="goBack">返回考试列表</el-button>
-            <el-tag :type="getExamStatusType(exam?.status)">{{ getExamStatusName(exam?.status) }}</el-tag>
+  <div class="exam-workbench-page" v-loading="loading">
+    <div class="hero-panel">
+      <div class="hero-main">
+        <div class="hero-label">考试工作台</div>
+        <div class="hero-title-row">
+          <div>
+            <h1 class="hero-title">{{ examDetail?.name || '考试流程编排' }}</h1>
+            <p class="hero-subtitle">{{ heroDescription }}</p>
           </div>
-          <h1 class="hero-title">{{ exam?.name || '考试工作台' }}</h1>
-          <p class="hero-subtitle">
-            这里不再按模块拆开看，而是按一场考试的处理链收口：
-            扫描识别池、客观题复核池、主观题核验池、待仲裁池，最后直接进入出分检查。
-          </p>
-          <div v-if="exam" class="hero-meta">
-            <span>学校：{{ exam.schoolName || '-' }}</span>
-            <span>学年：{{ exam.academicYear || '-' }}</span>
-            <span>年级：{{ exam.gradeName || '-' }}</span>
-            <span>科目数：{{ exam.subjectCount || subjectList.length }}</span>
-            <span>参考人数：{{ exam.studentCount || 0 }}</span>
-          </div>
-        </div>
-
-        <div class="hero-quick-actions">
-          <el-button type="primary" @click="openAnswerSheetPage()">批量上传扫描图</el-button>
-          <el-button @click="() => openMarkingPage()">阅卷任务</el-button>
-          <el-button @click="openPublishCheck">出分检查</el-button>
-          <el-button @click="openScorePage()">成绩中心</el-button>
-        </div>
-      </div>
-
-      <div class="subject-strip">
-        <span class="subject-strip__label">考试科目</span>
-        <div class="subject-strip__items">
-          <el-tag
-            v-for="subject in subjectList"
-            :key="subject.id"
-            effect="plain"
-            class="subject-tag"
-          >
-            {{ subject.subjectName }}{{ subject.fullScore ? ` · ${subject.fullScore}分` : '' }}
+          <el-tag :type="getExamStatusTagType(examDetail?.status)" effect="dark" round size="large">
+            {{ examDetail?.statusName || getExamStatusText(examDetail?.status) }}
           </el-tag>
-          <span v-if="subjectList.length === 0" class="empty-text">还没有配置科目</span>
         </div>
-      </div>
-    </el-card>
 
-    <el-card class="next-card" shadow="never">
-      <div class="next-card__header">
-        <div>
-          <div class="next-card__label">当前下一步</div>
-          <div class="next-card__title">{{ nextAction.title }}</div>
+        <div class="hero-meta">
+          <div class="hero-meta-item">
+            <span class="meta-label">学年学期</span>
+            <strong>{{ examDetail?.academicYear || '-' }} / {{ getSemesterText(examDetail?.semester) }}</strong>
+          </div>
+          <div class="hero-meta-item">
+            <span class="meta-label">年级</span>
+            <strong>{{ examDetail?.gradeName || '-' }}</strong>
+          </div>
+          <div class="hero-meta-item">
+            <span class="meta-label">参考班级</span>
+            <strong>{{ overview.classCount }}</strong>
+          </div>
+          <div class="hero-meta-item">
+            <span class="meta-label">考试科目</span>
+            <strong>{{ overview.subjectCount }}</strong>
+          </div>
         </div>
-        <el-button type="primary" @click="nextAction.action">{{ nextAction.buttonText }}</el-button>
-      </div>
-      <div class="next-card__desc">{{ nextAction.description }}</div>
-    </el-card>
 
-    <el-card class="overview-card" shadow="never">
-      <div class="overview-header">
-        <div>
-          <div class="overview-label">流程总览</div>
-          <div class="overview-title">按“识别 -> 异常复核 -> 阅卷仲裁 -> 出分检查”收口</div>
-        </div>
-        <el-tag :type="publishCheck?.canPublish ? 'success' : 'warning'" effect="plain">
-          {{ publishCheck?.canPublish ? '当前可出分' : '仍有流程积压' }}
-        </el-tag>
-      </div>
-
-      <div class="overview-grid">
-        <div class="overview-item">
-          <div class="overview-item__label">扫描识别</div>
-          <div class="overview-item__value">{{ scanPoolCount }}</div>
-          <div class="overview-item__desc">
-            识别中 {{ answerSheetStats.pendingRecognition }} / 异常 {{ answerSheetStats.exceptions }}
-          </div>
-        </div>
-        <div class="overview-item">
-          <div class="overview-item__label">异常复核</div>
-          <div class="overview-item__value">{{ reviewBacklogCount }}</div>
-          <div class="overview-item__desc">
-            客观题 {{ objectivePoolQuestionCount }} / 主观题 {{ subjectivePoolQuestionCount }}
-          </div>
-        </div>
-        <div class="overview-item">
-          <div class="overview-item__label">待阅卷流</div>
-          <div class="overview-item__value">{{ readyForScoringCount }}</div>
-          <div class="overview-item__desc">
-            待阅卷 {{ answerSheetStats.readyForMarking }} / 阅卷中 {{ answerSheetStats.marking }} / 已完成 {{ answerSheetStats.completed }}
-          </div>
-        </div>
-        <div class="overview-item">
-          <div class="overview-item__label">阅卷仲裁</div>
-          <div class="overview-item__value">{{ markingBacklogCount }}</div>
-          <div class="overview-item__desc">
-            未完成任务 {{ publishCheck?.unfinishedTaskCount || 0 }} / 待仲裁 {{ publishCheck?.pendingArbitrationCount || 0 }}
-          </div>
-        </div>
-      </div>
-    </el-card>
-
-    <div class="pool-grid">
-      <div class="pool-card scan-pool">
-        <div class="pool-card__header">
-          <div>
-            <div class="pool-card__label">扫描识别池</div>
-            <div class="pool-card__value">{{ scanPoolCount }}</div>
-          </div>
-          <el-button text @click="openAnswerSheetPage()">进入</el-button>
-        </div>
-        <div class="pool-card__desc">
-          扫描上传后的入口池。只要识别中或识别异常还没清掉，后续流程都不应该继续推进。
-        </div>
-        <div class="pool-card__tags">
-          <el-tag effect="plain">识别中 {{ answerSheetStats.pendingRecognition }}</el-tag>
-          <el-tag effect="plain" type="danger">异常池 {{ answerSheetStats.exceptions }}</el-tag>
-          <el-tag effect="plain" type="success">已识别 {{ scanResolvedCount }}</el-tag>
-        </div>
-      </div>
-
-      <div class="pool-card objective-pool">
-        <div class="pool-card__header">
-          <div>
-            <div class="pool-card__label">客观题复核池</div>
-            <div class="pool-card__value">{{ objectivePoolQuestionCount }}</div>
-          </div>
-          <el-button text :disabled="objectivePoolList.length === 0" @click="openFirstObjectivePool">
-            进入
+        <div class="hero-actions">
+          <el-button type="primary" @click="handleNextStep">
+            {{ nextStep ? `推进到 ${nextStep.index}. ${nextStep.title}` : '查看成绩结果' }}
           </el-button>
-        </div>
-        <div class="pool-card__desc">
-          这里只保留待确认的客观题项。正常识别结果不需要人工逐题过一遍。
-        </div>
-        <div class="pool-card__tags">
-          <el-tag effect="plain">待复核答题卡 {{ objectivePoolList.length }}</el-tag>
-          <el-tag effect="plain" type="primary">待复核题数 {{ objectivePoolQuestionCount }}</el-tag>
+          <el-button @click="loadWorkbench">刷新工作台</el-button>
+          <el-button @click="goExamList">返回考试列表</el-button>
         </div>
       </div>
 
-      <div class="pool-card subjective-pool">
-        <div class="pool-card__header">
-          <div>
-            <div class="pool-card__label">主观题核验池</div>
-            <div class="pool-card__value">{{ subjectivePoolQuestionCount }}</div>
+      <div class="hero-side">
+        <div class="hero-progress-card">
+          <div class="hero-progress-head">
+            <span>流程完成度</span>
+            <strong>{{ completedStepCount }}/{{ flowSteps.length }}</strong>
           </div>
-          <el-button text :disabled="subjectivePoolList.length === 0" @click="openFirstSubjectivePool">
-            进入
-          </el-button>
+          <el-progress
+            :percentage="progressPercentage"
+            :stroke-width="12"
+            :show-text="false"
+            color="#f59e0b"
+          />
+          <div class="hero-progress-note">
+            <span>当前阶段</span>
+            <strong>{{ nextStep ? nextStep.phase : '已发布' }}</strong>
+          </div>
         </div>
-        <div class="pool-card__desc">
-          这里只放真正的裁题异常项，例如未绑定裁题区域、缺少对应扫描页、无法生成题图。
-        </div>
-        <div class="pool-card__tags">
-          <el-tag effect="plain">异常答题卡 {{ subjectivePoolList.length }}</el-tag>
-          <el-tag effect="plain" type="warning">异常题数 {{ subjectivePoolQuestionCount }}</el-tag>
-        </div>
-      </div>
 
-      <div class="pool-card arbitration-pool">
-        <div class="pool-card__header">
-          <div>
-            <div class="pool-card__label">待仲裁池</div>
-            <div class="pool-card__value">{{ publishCheck?.pendingArbitrationCount || 0 }}</div>
+        <div class="hero-summary-grid">
+          <div v-for="item in summaryCards" :key="item.label" class="summary-tile">
+            <span class="summary-label">{{ item.label }}</span>
+            <strong class="summary-value" :class="`is-${item.tone}`">{{ item.value }}</strong>
+            <span class="summary-desc">{{ item.desc }}</span>
           </div>
-          <el-button text @click="openMarkingWorkspace">进入</el-button>
-        </div>
-        <div class="pool-card__desc">
-          阅卷任务先清零，再收口待仲裁。仲裁没有处理完，就不应该进入正式出分。
-        </div>
-        <div class="pool-card__tags">
-          <el-tag effect="plain">未完成任务 {{ publishCheck?.unfinishedTaskCount || 0 }}</el-tag>
-          <el-tag effect="plain">双评任务 {{ doubleMarkingTaskCount }}</el-tag>
-          <el-tag effect="plain" type="danger">待仲裁 {{ publishCheck?.pendingArbitrationCount || 0 }}</el-tag>
         </div>
       </div>
     </div>
 
-    <el-card class="section-card subject-workflow-card" shadow="never">
-      <template #header>
-        <div class="section-card__header">
-          <span>科目推进视图</span>
-          <span class="section-card__meta">直接看每一科当前卡点，不再自己拼状态</span>
+    <div class="overview-grid">
+      <div v-for="card in overviewCards" :key="card.label" class="overview-card">
+        <div class="overview-card__head">
+          <span>{{ card.label }}</span>
+          <span class="overview-card__badge" :class="`is-${card.tone}`">{{ card.badge }}</span>
         </div>
-      </template>
+        <div class="overview-card__value">{{ card.value }}</div>
+        <div class="overview-card__desc">{{ card.desc }}</div>
+      </div>
+    </div>
 
-      <el-table :data="subjectWorkflowList" stripe empty-text="当前考试还没有科目">
-        <el-table-column prop="subjectName" label="科目" min-width="120">
-          <template #default="{ row }">
-            <div class="subject-cell">
-              <strong>{{ row.subjectName }}</strong>
-              <span>{{ row.fullScore ? `${row.fullScore}分` : '-' }}</span>
+    <div class="workspace-layout">
+      <div class="flow-panel">
+        <div class="section-head">
+          <div>
+            <div class="section-title">创建考试主流程</div>
+            <div class="section-desc">严格按你文档里的 9 步主线推进，每一步都直达现有功能页。</div>
+          </div>
+          <el-tag round>{{ completedStepCount }} / {{ flowSteps.length }} 已完成</el-tag>
+        </div>
+
+        <div class="flow-track">
+          <div
+            v-for="step in flowSteps"
+            :key="step.key"
+            class="flow-step"
+            :class="[`is-${step.status}`, { 'is-highlight': nextStep?.key === step.key }]"
+          >
+            <div class="flow-step__top">
+              <div class="flow-step__index">{{ step.index }}</div>
+              <div class="flow-step__title-wrap">
+                <div class="flow-step__phase">{{ step.phase }}</div>
+                <div class="flow-step__title">{{ step.title }}</div>
+              </div>
+              <el-tag :type="getStepTagType(step.status)" round>{{ getStepStatusText(step.status) }}</el-tag>
             </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="扫描积压" width="100" align="center">
-          <template #default="{ row }">{{ row.scanBacklogCount }}</template>
-        </el-table-column>
-        <el-table-column label="客观复核" width="100" align="center">
-          <template #default="{ row }">{{ row.objectiveReviewCount }}</template>
-        </el-table-column>
-        <el-table-column label="主观核验" width="100" align="center">
-          <template #default="{ row }">{{ row.subjectiveReviewCount }}</template>
-        </el-table-column>
-        <el-table-column label="待阅卷流" width="120" align="center">
-          <template #default="{ row }">
-            {{ row.readyForMarkingCount + row.markingCount + row.completedCount }}
-          </template>
-        </el-table-column>
-        <el-table-column label="任务状态" min-width="170">
-          <template #default="{ row }">
-            <div class="task-state-cell">
-              <span>未开始 {{ row.notStartedTaskCount }}</span>
-              <span>进行中 {{ row.activeTaskCount }}</span>
-              <span>已完成 {{ row.completedTaskCount }}</span>
+
+            <div class="flow-step__desc">{{ step.description }}</div>
+
+            <div class="flow-step__metrics">
+              <div v-for="metric in step.metrics" :key="`${step.key}-${metric.label}`" class="flow-metric">
+                <span class="flow-metric__label">{{ metric.label }}</span>
+                <strong class="flow-metric__value" :class="`is-${metric.tone || 'default'}`">
+                  {{ metric.value }}
+                </strong>
+              </div>
             </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="当前卡点" min-width="160">
-          <template #default="{ row }">
-            <el-tag :type="row.stepType" effect="plain">{{ row.currentStep }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="220" align="center">
-          <template #default="{ row }">
-            <el-button type="primary" link @click="handleSubjectPrimaryAction(row)">
-              {{ row.primaryActionText }}
+
+            <div class="flow-step__hint">{{ step.hint }}</div>
+
+            <div class="flow-step__actions">
+              <el-button
+                v-for="action in step.actions"
+                :key="`${step.key}-${action.label}`"
+                :type="action.primary ? 'primary' : 'default'"
+                text
+                bg
+                @click="navigate(action.to)"
+              >
+                {{ action.label }}
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="side-panel">
+        <div class="side-card next-card">
+          <div class="side-card__title">下一步建议</div>
+          <template v-if="nextStep">
+            <div class="next-step-index">STEP {{ nextStep.index }}</div>
+            <div class="next-step-title">{{ nextStep.title }}</div>
+            <div class="next-step-desc">{{ nextStep.hint }}</div>
+            <el-button type="primary" class="side-block-button" @click="handleNextStep">
+              立即处理
             </el-button>
-            <el-button link @click="openAnswerSheetPage(undefined, row.examSubjectId)">查看答题卡</el-button>
           </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+          <template v-else>
+            <div class="next-step-title">流程已闭环</div>
+            <div class="next-step-desc">考试已经走完整条链路，可以直接查看成绩、统计和发布结果。</div>
+            <el-button type="primary" class="side-block-button" @click="goScorePublishCheck">
+              查看发布结果
+            </el-button>
+          </template>
+        </div>
 
-    <div class="section-grid">
-      <el-card class="section-card" shadow="never">
-        <template #header>
-          <div class="section-card__header">
-            <span>扫描识别池</span>
-            <div class="section-card__actions">
-              <el-tag effect="plain">待处理 {{ scanPoolCount }}</el-tag>
-              <el-button text @click="openAnswerSheetPage(5)">只看异常池</el-button>
-              <el-button text @click="openAnswerSheetPage(0)">只看识别中</el-button>
+        <div class="side-card">
+          <div class="side-card__title">当前阻塞</div>
+          <el-empty v-if="issueItems.length === 0" description="没有阻塞项" :image-size="70" />
+          <div v-else class="issue-list">
+            <div v-for="item in issueItems" :key="item" class="issue-item">
+              <span class="issue-dot"></span>
+              <span>{{ item }}</span>
             </div>
           </div>
-        </template>
+        </div>
 
-        <el-table :data="scanPoolList" stripe empty-text="当前没有识别中或异常卷">
-          <el-table-column prop="subjectName" label="科目" width="100" />
-          <el-table-column prop="studentName" label="学生" width="110" />
-          <el-table-column prop="studentNumber" label="学号" width="130" />
-          <el-table-column prop="remark" label="识别结果" min-width="220" show-overflow-tooltip />
-          <el-table-column label="状态" width="110" align="center">
-            <template #default="{ row }">
-              <el-tag :type="getAnswerSheetStatusType(row.status)">{{ getAnswerSheetStatusName(row.status) }}</el-tag>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <el-card class="section-card" shadow="never">
-        <template #header>
-          <div class="section-card__header">
-            <span>客观题复核池</span>
-            <span class="section-card__meta">人工只处理待确认项，共 {{ objectivePoolQuestionCount }} 题</span>
+        <div class="side-card">
+          <div class="side-card__title">独立模块</div>
+          <div class="module-card">
+            <div class="module-title">答题卡设计</div>
+            <div class="module-desc">设计模板、下载 PDF、打印使用，不和单场考试强绑定。</div>
+            <el-button class="side-block-button" @click="goAnswerSheetDesign">进入模板设计</el-button>
           </div>
-        </template>
+        </div>
 
-        <el-table :data="objectivePoolList" stripe empty-text="当前没有待复核客观题">
-          <el-table-column prop="subjectName" label="科目" width="100" />
-          <el-table-column prop="studentName" label="学生" width="110" />
-          <el-table-column prop="studentNumber" label="学号" width="130" />
-          <el-table-column prop="pendingCount" label="待复核题数" width="110" align="center" />
-          <el-table-column prop="sampleQuestions" label="涉及题号" min-width="180" />
-          <el-table-column label="操作" width="120" align="center">
-            <template #default="{ row }">
-              <el-button type="primary" link @click="openObjectiveReview(row.answerSheetId)">进入复核</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <el-card class="section-card" shadow="never">
-        <template #header>
-          <div class="section-card__header">
-            <span>主观题核验池</span>
-            <span class="section-card__meta">只显示真正的裁题异常项，共 {{ subjectivePoolQuestionCount }} 题</span>
-          </div>
-        </template>
-
-        <el-table :data="subjectivePoolList" stripe empty-text="当前没有主观题裁题异常">
-          <el-table-column prop="subjectName" label="科目" width="100" />
-          <el-table-column prop="studentName" label="学生" width="110" />
-          <el-table-column prop="studentNumber" label="学号" width="130" />
-          <el-table-column prop="pendingCount" label="异常题数" width="110" align="center" />
-          <el-table-column prop="sampleQuestions" label="涉及题号" min-width="180" />
-          <el-table-column prop="sampleReason" label="异常原因" min-width="220" show-overflow-tooltip />
-          <el-table-column label="操作" width="120" align="center">
-            <template #default="{ row }">
-              <el-button type="warning" link @click="openSubjectiveReview(row.answerSheetId)">进入核验</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <el-card class="section-card" shadow="never">
-        <template #header>
-          <div class="section-card__header">
-            <span>待仲裁与出分检查</span>
-            <div class="section-card__actions">
-              <el-tag effect="plain">流程积压 {{ markingBacklogCount }}</el-tag>
-              <el-button text @click="() => openMarkingPage()">阅卷任务</el-button>
-              <el-button text @click="openPublishCheck">出分检查</el-button>
+        <div class="side-card">
+          <div class="side-card__title">考试科目</div>
+          <el-empty v-if="subjectList.length === 0" description="还没有配置科目" :image-size="70" />
+          <div v-else class="subject-list">
+            <div v-for="subject in subjectList" :key="subject.id" class="subject-item">
+              <div>
+                <div class="subject-name">{{ subject.subjectName }}</div>
+                <div class="subject-meta">满分 {{ subject.fullScore }} / 题目 {{ subject.questionCount || 0 }}</div>
+              </div>
+              <el-tag size="small">{{ subject.duration || 0 }} 分钟</el-tag>
             </div>
           </div>
-        </template>
+        </div>
+      </div>
+    </div>
 
-        <div class="check-panel">
-          <div class="check-banner" :class="publishCheck?.canPublish ? 'is-pass' : 'is-blocked'">
+    <div class="detail-grid">
+      <div class="detail-card">
+        <div class="detail-card__head">
+          <div>
+            <div class="section-title">最近答题卡</div>
+            <div class="section-desc">扫描上传、识别异常、待阅卷样本在这里快速查看。</div>
+          </div>
+          <el-button text bg @click="goAnswerSheetList">查看全部</el-button>
+        </div>
+        <el-empty v-if="recentSheets.length === 0" description="还没有上传答题卡" :image-size="80" />
+        <div v-else class="record-list">
+          <div v-for="sheet in recentSheets" :key="sheet.id" class="record-item">
             <div>
-              <div class="check-banner__title">
-                {{ publishCheck?.canPublish ? '当前可直接进入出分检查并发布' : '当前仍有阻塞项，不能直接出分' }}
-              </div>
-              <div class="check-banner__desc">
-                {{ publishCheckDescription }}
+              <div class="record-title">{{ sheet.studentName || sheet.studentNumber || '未识别学生' }}</div>
+              <div class="record-subtitle">
+                {{ sheet.subjectName || '-' }} / {{ sheet.className || '未匹配班级' }} / {{ sheet.createTime || '-' }}
               </div>
             </div>
-            <el-tag :type="publishCheck?.canPublish ? 'success' : 'danger'" effect="dark">
-              {{ publishCheck?.canPublish ? '可发布' : '待处理' }}
+            <el-tag :type="getAnswerSheetStatusTagType(sheet.status)" round>
+              {{ getAnswerSheetStatusText(sheet.status) }}
             </el-tag>
           </div>
+        </div>
+      </div>
 
-          <div class="check-metrics">
-            <div class="mini-metric">
-              <span>待仲裁</span>
-              <strong>{{ publishCheck?.pendingArbitrationCount || 0 }}</strong>
-            </div>
-            <div class="mini-metric">
-              <span>未完成任务</span>
-              <strong>{{ publishCheck?.unfinishedTaskCount || 0 }}</strong>
-            </div>
-            <div class="mini-metric">
-              <span>总分记录</span>
-              <strong>{{ publishCheck?.examScoreCount || 0 }}</strong>
-            </div>
-            <div class="mini-metric">
-              <span>统计记录</span>
-              <strong>{{ publishCheck?.statisticsCount || 0 }}</strong>
-            </div>
+      <div class="detail-card">
+        <div class="detail-card__head">
+          <div>
+            <div class="section-title">阅卷任务</div>
+            <div class="section-desc">阅卷码生成、任务推进和完成情况。</div>
           </div>
-
-          <div class="issue-columns">
-            <div>
-              <div class="issue-title">阻塞项</div>
-              <div v-if="publishCheck?.blockingItems?.length" class="issue-list">
-                <div v-for="item in publishCheck.blockingItems" :key="item" class="issue-item is-blocking">
-                  {{ item }}
-                </div>
+          <el-button text bg @click="goMarkingTaskList">进入任务页</el-button>
+        </div>
+        <el-empty v-if="recentTasks.length === 0" description="还没有生成阅卷任务" :image-size="80" />
+        <div v-else class="task-list">
+          <div v-for="task in recentTasks.slice(0, 6)" :key="task.id" class="task-item">
+            <div class="task-item__top">
+              <div>
+                <div class="record-title">{{ task.subjectName }} 第{{ task.questionNo }}题</div>
+                <div class="record-subtitle">{{ task.name }}</div>
               </div>
-              <el-empty v-else description="没有阻塞项" :image-size="56" />
+              <el-tag :type="getMarkingTaskStatusTagType(task.status)" round>
+                {{ getMarkingTaskStatusText(task.status) }}
+              </el-tag>
             </div>
-            <div>
-              <div class="issue-title">提示项</div>
-              <div v-if="publishCheck?.warningItems?.length" class="issue-list">
-                <div v-for="item in publishCheck.warningItems" :key="item" class="issue-item is-warning">
-                  {{ item }}
-                </div>
-              </div>
-              <el-empty v-else description="没有额外提示" :image-size="56" />
+            <div class="task-progress-row">
+              <el-progress
+                :percentage="getTaskProgress(task)"
+                :stroke-width="10"
+                :show-text="false"
+                color="#0f766e"
+              />
+              <span>{{ task.completedCount }} / {{ task.totalCount }}</span>
+            </div>
+            <div class="task-meta-row">
+              <span>{{ task.enableDoubleMarking === 1 ? '双评' : '单评' }}</span>
+              <span>{{ task.accessCode ? `阅卷码 ${task.accessCode}` : '未生成阅卷码' }}</span>
             </div>
           </div>
         </div>
-      </el-card>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, reactive, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import {
-  getAnswerSheetPage,
-  getAnswerSheetQuestionDetails,
-  type AnswerSheet,
-  type AnswerSheetQuestionDetail,
-} from '@/api/answerSheet'
-import { getExamDetail, getExamSubjectList, type Exam, type ExamSubject } from '@/api/exam'
+  getExamDetail,
+  getExamSubjectList,
+  type Exam,
+  type ExamPublishCheck,
+  type ExamSubject,
+} from '@/api/exam'
+import { getAnswerSheetPage, type AnswerSheet } from '@/api/answerSheet'
+import { getTemplatePage, type AnswerSheetTemplate } from '@/api/answerSheetTemplate'
 import { pageMarkingTasks, type MarkingTaskVO } from '@/api/marking'
-import { getScorePublishCheck, type ScorePublishCheck } from '@/api/score'
+import type { ScorePublishCheck } from '@/api/score'
+import { request } from '@/utils/request'
 
-interface ReviewPoolItem {
-  answerSheetId: number
-  subjectName?: string
-  studentName?: string
-  studentNumber?: string
-  pendingCount: number
-  sampleQuestions: string
-  sampleReason?: string
-  createTime?: string
+type StepStatus = 'done' | 'active' | 'waiting'
+
+interface StepMetric {
+  label: string
+  value: number | string
+  tone?: 'default' | 'success' | 'warning' | 'danger'
 }
 
-interface SubjectReviewStats {
-  objectivePendingCount: number
-  subjectivePendingCount: number
-  objectiveAnswerSheetId?: number
-  subjectiveAnswerSheetId?: number
+interface StepAction {
+  label: string
+  to: RouteLocationRaw
+  primary?: boolean
 }
 
-interface SubjectWorkflowItem {
-  examSubjectId: number
-  subjectName: string
-  fullScore?: number
-  answerSheetCount: number
-  scanBacklogCount: number
-  objectiveReviewCount: number
-  subjectiveReviewCount: number
-  readyForMarkingCount: number
-  markingCount: number
-  completedCount: number
-  taskCount: number
-  notStartedTaskCount: number
-  activeTaskCount: number
-  completedTaskCount: number
-  currentStep: string
-  stepType: 'info' | 'primary' | 'warning' | 'success' | 'danger'
-  primaryActionText: string
-  primaryActionMode: 'scan' | 'objective' | 'subjective' | 'task' | 'publish'
-  objectiveAnswerSheetId?: number
-  subjectiveAnswerSheetId?: number
+interface FlowStep {
+  key: string
+  index: number
+  phase: string
+  title: string
+  description: string
+  status: StepStatus
+  metrics: StepMetric[]
+  hint: string
+  actions: StepAction[]
 }
 
-const route = useRoute()
 const router = useRouter()
+const route = useRoute()
 
 const loading = ref(false)
-const exam = ref<Exam | null>(null)
+const examDetail = ref<Exam | null>(null)
+const examPublishCheck = ref<ExamPublishCheck | null>(null)
+const scorePublishCheck = ref<ScorePublishCheck | null>(null)
 const subjectList = ref<ExamSubject[]>([])
-const allAnswerSheets = ref<AnswerSheet[]>([])
-const scanPoolList = ref<AnswerSheet[]>([])
-const objectivePoolList = ref<ReviewPoolItem[]>([])
-const subjectivePoolList = ref<ReviewPoolItem[]>([])
-const subjectReviewStatsMap = ref<Record<number, SubjectReviewStats>>({})
-const markingTaskList = ref<MarkingTaskVO[]>([])
-const publishCheck = ref<ScorePublishCheck | null>(null)
-
-const answerSheetStats = reactive({
-  total: 0,
-  pendingRecognition: 0,
-  recognized: 0,
-  readyForMarking: 0,
-  exceptions: 0,
-  marking: 0,
-  completed: 0,
-})
+const templateList = ref<AnswerSheetTemplate[]>([])
+const recentSheets = ref<AnswerSheet[]>([])
+const recentTasks = ref<MarkingTaskVO[]>([])
 
 const examId = computed(() => {
-  const value = Number(route.params.id)
-  return Number.isFinite(value) && value > 0 ? value : 0
+  const id = route.params.id
+  if (typeof id === 'string' && id) {
+    return id
+  }
+  if (typeof id === 'number') {
+    return String(id)
+  }
+  if (Array.isArray(id) && id.length > 0) {
+    return String(id[0])
+  }
+  return ''
 })
 
-const scanPoolCount = computed(() => answerSheetStats.pendingRecognition + answerSheetStats.exceptions)
-const scanResolvedCount = computed(() => Math.max(answerSheetStats.total - scanPoolCount.value, 0))
-const objectivePoolQuestionCount = computed(() => objectivePoolList.value.reduce((sum, item) => sum + item.pendingCount, 0))
-const subjectivePoolQuestionCount = computed(() => subjectivePoolList.value.reduce((sum, item) => sum + item.pendingCount, 0))
-const reviewBacklogCount = computed(() => objectivePoolQuestionCount.value + subjectivePoolQuestionCount.value)
-const readyForScoringCount = computed(() => answerSheetStats.readyForMarking + answerSheetStats.marking + answerSheetStats.completed)
-const markingBacklogCount = computed(() =>
-  (publishCheck.value?.unfinishedTaskCount || 0) + (publishCheck.value?.pendingArbitrationCount || 0)
+const overview = computed(() => {
+  const classCount = examPublishCheck.value?.classCount ?? examDetail.value?.classes?.length ?? 0
+  const subjectCount = subjectList.value.length || examPublishCheck.value?.subjectCount || 0
+  const uploadedTemplateCount = templateList.value.length
+  const publishedTemplateCount = templateList.value.filter((item) => item.status === 1).length
+  const answerSheetCount = scorePublishCheck.value?.answerSheetCount ?? 0
+  const completedAnswerSheetCount = scorePublishCheck.value?.completedAnswerSheetCount ?? 0
+  const pendingRecognitionCount = scorePublishCheck.value?.pendingRecognitionCount ?? 0
+  const recognitionExceptionCount = scorePublishCheck.value?.recognitionExceptionCount ?? 0
+  const pendingMarkingAnswerSheetCount = scorePublishCheck.value?.pendingMarkingAnswerSheetCount ?? 0
+  const markingTaskCount = scorePublishCheck.value?.markingTaskCount ?? recentTasks.value.length
+  const unfinishedTaskCount = scorePublishCheck.value?.unfinishedTaskCount ?? recentTasks.value.filter((item) => item.status !== 2).length
+  const pendingArbitrationCount = scorePublishCheck.value?.pendingArbitrationCount ?? 0
+  const examScoreCount = scorePublishCheck.value?.examScoreCount ?? 0
+  const subjectScoreCount = scorePublishCheck.value?.subjectScoreCount ?? 0
+  const statisticsCount = scorePublishCheck.value?.statisticsCount ?? 0
+  const requiredAccessCodeCount = recentTasks.value.reduce(
+    (count, item) => count + (item.enableDoubleMarking === 1 ? 2 : 1),
+    0
+  )
+  const accessCodeCount = recentTasks.value.reduce((count, item) => {
+    let current = count
+    if (item.accessCode) {
+      current += 1
+    }
+    if (item.secondAccessCode) {
+      current += 1
+    }
+    return current
+  }, 0)
+
+  return {
+    classCount,
+    subjectCount,
+    uploadedTemplateCount,
+    publishedTemplateCount,
+    answerSheetCount,
+    completedAnswerSheetCount,
+    pendingRecognitionCount,
+    recognitionExceptionCount,
+    pendingMarkingAnswerSheetCount,
+    markingTaskCount,
+    unfinishedTaskCount,
+    pendingArbitrationCount,
+    examScoreCount,
+    subjectScoreCount,
+    statisticsCount,
+    requiredAccessCodeCount,
+    accessCodeCount,
+  }
+})
+
+const summaryCards = computed(() => [
+  {
+    label: '答题卡',
+    value: overview.value.answerSheetCount,
+    desc: overview.value.answerSheetCount > 0 ? '已进入识别链路' : '等待批量上传',
+    tone: overview.value.answerSheetCount > 0 ? 'success' : 'default',
+  },
+  {
+    label: '阅卷任务',
+    value: overview.value.markingTaskCount,
+    desc: overview.value.markingTaskCount > 0 ? '任务已生成' : '等待裁题完成',
+    tone: overview.value.markingTaskCount > 0 ? 'success' : 'default',
+  },
+  {
+    label: '待仲裁',
+    value: overview.value.pendingArbitrationCount,
+    desc: overview.value.pendingArbitrationCount > 0 ? '需要收口仲裁' : '当前无积压',
+    tone: overview.value.pendingArbitrationCount > 0 ? 'warning' : 'success',
+  },
+  {
+    label: '发布状态',
+    value: examDetail.value?.status === 5 ? '已发布' : scorePublishCheck.value?.canPublish ? '可发布' : '未就绪',
+    desc: examDetail.value?.status === 5 ? '家长端可查询' : '由出分检查决定',
+    tone: examDetail.value?.status === 5 ? 'success' : scorePublishCheck.value?.canPublish ? 'warning' : 'default',
+  },
+])
+
+const overviewCards = computed(() => [
+  {
+    label: '模板与区域',
+    value: `${overview.value.uploadedTemplateCount} / ${overview.value.publishedTemplateCount}`,
+    badge: overview.value.publishedTemplateCount >= overview.value.subjectCount && overview.value.subjectCount > 0 ? '已就绪' : '待配置',
+    desc: '已上传模板数 / 已发布模板数。模板发布通过后，才算区域真正配置完成。',
+    tone: overview.value.publishedTemplateCount >= overview.value.subjectCount && overview.value.subjectCount > 0 ? 'success' : 'warning',
+  },
+  {
+    label: '识别异常',
+    value: `${overview.value.recognitionExceptionCount}`,
+    badge: overview.value.recognitionExceptionCount > 0 ? '需处理' : '正常',
+    desc: '异常池未处理样本，优先清掉避免影响后续阅卷。',
+    tone: overview.value.recognitionExceptionCount > 0 ? 'danger' : 'success',
+  },
+  {
+    label: '待阅卷',
+    value: `${overview.value.pendingMarkingAnswerSheetCount}`,
+    badge: overview.value.pendingMarkingAnswerSheetCount > 0 ? '可推进' : '未就绪',
+    desc: '裁题完成后进入待阅卷池，随后生成阅卷任务。',
+    tone: overview.value.pendingMarkingAnswerSheetCount > 0 ? 'warning' : 'default',
+  },
+  {
+    label: '成绩汇总',
+    value: `${overview.value.examScoreCount} / ${overview.value.statisticsCount}`,
+    badge: overview.value.examScoreCount > 0 ? '已生成' : '待汇总',
+    desc: '总分记录 / 统计记录，出分前必须补齐。',
+    tone: overview.value.examScoreCount > 0 ? 'success' : 'warning',
+  },
+])
+
+const flowSteps = computed<FlowStep[]>(() => {
+  const basicReady = overview.value.classCount > 0 && overview.value.subjectCount > 0
+  const requiredTemplateCount = overview.value.subjectCount
+  const templateUploaded = requiredTemplateCount > 0 && overview.value.uploadedTemplateCount >= requiredTemplateCount
+  const regionConfigured = requiredTemplateCount > 0 && overview.value.publishedTemplateCount >= requiredTemplateCount
+  const answerSheetsReady = overview.value.answerSheetCount > 0
+  const recognitionSettled =
+    answerSheetsReady &&
+    overview.value.pendingRecognitionCount === 0 &&
+    overview.value.recognitionExceptionCount === 0
+  const cropReady =
+    overview.value.markingTaskCount > 0 ||
+    overview.value.completedAnswerSheetCount > 0
+  const accessReady =
+    overview.value.markingTaskCount > 0 &&
+    overview.value.requiredAccessCodeCount > 0 &&
+    overview.value.accessCodeCount >= overview.value.requiredAccessCodeCount
+  const markingFinished = overview.value.markingTaskCount > 0 && overview.value.unfinishedTaskCount === 0
+  const aggregateReady =
+    overview.value.examScoreCount > 0 &&
+    overview.value.subjectScoreCount > 0 &&
+    overview.value.statisticsCount > 0
+  const released = examDetail.value?.status === 5
+
+  return [
+    {
+      key: 'create-exam',
+      index: 1,
+      phase: '准备',
+      title: '新建考试',
+      description: '填写考试信息，绑定参考班级与考试科目，工作台主线从这里启动。',
+      status: basicReady ? 'done' : 'active',
+      metrics: [
+        { label: '班级', value: overview.value.classCount, tone: basicReady ? 'success' : 'warning' },
+        { label: '科目', value: overview.value.subjectCount, tone: basicReady ? 'success' : 'warning' },
+        { label: '状态', value: examDetail.value?.statusName || getExamStatusText(examDetail.value?.status) },
+      ],
+      hint: basicReady ? '考试基础信息已经齐备，可以继续准备答题卡模板。' : '先把班级和科目补齐，否则后续链路都不稳。',
+      actions: [
+        { label: '考试管理', to: { name: 'ExamList' }, primary: !basicReady },
+        { label: '出分检查', to: { name: 'ScorePublishCheck', params: { id: examId.value } } },
+      ],
+    },
+    {
+      key: 'upload-template',
+      index: 2,
+      phase: '准备',
+      title: '上传答题卡模板',
+      description: '上传空白答题卡模板，保留四角定位标记，为后续识别和矫正提供基准。',
+      status: templateUploaded ? 'done' : basicReady ? 'active' : 'waiting',
+      metrics: [
+        { label: '应上传', value: requiredTemplateCount, tone: requiredTemplateCount > 0 ? 'default' : 'warning' },
+        { label: '已上传', value: overview.value.uploadedTemplateCount, tone: templateUploaded ? 'success' : 'warning' },
+        { label: '定位', value: overview.value.uploadedTemplateCount > 0 ? '已录入模板' : '待上传' },
+      ],
+      hint: templateUploaded
+        ? '空白模板已经补齐，下一步进入区域配置和模板发布。'
+        : '先按科目把模板传全，别跳过模板层直接进扫描。',
+      actions: [
+        { label: '去模板设计', to: { path: '/answer-sheet-design/list' }, primary: !templateUploaded },
+      ],
+    },
+    {
+      key: 'configure-region',
+      index: 3,
+      phase: '准备',
+      title: '设置答题卡区域',
+      description: '完成信息区、条码区、题目区配置，客观题选项和主观题分值都在这一步收口。',
+      status: regionConfigured ? 'done' : templateUploaded ? 'active' : 'waiting',
+      metrics: [
+        { label: '已发布模板', value: overview.value.publishedTemplateCount, tone: regionConfigured ? 'success' : 'warning' },
+        { label: '信息/条码/题目区', value: regionConfigured ? '已配置' : '待发布确认', tone: regionConfigured ? 'success' : 'warning' },
+      ],
+      hint: regionConfigured
+        ? '模板发布已通过校验，说明区域坐标、题号范围和裁题模式已经可用。'
+        : '模板上传完不等于区域可用，必须完成标注并发布模板。',
+      actions: [
+        { label: '编辑模板区域', to: { path: '/answer-sheet-design/list' }, primary: !regionConfigured },
+      ],
+    },
+    {
+      key: 'upload-answer-sheet',
+      index: 4,
+      phase: '采集',
+      title: '批量上传答题卡',
+      description: '系统会自动执行四角矫正、条码识别、客观题识别和初步判分，把异常样本送入异常池。',
+      status: recognitionSettled ? 'done' : regionConfigured ? 'active' : 'waiting',
+      metrics: [
+        { label: '已上传', value: overview.value.answerSheetCount, tone: answerSheetsReady ? 'success' : 'default' },
+        { label: '待识别', value: overview.value.pendingRecognitionCount, tone: overview.value.pendingRecognitionCount > 0 ? 'warning' : 'success' },
+        { label: '异常池', value: overview.value.recognitionExceptionCount, tone: overview.value.recognitionExceptionCount > 0 ? 'danger' : 'success' },
+      ],
+      hint: !answerSheetsReady
+        ? '先导入扫描图片，识别链路没有样本就无从推进。'
+        : recognitionSettled
+          ? '识别链路已经收口，可以进入裁题和阅卷准备。'
+          : '优先处理异常池和识别残留，别把脏数据带进后面环节。',
+      actions: [
+        { label: '答题卡列表', to: { name: 'AnswerSheetList', query: { examId: String(examId.value) } }, primary: !answerSheetsReady },
+        { label: '异常池', to: { name: 'AnswerSheetList', query: { examId: String(examId.value), status: '5' } } },
+      ],
+    },
+    {
+      key: 'crop-question',
+      index: 5,
+      phase: '采集',
+      title: '裁题',
+      description: '按题目区域裁切生成题目图片，主观题样本进入可阅卷状态，异常样本进入人工核验。',
+      status: cropReady ? 'done' : recognitionSettled ? 'active' : 'waiting',
+      metrics: [
+        { label: '已生成任务', value: overview.value.markingTaskCount, tone: cropReady ? 'success' : 'warning' },
+        { label: '已完成阅卷', value: overview.value.completedAnswerSheetCount, tone: overview.value.completedAnswerSheetCount > 0 ? 'success' : 'default' },
+      ],
+      hint: cropReady
+        ? '已经能进入阅卷任务，说明题图链路至少已经跑通。'
+        : '识别收口后还要把题图真正裁出来，再进入阅卷任务分配。',
+      actions: [
+        { label: '去答题卡列表', to: { name: 'AnswerSheetList', query: { examId: String(examId.value) } }, primary: !cropReady },
+      ],
+    },
+    {
+      key: 'generate-access-code',
+      index: 6,
+      phase: '阅卷',
+      title: '生成阅卷码',
+      description: '分配任务时生成 8 位数字阅卷码，老师可免登录进入独立阅卷页。',
+      status: overview.value.markingTaskCount > 0 && overview.value.accessCodeCount === overview.value.requiredAccessCodeCount
+        ? 'done'
+        : cropReady
+          ? 'active'
+          : 'waiting',
+      metrics: [
+        { label: '任务数', value: overview.value.markingTaskCount, tone: overview.value.markingTaskCount > 0 ? 'success' : 'default' },
+        { label: '应有码数', value: overview.value.requiredAccessCodeCount, tone: overview.value.requiredAccessCodeCount > 0 ? 'default' : 'warning' },
+        { label: '已有码数', value: overview.value.accessCodeCount, tone: accessReady ? 'success' : 'warning' },
+      ],
+      hint: overview.value.markingTaskCount === 0
+        ? '先完成裁题并生成阅卷任务，再给老师发码。'
+        : accessReady
+          ? '阅卷码已经补齐，老师可以按角色直接进入 /marking。'
+          : '去任务页启动任务并补齐阅卷码，双评任务必须同时具备一评码和二评码。',
+      actions: [
+        { label: '阅卷任务', to: { name: 'MarkingTask', query: { examId: String(examId.value) } }, primary: !accessReady },
+        { label: '老师阅卷入口', to: { path: '/marking' } },
+      ],
+    },
+    {
+      key: 'teacher-marking',
+      index: 7,
+      phase: '阅卷',
+      title: '老师阅卷',
+      description: '老师通过阅卷码免登录评分，支持问题卷标记、双评分差阈值仲裁和任务进度追踪。',
+      status: markingFinished ? 'done' : overview.value.markingTaskCount > 0 ? 'active' : 'waiting',
+      metrics: [
+        { label: '未完成任务', value: overview.value.unfinishedTaskCount, tone: overview.value.unfinishedTaskCount > 0 ? 'warning' : 'success' },
+        { label: '已完成答题卡', value: overview.value.completedAnswerSheetCount, tone: overview.value.completedAnswerSheetCount > 0 ? 'success' : 'default' },
+        { label: '待仲裁', value: overview.value.pendingArbitrationCount, tone: overview.value.pendingArbitrationCount > 0 ? 'danger' : 'success' },
+      ],
+      hint: markingFinished
+        ? '阅卷已经完成，进入汇总和出分阶段。'
+        : overview.value.markingTaskCount > 0
+          ? '盯住待仲裁和未完成任务，别让老师评分长期悬空。'
+          : '先生成阅卷任务，否则老师没有实际工作入口。',
+      actions: [
+        { label: '去阅卷任务', to: { name: 'MarkingTask', query: { examId: String(examId.value) } }, primary: overview.value.markingTaskCount > 0 },
+        { label: '出分检查', to: { name: 'ScorePublishCheck', params: { id: examId.value } } },
+      ],
+    },
+    {
+      key: 'aggregate-score',
+      index: 8,
+      phase: '出分',
+      title: '自动汇总成绩',
+      description: '阅卷收口后自动计算总分、排名和统计，生成正式出分前需要的全部结果数据。',
+      status: aggregateReady ? 'done' : markingFinished ? 'active' : 'waiting',
+      metrics: [
+        { label: '总分记录', value: overview.value.examScoreCount, tone: overview.value.examScoreCount > 0 ? 'success' : 'warning' },
+        { label: '科目成绩', value: overview.value.subjectScoreCount, tone: overview.value.subjectScoreCount > 0 ? 'success' : 'warning' },
+        { label: '统计记录', value: overview.value.statisticsCount, tone: overview.value.statisticsCount > 0 ? 'success' : 'warning' },
+      ],
+      hint: aggregateReady
+        ? '汇总结果已经存在，出分前只需要确认阻塞项。'
+        : markingFinished
+          ? '阅卷虽已结束，但总分、科目分和统计还没全部产出，先去成绩中心/出分检查收口。'
+          : '阅卷还没结束，汇总阶段暂时不会完整。',
+      actions: [
+        { label: '成绩列表', to: { name: 'ScoreList', query: { examId: String(examId.value), viewMode: 'statistics' } }, primary: aggregateReady },
+        { label: '出分检查', to: { name: 'ScorePublishCheck', params: { id: examId.value } }, primary: !aggregateReady && markingFinished },
+      ],
+    },
+    {
+      key: 'publish-score',
+      index: 9,
+      phase: '发布',
+      title: '发布',
+      description: '确认所有阻塞项清零后正式发布，家长端和学生端可以直接查看考试结果。',
+      status: released ? 'done' : scorePublishCheck.value?.canPublish ? 'active' : 'waiting',
+      metrics: [
+        { label: '可发布', value: scorePublishCheck.value?.canPublish ? '是' : '否', tone: scorePublishCheck.value?.canPublish ? 'success' : 'warning' },
+        { label: '阻塞项', value: scorePublishCheck.value?.blockingItems?.length || 0, tone: (scorePublishCheck.value?.blockingItems?.length || 0) > 0 ? 'danger' : 'success' },
+        { label: '提示项', value: scorePublishCheck.value?.warningItems?.length || 0, tone: (scorePublishCheck.value?.warningItems?.length || 0) > 0 ? 'warning' : 'default' },
+      ],
+      hint: released
+        ? '本场考试已经发布完成，后续只需要回看统计和导出。'
+        : scorePublishCheck.value?.canPublish
+          ? '可以进入出分检查页完成正式发布。'
+          : '先把识别异常、待阅卷、待仲裁和汇总缺口清掉。',
+      actions: [
+        { label: '出分检查', to: { name: 'ScorePublishCheck', params: { id: examId.value } }, primary: true },
+        { label: '成绩列表', to: { name: 'ScoreList', query: { examId: String(examId.value) } } },
+      ],
+    },
+  ]
+})
+
+const completedStepCount = computed(() => flowSteps.value.filter((step) => step.status === 'done').length)
+const progressPercentage = computed(() => Math.round((completedStepCount.value / flowSteps.value.length) * 100))
+const nextStep = computed(() => {
+  return flowSteps.value.find((step) => step.status === 'active') || flowSteps.value.find((step) => step.status === 'waiting')
+})
+
+const heroDescription = computed(() => {
+  if (!examDetail.value) {
+    return '按新建考试、模板、上传、裁题、阅卷、汇总、发布这条主线来推进。'
+  }
+
+  if (nextStep.value) {
+    return `当前建议优先处理「${nextStep.value.index}. ${nextStep.value.title}」，让考试从配置一路推进到正式发布。`
+  }
+
+  return '整条链路已经跑通，这场考试可以直接回看成绩、统计和发布结果。'
+})
+
+const issueItems = computed(() => {
+  const configIssues = examPublishCheck.value?.missingItems || []
+  const scoreIssues = scorePublishCheck.value?.blockingItems || []
+  return Array.from(new Set([...configIssues, ...scoreIssues]))
+})
+
+onMounted(() => {
+  loadWorkbench()
+})
+
+watch(
+  () => route.params.id,
+  () => {
+    loadWorkbench()
+  }
 )
-const doubleMarkingTaskCount = computed(() => markingTaskList.value.filter((item) => item.enableDoubleMarking === 1).length)
-const subjectWorkflowList = computed<SubjectWorkflowItem[]>(() =>
-  subjectList.value.map((subject) => buildSubjectWorkflowItem(subject))
-)
-
-const publishCheckDescription = computed(() => {
-  if (!publishCheck.value) {
-    return '正在读取出分前检查结果'
-  }
-  if (publishCheck.value.canPublish) {
-    return '识别、复核、阅卷、仲裁已经收口，可以直接进入出分检查并发布。'
-  }
-  return '请先把阻塞项清零，再进入正式出分。'
-})
-
-const nextAction = computed(() => {
-  if (scanPoolCount.value > 0) {
-    return {
-      title: '先处理扫描识别池',
-      description: '优先清掉识别中和异常池，正常卷才能稳定进入待阅卷。',
-      buttonText: '去扫描识别池',
-      action: () => openAnswerSheetPage(),
-    }
-  }
-  if (objectivePoolQuestionCount.value > 0) {
-    return {
-      title: '处理客观题复核池',
-      description: '先把待复核的客观题收口，避免后续成绩汇总前还残留人工确认项。',
-      buttonText: '去客观题复核',
-      action: () => openFirstObjectivePool(),
-    }
-  }
-  if (subjectivePoolQuestionCount.value > 0) {
-    return {
-      title: '处理主观题核验池',
-      description: '这里只处理真正的裁题异常项，正常主观题不再进人工核验池。',
-      buttonText: '去主观题核验',
-      action: () => openFirstSubjectivePool(),
-    }
-  }
-  if ((publishCheck.value?.unfinishedTaskCount || 0) > 0 || answerSheetStats.readyForMarking > 0 || answerSheetStats.marking > 0) {
-    return {
-      title: '推进阅卷任务收口',
-      description: '异常项已经清掉后，下一步应该先把待阅卷和阅卷中任务推进到完成，再进入仲裁。',
-      buttonText: '去阅卷任务',
-      action: () => openMarkingPage(),
-    }
-  }
-  if ((publishCheck.value?.pendingArbitrationCount || 0) > 0) {
-    return {
-      title: '处理待仲裁池',
-      description: '阅卷任务已经基本完成，但双评分差还没有收口，仲裁清零后才能进入正式出分。',
-      buttonText: '看出分阻塞项',
-      action: () => openPublishCheck(),
-    }
-  }
-  return {
-    title: '进入出分检查并发布',
-    description: '当前主链已经基本收口，可以直接去出分检查页确认发布。',
-    buttonText: '去出分检查',
-    action: () => openPublishCheck(),
-  }
-})
-
-async function loadExamBase() {
-  const [detailRes, subjectRes] = await Promise.all([
-    getExamDetail(examId.value),
-    getExamSubjectList(examId.value),
-  ])
-  exam.value = detailRes.data
-  subjectList.value = subjectRes.data || []
-}
-
-async function loadAllAnswerSheets() {
-  const pageSize = 100
-  let pageNum = 1
-  let total = 0
-  const result: AnswerSheet[] = []
-
-  do {
-    const res = await getAnswerSheetPage({
-      pageNum,
-      pageSize,
-      examId: examId.value,
-    })
-    const list = res.data.list || []
-    total = res.data.total || 0
-    result.push(...list)
-    pageNum += 1
-  } while (result.length < total)
-
-  allAnswerSheets.value = result
-  answerSheetStats.total = result.length
-  answerSheetStats.pendingRecognition = result.filter((item) => item.status === 0).length
-  answerSheetStats.recognized = result.filter((item) => item.status === 1).length
-  answerSheetStats.readyForMarking = result.filter((item) => item.status === 2).length
-  answerSheetStats.exceptions = result.filter((item) => item.status === 5).length
-  answerSheetStats.marking = result.filter((item) => item.status === 3).length
-  answerSheetStats.completed = result.filter((item) => item.status === 4).length
-  scanPoolList.value = result
-    .filter((item) => item.status === 0 || item.status === 5)
-    .sort((left, right) => (left.status === 5 ? -1 : 1) - (right.status === 5 ? -1 : 1))
-    .slice(0, 8)
-}
-
-async function loadMarkingTasks() {
-  const res = await pageMarkingTasks({
-    pageNum: 1,
-    pageSize: 50,
-    examId: examId.value,
-  })
-  markingTaskList.value = res.data.list || []
-}
-
-async function loadPublishCheck() {
-  const res = await getScorePublishCheck(examId.value)
-  publishCheck.value = res.data
-}
-
-async function loadReviewPools() {
-  const reviewSheets = allAnswerSheets.value.filter((item) => ![0, 5].includes(item.status))
-  const detailBundles: Array<{ sheet: AnswerSheet; details: AnswerSheetQuestionDetail[] }> = []
-
-  for (let index = 0; index < reviewSheets.length; index += 8) {
-    const chunk = reviewSheets.slice(index, index + 8)
-    const chunkResults = await Promise.all(chunk.map(async (sheet) => {
-      const res = await getAnswerSheetQuestionDetails(sheet.id)
-      return {
-        sheet,
-        details: res.data || [],
-      }
-    }))
-    detailBundles.push(...chunkResults)
-  }
-
-  const subjectStats: Record<number, SubjectReviewStats> = {}
-  detailBundles.forEach(({ sheet, details }) => {
-    const key = sheet.examSubjectId
-    if (!key) {
-      return
-    }
-    if (!subjectStats[key]) {
-      subjectStats[key] = {
-        objectivePendingCount: 0,
-        subjectivePendingCount: 0,
-      }
-    }
-
-    const objectivePool = buildPoolItem(sheet, details, true)
-    if (objectivePool) {
-      subjectStats[key].objectivePendingCount += objectivePool.pendingCount
-      subjectStats[key].objectiveAnswerSheetId ||= sheet.id
-    }
-
-    const subjectivePool = buildPoolItem(sheet, details, false)
-    if (subjectivePool) {
-      subjectStats[key].subjectivePendingCount += subjectivePool.pendingCount
-      subjectStats[key].subjectiveAnswerSheetId ||= sheet.id
-    }
-  })
-  subjectReviewStatsMap.value = subjectStats
-
-  objectivePoolList.value = detailBundles
-    .map(({ sheet, details }) => buildPoolItem(sheet, details, true))
-    .filter(isReviewPoolItem)
-    .sort((left, right) => right.pendingCount - left.pendingCount)
-    .slice(0, 12)
-
-  subjectivePoolList.value = detailBundles
-    .map(({ sheet, details }) => buildPoolItem(sheet, details, false))
-    .filter(isReviewPoolItem)
-    .sort((left, right) => right.pendingCount - left.pendingCount)
-    .slice(0, 12)
-}
-
-function buildPoolItem(
-  sheet: AnswerSheet,
-  details: AnswerSheetQuestionDetail[],
-  objective: boolean
-): ReviewPoolItem | null {
-  const filtered = details.filter((item) => {
-    const isObjective = item.isObjective === 1
-    if (objective !== isObjective) {
-      return false
-    }
-    if (!objective && item.anomalyFlag !== true) {
-      return false
-    }
-    return item.status !== 1
-  })
-
-  if (filtered.length === 0) {
-    return null
-  }
-
-  return {
-    answerSheetId: sheet.id,
-    subjectName: sheet.subjectName,
-    studentName: sheet.studentName,
-    studentNumber: sheet.studentNumber,
-    pendingCount: filtered.length,
-    sampleQuestions: filtered.slice(0, 5).map((item) => item.questionNo || String(item.questionId)).join('、'),
-    sampleReason: filtered[0]?.anomalyReason,
-    createTime: sheet.createTime,
-  }
-}
-
-function isReviewPoolItem(item: ReviewPoolItem | null): item is ReviewPoolItem {
-  return item !== null
-}
-
-function buildSubjectWorkflowItem(subject: ExamSubject): SubjectWorkflowItem {
-  const sheets = allAnswerSheets.value.filter((item) => item.examSubjectId === subject.id)
-  const subjectTasks = markingTaskList.value.filter((item) => item.examSubjectId === subject.id)
-  const reviewStats = subjectReviewStatsMap.value[subject.id] || {
-    objectivePendingCount: 0,
-    subjectivePendingCount: 0,
-  }
-
-  const scanBacklogCount = sheets.filter((item) => [0, 5].includes(item.status)).length
-  const readyForMarkingCount = sheets.filter((item) => item.status === 2).length
-  const markingCount = sheets.filter((item) => item.status === 3).length
-  const completedCount = sheets.filter((item) => item.status === 4).length
-  const notStartedTaskCount = subjectTasks.filter((item) => item.status === 0).length
-  const activeTaskCount = subjectTasks.filter((item) => item.status === 1).length
-  const completedTaskCount = subjectTasks.filter((item) => item.status === 2).length
-
-  if (sheets.length === 0) {
-    return {
-      examSubjectId: subject.id,
-      subjectName: subject.subjectName,
-      fullScore: subject.fullScore,
-      answerSheetCount: 0,
-      scanBacklogCount: 0,
-      objectiveReviewCount: 0,
-      subjectiveReviewCount: 0,
-      readyForMarkingCount: 0,
-      markingCount: 0,
-      completedCount: 0,
-      taskCount: 0,
-      notStartedTaskCount: 0,
-      activeTaskCount: 0,
-      completedTaskCount: 0,
-      currentStep: '待上传扫描图',
-      stepType: 'info',
-      primaryActionText: '去上传扫描图',
-      primaryActionMode: 'scan',
-    }
-  }
-
-  let currentStep = '等待出分检查'
-  let stepType: SubjectWorkflowItem['stepType'] = 'success'
-  let primaryActionText = '查看出分检查'
-  let primaryActionMode: SubjectWorkflowItem['primaryActionMode'] = 'publish'
-
-  if (scanBacklogCount > 0) {
-    currentStep = '扫描识别待处理'
-    stepType = 'danger'
-    primaryActionText = '处理扫描池'
-    primaryActionMode = 'scan'
-  } else if (reviewStats.objectivePendingCount > 0) {
-    currentStep = '客观题待复核'
-    stepType = 'warning'
-    primaryActionText = '进入客观题复核'
-    primaryActionMode = 'objective'
-  } else if (reviewStats.subjectivePendingCount > 0) {
-    currentStep = '主观题待核验'
-    stepType = 'warning'
-    primaryActionText = '进入主观题核验'
-    primaryActionMode = 'subjective'
-  } else if (subjectTasks.length === 0 && (readyForMarkingCount > 0 || markingCount > 0 || completedCount > 0)) {
-    currentStep = '待生成阅卷任务'
-    stepType = 'primary'
-    primaryActionText = '查看阅卷任务'
-    primaryActionMode = 'task'
-  } else if (notStartedTaskCount > 0) {
-    currentStep = '阅卷任务待开始'
-    stepType = 'primary'
-    primaryActionText = '启动阅卷任务'
-    primaryActionMode = 'task'
-  } else if (activeTaskCount > 0 || readyForMarkingCount > 0 || markingCount > 0) {
-    currentStep = '阅卷进行中'
-    stepType = 'primary'
-    primaryActionText = '查看阅卷任务'
-    primaryActionMode = 'task'
-  }
-
-  return {
-    examSubjectId: subject.id,
-    subjectName: subject.subjectName,
-    fullScore: subject.fullScore,
-    answerSheetCount: sheets.length,
-    scanBacklogCount,
-    objectiveReviewCount: reviewStats.objectivePendingCount,
-    subjectiveReviewCount: reviewStats.subjectivePendingCount,
-    readyForMarkingCount,
-    markingCount,
-    completedCount,
-    taskCount: subjectTasks.length,
-    notStartedTaskCount,
-    activeTaskCount,
-    completedTaskCount,
-    currentStep,
-    stepType,
-    primaryActionText,
-    primaryActionMode,
-    objectiveAnswerSheetId: reviewStats.objectiveAnswerSheetId,
-    subjectiveAnswerSheetId: reviewStats.subjectiveAnswerSheetId,
-  }
-}
 
 async function loadWorkbench() {
-  if (!examId.value) {
+  if (!/^\d+$/.test(examId.value)) {
     ElMessage.error('考试参数无效')
-    router.replace('/exam/list')
+    router.push({ name: 'ExamList' })
     return
   }
 
   loading.value = true
   try {
-    await Promise.all([
-      loadExamBase(),
-      loadAllAnswerSheets(),
-      loadMarkingTasks(),
-      loadPublishCheck(),
+    const [examRes, subjectRes] = await Promise.all([
+      getExamDetail(examId.value),
+      getExamSubjectList(examId.value),
     ])
-    await loadReviewPools()
+    examDetail.value = examRes.data
+    subjectList.value = subjectRes.data || []
+
+    const [templateRes, examCheckRes, scoreCheckRes, sheetRes, taskRes] = await Promise.allSettled([
+      getTemplatePage({ pageNum: 1, pageSize: 200, examId: examId.value }),
+      request.get<ExamPublishCheck>(`/exam/${examId.value}/publish-check`, { silentError: true }),
+      request.get<ScorePublishCheck>(`/score/publish-check/${examId.value}`, { silentError: true }),
+      getAnswerSheetPage({ pageNum: 1, pageSize: 6, examId: examId.value }),
+      pageMarkingTasks({ pageNum: 1, pageSize: 200, examId: examId.value }),
+    ])
+
+    templateList.value = templateRes.status === 'fulfilled' ? templateRes.value.data.list || [] : []
+    examPublishCheck.value = examCheckRes.status === 'fulfilled' ? examCheckRes.value.data : null
+    scorePublishCheck.value = scoreCheckRes.status === 'fulfilled' ? scoreCheckRes.value.data : null
+    recentSheets.value = sheetRes.status === 'fulfilled' ? sheetRes.value.data.list || [] : []
+    recentTasks.value = taskRes.status === 'fulfilled' ? taskRes.value.data.list || [] : []
   } catch (error) {
-    console.error('加载考试工作台失败', error)
+    console.error(error)
     ElMessage.error('加载考试工作台失败')
   } finally {
     loading.value = false
   }
 }
 
-function goBack() {
-  router.push('/exam/list')
-}
-
-function openAnswerSheetPage(status?: number, examSubjectId?: number) {
-  router.push({
-    path: '/exam/answer-sheet',
-    query: {
-      examId: String(examId.value),
-      ...(status !== undefined ? { status: String(status) } : {}),
-      ...(examSubjectId !== undefined ? { examSubjectId: String(examSubjectId) } : {}),
-    },
-  })
-}
-
-function openObjectiveReview(answerSheetId: number) {
-  router.push({
-    name: 'AnswerSheetObjectiveReview',
-    params: { id: String(answerSheetId) },
-    query: { examId: String(examId.value) },
-  })
-}
-
-function openSubjectiveReview(answerSheetId: number) {
-  router.push({
-    name: 'AnswerSheetSubjectiveReview',
-    params: { id: String(answerSheetId) },
-    query: { examId: String(examId.value) },
-  })
-}
-
-function openFirstObjectivePool() {
-  if (objectivePoolList.value.length === 0) {
-    openAnswerSheetPage()
+function handleNextStep() {
+  if (nextStep.value?.actions?.length) {
+    navigate(nextStep.value.actions[0].to)
     return
   }
-  openObjectiveReview(objectivePoolList.value[0].answerSheetId)
+  goScorePublishCheck()
 }
 
-function openFirstSubjectivePool() {
-  if (subjectivePoolList.value.length === 0) {
-    openAnswerSheetPage()
-    return
+function navigate(to: RouteLocationRaw) {
+  router.push(to)
+}
+
+function goExamList() {
+  router.push({ name: 'ExamList' })
+}
+
+function goAnswerSheetDesign() {
+  router.push('/answer-sheet-design/list')
+}
+
+function goAnswerSheetList() {
+  router.push({ name: 'AnswerSheetList', query: { examId: String(examId.value) } })
+}
+
+function goMarkingTaskList() {
+  router.push({ name: 'MarkingTask', query: { examId: String(examId.value) } })
+}
+
+function goScorePublishCheck() {
+  router.push({ name: 'ScorePublishCheck', params: { id: examId.value } })
+}
+
+function getStepTagType(status: StepStatus): 'success' | 'warning' | 'info' {
+  if (status === 'done') {
+    return 'success'
   }
-  openSubjectiveReview(subjectivePoolList.value[0].answerSheetId)
-}
-
-function openMarkingPage(examSubjectId?: number) {
-  router.push({
-    path: '/marking/task',
-    query: {
-      examId: String(examId.value),
-      ...(examSubjectId !== undefined ? { examSubjectId: String(examSubjectId) } : {}),
-    },
-  })
-}
-
-function openMarkingWorkspace() {
-  router.push('/marking/workspace')
-}
-
-function openPublishCheck() {
-  router.push({
-    name: 'ScorePublishCheck',
-    params: { id: String(examId.value) },
-  })
-}
-
-function openScorePage(viewMode: 'score' | 'statistics' = 'score') {
-  router.push({
-    path: '/score/list',
-    query: {
-      examId: String(examId.value),
-      viewMode,
-    },
-  })
-}
-
-function handleSubjectPrimaryAction(item: SubjectWorkflowItem) {
-  switch (item.primaryActionMode) {
-    case 'scan':
-      openAnswerSheetPage(undefined, item.examSubjectId)
-      return
-    case 'objective':
-      if (item.objectiveAnswerSheetId) {
-        openObjectiveReview(item.objectiveAnswerSheetId)
-        return
-      }
-      openAnswerSheetPage(undefined, item.examSubjectId)
-      return
-    case 'subjective':
-      if (item.subjectiveAnswerSheetId) {
-        openSubjectiveReview(item.subjectiveAnswerSheetId)
-        return
-      }
-      openAnswerSheetPage(undefined, item.examSubjectId)
-      return
-    case 'task':
-      openMarkingPage(item.examSubjectId)
-      return
-    case 'publish':
-      openPublishCheck()
-      return
-    default:
-      openAnswerSheetPage(undefined, item.examSubjectId)
+  if (status === 'active') {
+    return 'warning'
   }
+  return 'info'
 }
 
-function getExamStatusName(status?: number) {
-  const statusMap: Record<number, string> = {
+function getStepStatusText(status: StepStatus) {
+  if (status === 'done') {
+    return '已完成'
+  }
+  if (status === 'active') {
+    return '进行中'
+  }
+  return '待开始'
+}
+
+function getSemesterText(semester?: number) {
+  if (semester === 1) {
+    return '第一学期'
+  }
+  if (semester === 2) {
+    return '第二学期'
+  }
+  return '-'
+}
+
+function getExamStatusText(status?: number) {
+  const map: Record<number, string> = {
     0: '草稿',
     1: '待考试',
     2: '考试中',
@@ -919,23 +793,23 @@ function getExamStatusName(status?: number) {
     4: '已完成',
     5: '已发布',
   }
-  return statusMap[status ?? 0] || '未知'
+  return status !== undefined ? map[status] || '未知状态' : '未设置'
 }
 
-function getExamStatusType(status?: number): 'info' | 'warning' | 'success' | 'primary' {
-  const typeMap: Record<number, 'info' | 'warning' | 'success' | 'primary'> = {
+function getExamStatusTagType(status?: number): 'info' | 'warning' | 'primary' | 'success' {
+  const map: Record<number, 'info' | 'warning' | 'primary' | 'success'> = {
     0: 'info',
-    1: 'info',
-    2: 'warning',
-    3: 'warning',
-    4: 'primary',
+    1: 'warning',
+    2: 'primary',
+    3: 'primary',
+    4: 'success',
     5: 'success',
   }
-  return typeMap[status ?? 0] || 'info'
+  return status !== undefined ? map[status] || 'info' : 'info'
 }
 
-function getAnswerSheetStatusName(status: number) {
-  const statusMap: Record<number, string> = {
+function getAnswerSheetStatusText(status: number) {
+  const map: Record<number, string> = {
     0: '识别中',
     1: '已识别',
     2: '待阅卷',
@@ -943,451 +817,704 @@ function getAnswerSheetStatusName(status: number) {
     4: '已完成',
     5: '识别异常',
   }
-  return statusMap[status] || '未知'
+  return map[status] || '未知状态'
 }
 
-function getAnswerSheetStatusType(status: number): 'info' | 'primary' | 'warning' | 'success' | 'danger' {
-  const typeMap: Record<number, 'info' | 'primary' | 'warning' | 'success' | 'danger'> = {
+function getAnswerSheetStatusTagType(status: number): 'info' | 'success' | 'warning' | 'danger' {
+  const map: Record<number, 'info' | 'success' | 'warning' | 'danger'> = {
     0: 'info',
-    1: 'primary',
+    1: 'success',
     2: 'warning',
     3: 'warning',
     4: 'success',
     5: 'danger',
   }
-  return typeMap[status] || 'info'
+  return map[status] || 'info'
 }
 
-watch(() => route.params.id, () => {
-  loadWorkbench()
-})
+function getMarkingTaskStatusText(status: number) {
+  const map: Record<number, string> = {
+    0: '未开始',
+    1: '进行中',
+    2: '已完成',
+  }
+  return map[status] || '未知状态'
+}
 
-onMounted(() => {
-  loadWorkbench()
-})
+function getMarkingTaskStatusTagType(status: number): 'info' | 'warning' | 'success' {
+  const map: Record<number, 'info' | 'warning' | 'success'> = {
+    0: 'info',
+    1: 'warning',
+    2: 'success',
+  }
+  return map[status] || 'info'
+}
+
+function getTaskProgress(task: MarkingTaskVO) {
+  if (!task.totalCount) {
+    return 0
+  }
+  return Math.min(100, Math.round((task.completedCount / task.totalCount) * 100))
+}
 </script>
 
-<style scoped lang="scss">
-.exam-workbench {
+<style scoped>
+.exam-workbench-page {
   min-height: 100%;
-  padding: 20px;
-  background: #f4f6f8;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 26%),
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.14), transparent 28%),
+    linear-gradient(180deg, #f6f8fb 0%, #eef3f6 100%);
 }
 
-.hero-card,
-.next-card,
-.overview-card,
-.section-card {
-  border: 1px solid #e6eaef;
-  border-radius: 18px;
-  background: #fff;
-}
-
-.hero-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
+.hero-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(320px, 1fr);
+  gap: 20px;
+  margin-bottom: 20px;
 }
 
 .hero-main {
-  min-width: 0;
+  padding: 28px 30px;
+  border-radius: 28px;
+  color: #f8fafc;
+  background:
+    linear-gradient(135deg, #0f172a 0%, #134e4a 48%, #115e59 100%);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
 }
 
-.hero-actions {
-  display: flex;
+.hero-label {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(248, 250, 252, 0.88);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.hero-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
 }
 
 .hero-title {
   margin: 0;
-  color: #1f2937;
-  font-size: 30px;
-  line-height: 1.2;
+  font-size: 34px;
+  line-height: 1.15;
+  font-weight: 700;
 }
 
 .hero-subtitle {
-  max-width: 780px;
-  margin: 10px 0 0;
-  color: #5b6472;
-  line-height: 1.8;
+  margin: 12px 0 0;
+  max-width: 720px;
+  color: rgba(226, 232, 240, 0.92);
+  font-size: 15px;
+  line-height: 1.7;
 }
 
 .hero-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
-  margin-top: 18px;
-  color: #5b6472;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 24px;
 }
 
-.hero-quick-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+.hero-meta-item {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
 }
 
-.subject-strip {
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid #eceff3;
-}
-
-.subject-strip__label {
+.meta-label {
   display: block;
-  margin-bottom: 12px;
-  color: #8b93a1;
+  margin-bottom: 8px;
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 12px;
+}
+
+.hero-meta-item strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.hero-progress-card,
+.summary-tile,
+.overview-card,
+.flow-step,
+.side-card,
+.detail-card {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.hero-progress-card {
+  padding: 22px 24px;
+  border-radius: 24px;
+}
+
+.hero-progress-head,
+.hero-progress-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hero-progress-head span,
+.hero-progress-note span {
+  color: #64748b;
   font-size: 13px;
 }
 
-.subject-strip__items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.subject-tag {
-  padding-inline: 12px;
-}
-
-.empty-text {
-  color: #8b93a1;
-}
-
-.next-card {
-  margin-top: 16px;
-}
-
-.overview-card {
-  margin-top: 16px;
-}
-
-.next-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.next-card__label {
-  color: #8b93a1;
-  font-size: 12px;
-}
-
-.next-card__title {
-  margin-top: 6px;
-  color: #1f2937;
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.next-card__desc {
-  margin-top: 12px;
-  color: #5b6472;
-  line-height: 1.7;
-}
-
-.overview-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.overview-label {
-  color: #8b93a1;
-  font-size: 12px;
-}
-
-.overview-title {
-  margin-top: 6px;
-  color: #1f2937;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.overview-grid {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.overview-item {
-  padding: 16px;
-  border-radius: 14px;
-  border: 1px solid #e6eaef;
-  background: #f8fafc;
-}
-
-.overview-item__label {
-  color: #8b93a1;
-  font-size: 12px;
-}
-
-.overview-item__value {
-  margin-top: 10px;
-  color: #1f2937;
-  font-size: 30px;
-  font-weight: 700;
-}
-
-.overview-item__desc {
-  margin-top: 8px;
-  color: #5b6472;
-  line-height: 1.7;
-}
-
-.pool-grid {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.pool-card {
-  padding: 18px;
-  border-radius: 18px;
-  border: 1px solid #e6eaef;
-  background: #fff;
-}
-
-.subject-workflow-card {
-  margin-top: 16px;
-}
-
-.scan-pool {
-  background: #fafcff;
-}
-
-.objective-pool {
-  background: #f8fbff;
-}
-
-.subjective-pool {
-  background: #fffaf4;
-}
-
-.arbitration-pool {
-  background: #fff7f5;
-}
-
-.pool-card__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.pool-card__label {
-  color: #8b93a1;
-  font-size: 12px;
-}
-
-.pool-card__value {
-  margin-top: 10px;
-  color: #1f2937;
-  font-size: 32px;
-  font-weight: 700;
-}
-
-.pool-card__desc {
-  margin-top: 12px;
-  color: #5b6472;
-  min-height: 48px;
-  line-height: 1.7;
-}
-
-.pool-card__tags {
-  margin-top: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.section-grid {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.section-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.section-card__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.section-card__meta {
-  color: #8b93a1;
-  font-size: 12px;
-}
-
-.subject-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.subject-cell strong {
-  color: #1f2937;
-}
-
-.subject-cell span,
-.task-state-cell span {
-  color: #5b6472;
-  font-size: 12px;
-}
-
-.task-state-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.check-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.check-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 16px;
-  border-radius: 14px;
-}
-
-.check-banner.is-pass {
-  background: #effaf3;
-  border: 1px solid #bfe3cb;
-}
-
-.check-banner.is-blocked {
-  background: #fff3f1;
-  border: 1px solid #efc4bc;
-}
-
-.check-banner__title {
-  color: #1f2937;
+.hero-progress-head strong,
+.hero-progress-note strong {
+  color: #0f172a;
   font-size: 18px;
   font-weight: 700;
 }
 
-.check-banner__desc {
-  margin-top: 6px;
-  color: #5b6472;
-  line-height: 1.7;
+.hero-progress-note {
+  margin-top: 14px;
 }
 
-.check-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.mini-metric {
-  padding: 14px;
-  border-radius: 12px;
-  background: #f7f9fb;
-  border: 1px solid #e6eaef;
-}
-
-.mini-metric span {
-  display: block;
-  color: #8b93a1;
-  font-size: 12px;
-}
-
-.mini-metric strong {
-  display: block;
-  margin-top: 8px;
-  color: #1f2937;
-  font-size: 22px;
-}
-
-.issue-columns {
+.hero-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
-.issue-title {
-  margin-bottom: 10px;
-  color: #1f2937;
+.summary-tile {
+  padding: 20px;
+  border-radius: 22px;
+}
+
+.summary-label,
+.summary-desc {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.summary-value {
+  display: block;
+  margin: 10px 0 8px;
+  color: #0f172a;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.summary-value.is-success {
+  color: #0f766e;
+}
+
+.summary-value.is-warning {
+  color: #d97706;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.overview-card {
+  padding: 20px 22px;
+  border-radius: 24px;
+}
+
+.overview-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.overview-card__badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.overview-card__badge.is-success {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.12);
+}
+
+.overview-card__badge.is-warning {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.overview-card__badge.is-danger {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.overview-card__badge.is-default {
+  color: #475569;
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.overview-card__value {
+  margin: 14px 0 10px;
+  color: #0f172a;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.overview-card__desc {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+.flow-panel {
+  padding: 22px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.section-head,
+.detail-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.section-title {
+  color: #0f172a;
+  font-size: 18px;
   font-weight: 700;
 }
 
-.issue-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.issue-item {
-  padding: 12px 14px;
-  border-radius: 10px;
+.section-desc {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
   line-height: 1.6;
 }
 
-.issue-item.is-blocking {
-  background: #fff5f2;
-  color: #9a3412;
+.flow-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(310px, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+  overflow-x: auto;
+  padding-bottom: 10px;
 }
 
-.issue-item.is-warning {
-  background: #fff9ed;
-  color: #9a6700;
+.flow-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 292px;
+  padding: 20px;
+  border-radius: 26px;
 }
 
-@media (max-width: 1280px) {
-  .overview-grid,
-  .pool-grid {
+.flow-step::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -18px;
+  width: 18px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(15, 118, 110, 0.22), rgba(245, 158, 11, 0.56));
+  transform: translateY(-50%);
+}
+
+.flow-step:last-child::after {
+  display: none;
+}
+
+.flow-step.is-done {
+  border-color: rgba(15, 118, 110, 0.2);
+}
+
+.flow-step.is-active {
+  border-color: rgba(245, 158, 11, 0.24);
+}
+
+.flow-step.is-highlight {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 48px rgba(245, 158, 11, 0.14);
+}
+
+.flow-step__top {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.flow-step__index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(15, 118, 110, 0.88));
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.flow-step__phase {
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.flow-step__title {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.flow-step__desc,
+.flow-step__hint {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.flow-step__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.flow-metric {
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.flow-metric__label {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.flow-metric__value {
+  display: block;
+  margin-top: 6px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.flow-metric__value.is-success {
+  color: #0f766e;
+}
+
+.flow-metric__value.is-warning {
+  color: #d97706;
+}
+
+.flow-metric__value.is-danger {
+  color: #b91c1c;
+}
+
+.flow-step__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.side-card {
+  padding: 20px;
+  border-radius: 24px;
+}
+
+.side-card__title {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.next-card {
+  background:
+    linear-gradient(180deg, rgba(15, 118, 110, 0.08), rgba(255, 255, 255, 0.96));
+}
+
+.next-step-index {
+  margin-top: 14px;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.next-step-title {
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.next-step-desc {
+  margin-top: 10px;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.side-block-button {
+  width: 100%;
+  margin-top: 18px;
+}
+
+.issue-list,
+.subject-list,
+.record-list,
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.issue-item,
+.subject-item,
+.record-item,
+.task-item {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.issue-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.issue-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #dc2626;
+  flex-shrink: 0;
+}
+
+.module-card {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(31, 41, 55, 0.92));
+  color: #f8fafc;
+}
+
+.module-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.module-desc {
+  margin-top: 10px;
+  color: rgba(226, 232, 240, 0.9);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.subject-item,
+.record-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.subject-name,
+.record-title {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.subject-meta,
+.record-subtitle,
+.task-meta-row {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.detail-card {
+  padding: 22px;
+  border-radius: 28px;
+}
+
+.task-item__top,
+.task-progress-row,
+.task-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-progress-row {
+  margin-top: 14px;
+}
+
+.task-progress-row .el-progress {
+  flex: 1;
+}
+
+.task-meta-row {
+  margin-top: 10px;
+}
+
+@media (max-width: 1440px) {
+  .hero-meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .section-grid {
+  .overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-layout {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 900px) {
-  .hero-top,
-  .overview-header,
-  .next-card__header,
-  .check-banner {
-    flex-direction: column;
-    align-items: flex-start;
+@media (max-width: 1024px) {
+  .exam-workbench-page {
+    padding: 16px;
   }
 
-  .check-metrics,
-  .issue-columns {
+  .hero-panel,
+  .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .hero-title-row {
+    flex-direction: column;
+  }
+
+  .hero-summary-grid,
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-track {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    overflow-x: visible;
+  }
+
+  .flow-step::after {
+    top: auto;
+    right: auto;
+    left: 50%;
+    bottom: -18px;
+    width: 2px;
+    height: 18px;
+    transform: translateX(-50%);
   }
 }
 
 @media (max-width: 768px) {
-  .exam-workbench {
-    padding: 14px;
+  .hero-main,
+  .flow-panel,
+  .detail-card,
+  .side-card {
+    padding: 18px;
   }
 
-  .pool-grid {
+  .hero-title {
+    font-size: 28px;
+  }
+
+  .hero-meta {
     grid-template-columns: 1fr;
   }
 
-  .overview-grid {
+  .section-head,
+  .detail-card__head {
+    flex-direction: column;
+  }
+
+  .flow-step__top {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .flow-step__top :deep(.el-tag) {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .flow-step__metrics {
     grid-template-columns: 1fr;
+  }
+
+  .subject-item,
+  .record-item,
+  .task-item__top,
+  .task-progress-row,
+  .task-meta-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

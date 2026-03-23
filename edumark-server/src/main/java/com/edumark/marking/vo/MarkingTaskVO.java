@@ -65,6 +65,16 @@ public class MarkingTaskVO {
     @Schema(description = "状态名称")
     private String statusName;
 
+    @Schema(description = "阅卷码(8位数字)")
+    private String accessCode;
+
+    @Schema(description = "二评阅卷码(8位数字)")
+    private String secondAccessCode;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @Schema(description = "阅卷码过期时间")
+    private LocalDateTime accessCodeExpireTime;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Schema(description = "开始时间")
     private LocalDateTime startTime;
@@ -82,6 +92,10 @@ public class MarkingTaskVO {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @Schema(description = "更新时间")
+    private LocalDateTime updateTime;
 
     // Getters and Setters
     public Long getId() { return id; }
@@ -149,4 +163,16 @@ public class MarkingTaskVO {
 
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+
+    public LocalDateTime getUpdateTime() { return updateTime; }
+    public void setUpdateTime(LocalDateTime updateTime) { this.updateTime = updateTime; }
+
+    public String getAccessCode() { return accessCode; }
+    public void setAccessCode(String accessCode) { this.accessCode = accessCode; }
+
+    public String getSecondAccessCode() { return secondAccessCode; }
+    public void setSecondAccessCode(String secondAccessCode) { this.secondAccessCode = secondAccessCode; }
+
+    public LocalDateTime getAccessCodeExpireTime() { return accessCodeExpireTime; }
+    public void setAccessCodeExpireTime(LocalDateTime accessCodeExpireTime) { this.accessCodeExpireTime = accessCodeExpireTime; }
 }

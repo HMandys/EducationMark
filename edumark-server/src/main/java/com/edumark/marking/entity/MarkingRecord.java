@@ -49,6 +49,15 @@ public class MarkingRecord extends BaseEntity {
     @Schema(description = "状态: 0-待评 1-已评 2-待仲裁 3-仲裁完成")
     private Integer status;
 
+    @Schema(description = "问题卷标记: 0-正常 1-问题卷")
+    private Integer problemFlag;
+
+    @Schema(description = "问题卷原因")
+    private String problemReason;
+
+    @Schema(description = "跳过次数")
+    private Integer skipCount;
+
     @TableField(exist = false)
     @Schema(description = "教师姓名")
     private String teacherName;
@@ -110,4 +119,13 @@ public class MarkingRecord extends BaseEntity {
 
     public String getQuestionNo() { return questionNo; }
     public void setQuestionNo(String questionNo) { this.questionNo = questionNo; }
+
+    public Integer getProblemFlag() { return problemFlag; }
+    public void setProblemFlag(Integer problemFlag) { this.problemFlag = problemFlag; }
+
+    public String getProblemReason() { return problemReason; }
+    public void setProblemReason(String problemReason) { this.problemReason = problemReason; }
+
+    public Integer getSkipCount() { return skipCount; }
+    public void setSkipCount(Integer skipCount) { this.skipCount = skipCount; }
 }

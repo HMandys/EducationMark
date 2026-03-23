@@ -3,9 +3,14 @@
     <div class="preview-toolbar">
       <div>
         <div class="preview-toolbar-title">模板标注预览</div>
-        <div class="preview-toolbar-tip">点击区域选中，拖动区域框可调整位置，右下角拖点可调整尺寸。</div>
+        <div class="preview-toolbar-tip">
+          {{ drawMode ? '拉框模式：在样张上拖拽创建新区域' : '点击区域选中，拖动区域框可调整位置，右下角拖点可调整尺寸。' }}
+        </div>
       </div>
       <div class="preview-toolbar-right">
+        <el-tag v-if="drawMode" type="warning" effect="plain">
+          拉框模式
+        </el-tag>
         <el-tag v-if="sampleImageVisible && sampleImageUrl" type="success" effect="plain">
           样张叠加中
         </el-tag>
@@ -18,8 +23,10 @@
     <div
       ref="pageRef"
       class="preview-panel"
+      :class="{ 'is-draw-mode': drawMode }"
       :style="pageStyle"
       @click="handleBlankClick"
+      @mousedown="handleDrawStart"
     >
       <div v-if="sampleImageVisible && sampleImageUrl" class="sample-image-layer" :style="{ opacity: sampleImageOpacity }">
         <img :src="sampleImageUrl" alt="答题卡样张" class="sample-image" />
@@ -160,6 +167,22 @@
         </div>
       </div>
 
+      <!-- 拉框绘制层 -->
+      <div v-if="drawMode" class="draw-layer">
+        <div
+          v-if="drawingState.isDrawing"
+          class="draw-box"
+          :style="getDrawBoxStyle()"
+        >
+          <div class="draw-box-info">
+            <div>X: {{ drawingState.displayX }}%</div>
+            <div>Y: {{ drawingState.displayY }}%</div>
+            <div>W: {{ drawingState.displayWidth }}%</div>
+            <div>H: {{ drawingState.displayHeight }}%</div>
+          </div>
+        </div>
+      </div>
+
       <div class="overlay-layer">
         <div
           v-for="(region, index) in template.regions || []"
@@ -242,21 +265,39 @@ const props = withDefaults(defineProps<{
   sampleImageUrl?: string
   sampleImageVisible?: boolean
   sampleImageOpacity?: number
+  drawMode?: boolean
 }>(), {
   editable: false,
   selectedRegionIndex: -1,
   sampleImageUrl: '',
   sampleImageVisible: false,
   sampleImageOpacity: 0.35,
+  drawMode: false,
 })
 
 const emit = defineEmits<{
   'select-region': [index: number]
   'update-region': [payload: { index: number; region: AnswerSheetRegion }]
+  'create-region': [bounds: { boxX: number; boxY: number; boxWidth: number; boxHeight: number }]
 }>()
 
 const pageRef = ref<HTMLDivElement>()
 const activeInteraction = ref<ActiveInteraction | null>(null)
+
+// 拉框绘制状态
+const drawingState = ref({
+  isDrawing: false,
+  startX: 0,      // 起始 X（百分比）
+  startY: 0,      // 起始 Y（百分比）
+  currentX: 0,    // 当前 X（百分比）
+  currentY: 0,    // 当前 Y（百分比）
+  displayX: 0,    // 显示用的左上角 X
+  displayY: 0,    // 显示用的左上角 Y
+  displayWidth: 0, // 显示用的宽度
+  displayHeight: 0, // 显示用的高度
+})
+
+const MIN_BOX_SIZE = 2 // 最小框尺寸（百分比）
 
 const roleLabelMap: Record<RegionRole, string> = {
   choice_block: '客观题涂卡区',
@@ -386,7 +427,101 @@ const handleSelect = (index: number) => {
 }
 
 const handleBlankClick = () => {
+  if (props.drawMode) {
+    return
+  }
   emit('select-region', -1)
+}
+
+// 拉框开始
+const handleDrawStart = (event: MouseEvent) => {
+  if (!props.drawMode) {
+    return
+  }
+
+  const rect = pageRef.value?.getBoundingClientRect()
+  if (!rect) {
+    return
+  }
+
+  const x = ((event.clientX - rect.left) / rect.width) * 100
+  const y = ((event.clientY - rect.top) / rect.height) * 100
+
+  drawingState.value = {
+    isDrawing: true,
+    startX: x,
+    startY: y,
+    currentX: x,
+    currentY: y,
+    displayX: x,
+    displayY: y,
+    displayWidth: 0,
+    displayHeight: 0,
+  }
+
+  window.addEventListener('mousemove', handleDrawMove)
+  window.addEventListener('mouseup', handleDrawEnd)
+}
+
+// 拉框移动
+const handleDrawMove = (event: MouseEvent) => {
+  const rect = pageRef.value?.getBoundingClientRect()
+  if (!rect) {
+    return
+  }
+
+  const currentX = clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100)
+  const currentY = clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100)
+
+  const startX = drawingState.value.startX
+  const startY = drawingState.value.startY
+
+  // 计算左上角和尺寸（支持任意方向拖拽）
+  const left = Math.min(startX, currentX)
+  const top = Math.min(startY, currentY)
+  const width = Math.abs(currentX - startX)
+  const height = Math.abs(currentY - startY)
+
+  drawingState.value.currentX = currentX
+  drawingState.value.currentY = currentY
+  drawingState.value.displayX = Math.round(left * 10) / 10
+  drawingState.value.displayY = Math.round(top * 10) / 10
+  drawingState.value.displayWidth = Math.round(width * 10) / 10
+  drawingState.value.displayHeight = Math.round(height * 10) / 10
+}
+
+// 拉框结束
+const handleDrawEnd = () => {
+  window.removeEventListener('mousemove', handleDrawMove)
+  window.removeEventListener('mouseup', handleDrawEnd)
+
+  const { displayX, displayY, displayWidth, displayHeight } = drawingState.value
+
+  drawingState.value.isDrawing = false
+
+  // 检查最小尺寸
+  if (displayWidth < MIN_BOX_SIZE || displayHeight < MIN_BOX_SIZE) {
+    return
+  }
+
+  // 触发创建区域事件
+  emit('create-region', {
+    boxX: displayX,
+    boxY: displayY,
+    boxWidth: displayWidth,
+    boxHeight: displayHeight,
+  })
+}
+
+// 获取拖拽框样式
+const getDrawBoxStyle = () => {
+  const { displayX, displayY, displayWidth, displayHeight } = drawingState.value
+  return {
+    left: `${displayX}%`,
+    top: `${displayY}%`,
+    width: `${displayWidth}%`,
+    height: `${displayHeight}%`,
+  }
 }
 
 const startInteraction = (event: MouseEvent, index: number, mode: InteractionMode) => {
@@ -458,6 +593,9 @@ const stopInteraction = () => {
 
 onBeforeUnmount(() => {
   stopInteraction()
+  // 清理拉框事件监听
+  window.removeEventListener('mousemove', handleDrawMove)
+  window.removeEventListener('mouseup', handleDrawEnd)
 })
 </script>
 
@@ -505,6 +643,10 @@ onBeforeUnmount(() => {
   user-select: none;
 }
 
+.preview-panel.is-draw-mode {
+  cursor: crosshair;
+}
+
 .sample-image-layer {
   position: absolute;
   inset: 0;
@@ -528,6 +670,36 @@ onBeforeUnmount(() => {
   inset: 0;
   z-index: 2;
   pointer-events: none;
+}
+
+.draw-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.draw-box {
+  position: absolute;
+  border: 2px dashed #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  pointer-events: none;
+}
+
+.draw-box-info {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 6px 8px;
+  background: rgba(245, 158, 11, 0.95);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+  line-height: 1.4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .overlay-region {

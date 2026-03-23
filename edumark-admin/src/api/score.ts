@@ -1,12 +1,12 @@
 import { request } from '@/utils/request'
-import type { PageResult } from './types'
+import type { Id, PageResult } from './types'
 
 // 成绩查询参数
 export interface ScoreQuery {
   pageNum: number
   pageSize: number
-  examId?: number
-  examSubjectId?: number
+  examId?: Id
+  examSubjectId?: Id
   classId?: number
   studentName?: string
   studentNumber?: string
@@ -14,8 +14,8 @@ export interface ScoreQuery {
 
 // 考试成绩
 export interface ExamScore {
-  id: number
-  examId: number
+  id: Id
+  examId: Id
   examName?: string
   studentId: number
   studentName?: string
@@ -32,8 +32,8 @@ export interface ExamScore {
 
 // 科目成绩
 export interface SubjectScore {
-  id: number
-  examSubjectId: number
+  id: Id
+  examSubjectId: Id
   subjectName?: string
   fullScore?: number
   studentId: number
@@ -55,10 +55,10 @@ export interface ScoreSegment {
 
 // 成绩统计
 export interface ScoreStatistics {
-  id: number
-  examId: number
+  id: Id
+  examId: Id
   examName?: string
-  examSubjectId?: number
+  examSubjectId?: Id
   subjectName?: string
   classId?: number
   className?: string
@@ -77,7 +77,7 @@ export interface ScoreStatistics {
 }
 
 export interface ScorePublishCheck {
-  examId: number
+  examId: Id
   examName?: string
   examStatus?: number
   canPublish: boolean
@@ -108,48 +108,48 @@ export function getSubjectScorePage(params: ScoreQuery) {
 }
 
 // 查询学生考试成绩详情
-export function getStudentExamScore(examId: number, studentId: number) {
+export function getStudentExamScore(examId: Id, studentId: Id) {
   return request.get<ExamScore>(`/score/student/${examId}/${studentId}`)
 }
 
 // 查询统计数据
-export function getScoreStatistics(examId: number, examSubjectId?: number, classId?: number) {
+export function getScoreStatistics(examId: Id, examSubjectId?: Id, classId?: number) {
   return request.get<ScoreStatistics[]>(`/score/statistics/${examId}`, {
     params: { examSubjectId, classId },
   })
 }
 
-export function getScorePublishCheck(examId: number) {
+export function getScorePublishCheck(examId: Id) {
   return request.get<ScorePublishCheck>(`/score/publish-check/${examId}`)
 }
 
 // 汇总成绩
-export function aggregateScores(examId: number) {
+export function aggregateScores(examId: Id) {
   return request.post<void>(`/score/aggregate/${examId}`)
 }
 
 // 计算排名
-export function calculateRanking(examId: number) {
+export function calculateRanking(examId: Id) {
   return request.post<void>(`/score/ranking/${examId}`)
 }
 
 // 计算统计
-export function calculateStatistics(examId: number) {
+export function calculateStatistics(examId: Id) {
   return request.post<void>(`/score/statistics/${examId}`)
 }
 
 // 发布成绩
-export function publishScore(examId: number, userId: number) {
+export function publishScore(examId: Id, userId: Id) {
   return request.post<void>(`/score/publish/${examId}`, null, { params: { userId } })
 }
 
 // 撤回成绩
-export function unpublishScore(examId: number, userId: number) {
+export function unpublishScore(examId: Id, userId: Id) {
   return request.post<void>(`/score/unpublish/${examId}`, null, { params: { userId } })
 }
 
 // 导出成绩Excel
-export function exportScoreExcel(examId: number, classId?: number) {
+export function exportScoreExcel(examId: Id, classId?: number) {
   return request.getRaw<Blob>(`/score/export/${examId}`, {
     params: { classId },
     responseType: 'blob',

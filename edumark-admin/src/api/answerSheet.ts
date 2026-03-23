@@ -1,14 +1,14 @@
 import { request } from '@/utils/request'
-import type { PageResult } from './types'
+import type { Id, PageResult } from './types'
 
 // 答题卡类型定义
 export interface AnswerSheet {
-  id: number
-  examId: number
+  id: Id
+  examId: Id
   examName?: string
-  examSubjectId: number
+  examSubjectId: Id
   subjectName?: string
-  studentId?: number
+  studentId?: Id
   studentName?: string
   studentNumber?: string
   className?: string
@@ -25,8 +25,8 @@ export interface AnswerSheet {
 }
 
 export interface AnswerSheetImage {
-  id: number
-  answerSheetId: number
+  id: Id
+  answerSheetId: Id
   pageNum: number
   imagePath: string
   imageUrl: string
@@ -38,9 +38,9 @@ export interface AnswerSheetImage {
 }
 
 export interface AnswerSheetQuestionDetail {
-  id?: number
-  answerSheetId: number
-  questionId: number
+  id?: Id
+  answerSheetId: Id
+  questionId: Id
   questionNo?: string
   questionType?: number
   questionTypeName?: string
@@ -68,9 +68,9 @@ export interface AnswerSheetObjectiveAnswerDTO {
 export interface AnswerSheetQuery {
   pageNum: number
   pageSize: number
-  examId?: number
-  examSubjectId?: number
-  studentId?: number
+  examId?: Id
+  examSubjectId?: Id
+  studentId?: Id
   studentNumber?: string
   studentName?: string
   classId?: number
@@ -78,9 +78,9 @@ export interface AnswerSheetQuery {
 }
 
 export interface AnswerSheetUploadDTO {
-  examId: number
-  examSubjectId: number
-  studentId?: number
+  examId: Id
+  examSubjectId: Id
+  studentId?: Id
   studentNumber?: string
   seatNumber?: string
   imageObjectNames: string[]
@@ -101,27 +101,27 @@ export function getAnswerSheetPage(params: AnswerSheetQuery) {
   return request.get<PageResult<AnswerSheet>>('/answer-sheet/page', { params })
 }
 
-export function getAnswerSheetDetail(id: number) {
+export function getAnswerSheetDetail(id: Id) {
   return request.get<AnswerSheet>(`/answer-sheet/${id}`)
 }
 
-export function getAnswerSheetQuestionDetails(id: number) {
+export function getAnswerSheetQuestionDetails(id: Id) {
   return request.get<AnswerSheetQuestionDetail[]>(`/answer-sheet/${id}/details`)
 }
 
-export function getAnswerSheetQuestionPreview(id: number, questionId: number) {
+export function getAnswerSheetQuestionPreview(id: Id, questionId: Id) {
   return request.get<string>(`/answer-sheet/${id}/details/${questionId}/preview`)
 }
 
-export function recognizeObjectiveAnswers(id: number) {
+export function recognizeObjectiveAnswers(id: Id) {
   return request.post<AnswerSheetQuestionDetail[]>(`/answer-sheet/${id}/objective-recognize`)
 }
 
-export function updateObjectiveAnswer(id: number, questionId: number, data: AnswerSheetObjectiveAnswerDTO) {
+export function updateObjectiveAnswer(id: Id, questionId: Id, data: AnswerSheetObjectiveAnswerDTO) {
   return request.put<AnswerSheetQuestionDetail>(`/answer-sheet/${id}/details/${questionId}/objective-answer`, data)
 }
 
-export function updateSubjectiveReviewStatus(id: number, questionId: number, status: number) {
+export function updateSubjectiveReviewStatus(id: Id, questionId: Id, status: number) {
   return request.put<AnswerSheetQuestionDetail>(
     `/answer-sheet/${id}/details/${questionId}/subjective-review-status`,
     null,
@@ -129,49 +129,49 @@ export function updateSubjectiveReviewStatus(id: number, questionId: number, sta
   )
 }
 
-export function rerunSubjectiveReview(id: number) {
+export function rerunSubjectiveReview(id: Id) {
   return request.post<AnswerSheetQuestionDetail[]>(`/answer-sheet/${id}/subjective-review/rerun`)
 }
 
 export function createAnswerSheet(data: Partial<AnswerSheet>) {
-  return request.post<number>('/answer-sheet', data)
+  return request.post<Id>('/answer-sheet', data)
 }
 
 export function updateAnswerSheet(data: Partial<AnswerSheet>) {
   return request.put<void>('/answer-sheet', data)
 }
 
-export function deleteAnswerSheet(id: number) {
+export function deleteAnswerSheet(id: Id) {
   return request.delete<void>(`/answer-sheet/${id}`)
 }
 
-export function deleteAnswerSheetBatch(ids: number[]) {
+export function deleteAnswerSheetBatch(ids: Id[]) {
   return request.delete<void>('/answer-sheet/batch', { data: ids })
 }
 
-export function uploadAnswerSheetImages(id: number, files: FormData) {
+export function uploadAnswerSheetImages(id: Id, files: FormData) {
   return request.post<AnswerSheet>(`/answer-sheet/${id}/images`, files, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
 
 export function uploadAnswerSheet(data: AnswerSheetUploadDTO) {
-  return request.post<number>('/answer-sheet/upload', data)
+  return request.post<Id>('/answer-sheet/upload', data)
 }
 
-export function deleteAnswerSheetImage(imageId: number) {
+export function deleteAnswerSheetImage(imageId: Id) {
   return request.delete<void>(`/answer-sheet/image/${imageId}`)
 }
 
-export function getAnswerSheetListByExamSubject(examSubjectId: number) {
+export function getAnswerSheetListByExamSubject(examSubjectId: Id) {
   return request.get<AnswerSheet[]>(`/answer-sheet/list/${examSubjectId}`)
 }
 
-export function updateAnswerSheetStatus(id: number, status: number) {
+export function updateAnswerSheetStatus(id: Id, status: number) {
   return request.put<void>(`/answer-sheet/${id}/status`, null, { params: { status } })
 }
 
-export function rerunAnswerSheetRecognition(id: number) {
+export function rerunAnswerSheetRecognition(id: Id) {
   return request.post<void>(`/answer-sheet/${id}/recognize`)
 }
 

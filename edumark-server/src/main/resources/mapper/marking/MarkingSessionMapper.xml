@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.marking.mapper.MarkingSessionMapper">
+
+    <resultMap id="BaseResultMap" type="com.edumark.marking.entity.MarkingSession">
+        <id column="id" property="id"/>
+        <result column="task_id" property="taskId"/>
+        <result column="access_code" property="accessCode"/>
+        <result column="marking_role" property="markingRole"/>
+        <result column="session_token" property="sessionToken"/>
+        <result column="expire_time" property="expireTime"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <select id="selectBySessionToken" resultMap="BaseResultMap">
+        SELECT id, task_id, access_code, marking_role, session_token, expire_time, create_time
+        FROM marking_session
+        WHERE session_token = #{sessionToken}
+          AND expire_time > NOW()
+    </select>
+
+    <delete id="deleteExpiredSessions">
+        DELETE FROM marking_session
+        WHERE expire_time &lt;= NOW()
+    </delete>
+
+</mapper>

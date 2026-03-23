@@ -6,6 +6,7 @@ import com.edumark.marking.dto.MarkingSubmitDTO;
 import com.edumark.marking.vo.MarkingArbitrationVO;
 import com.edumark.marking.vo.MarkingRecordVO;
 import com.edumark.marking.vo.MarkingTaskAssignVO;
+import com.edumark.marking.vo.ProblemRecordStatistics;
 
 import java.util.List;
 
@@ -65,4 +66,39 @@ public interface MarkingService {
      * 客观题自动判分
      */
     void autoMarkObjective(Long examSubjectId);
+
+    /**
+     * 标记为问题卷
+     *
+     * @param recordId      阅卷记录ID
+     * @param problemReason 问题原因
+     * @param teacherId     教师ID
+     */
+    void markAsProblem(Long recordId, String problemReason, Long teacherId);
+
+    /**
+     * 取消问题卷标记
+     *
+     * @param recordId  阅卷记录ID
+     * @param teacherId 教师ID
+     */
+    void unmarkProblem(Long recordId, Long teacherId);
+
+    /**
+     * 获取问题卷列表
+     *
+     * @param taskId 阅卷任务ID
+     * @param pageNum  页码
+     * @param pageSize 每页数量
+     * @return 问题卷列表
+     */
+    PageResult<MarkingRecordVO> pageProblemRecords(Long taskId, int pageNum, int pageSize);
+
+    /**
+     * 获取问题卷统计
+     *
+     * @param taskId 阅卷任务ID
+     * @return 统计信息
+     */
+    ProblemRecordStatistics getProblemStatistics(Long taskId);
 }

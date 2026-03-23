@@ -54,6 +54,12 @@ public class SecurityConfig {
             // 登录相关
             "/auth/login",
             "/auth/captcha",
+            // 阅卷码免登录接口
+            "/marking/access/login",
+            "/marking/access/task",
+            "/marking/access/next",
+            "/marking/access/submit",
+            "/marking/access/skip",
             // Knife4j 文档
             "/doc.html",
             "/webjars/**",

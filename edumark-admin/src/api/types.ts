@@ -1,3 +1,5 @@
+export type Id = string | number
+
 /**
  * 通用响应结果
  */

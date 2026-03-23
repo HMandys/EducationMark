@@ -58,13 +58,16 @@
           </template>
         </el-table-column>
         <el-table-column prop="createTime" label="创建时间" width="170" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleAssign(row)" v-if="row.status === 0">
               分配
             </el-button>
             <el-button type="success" link size="small" @click="handleStart(row)" v-if="row.status === 0">
               开始
+            </el-button>
+            <el-button type="primary" link size="small" @click="handleAccessCode(row)" v-if="row.status === 1">
+              阅卷码
             </el-button>
             <el-button type="warning" link size="small" @click="handleComplete(row)" v-if="row.status === 1">
               完成
@@ -161,6 +164,19 @@
         </el-descriptions-item>
         <el-descriptions-item label="双评">{{ currentTask.enableDoubleMarking === 1 ? '是' : '否' }}</el-descriptions-item>
         <el-descriptions-item label="双评阈值">{{ currentTask.doubleMarkingThreshold || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="阅卷码" :span="2" v-if="hasAnyAccessCode(currentTask)">
+          <div class="detail-code-list">
+            <div v-for="item in getAccessCodeEntries(currentTask)" :key="item.label" class="detail-code-item">
+              <span class="detail-code-label">{{ item.label }}</span>
+              <el-tag type="success" size="large" class="access-code-tag">{{ item.code }}</el-tag>
+              <el-button type="primary" link size="small" @click="copyAccessCode(item.code, item.label)">复制</el-button>
+              <el-button link size="small" @click="copyAccessUrl(item.code, `${item.label}链接`)">复制链接</el-button>
+            </div>
+          </div>
+        </el-descriptions-item>
+        <el-descriptions-item label="阅卷码有效期" :span="2" v-if="currentTask.accessCodeExpireTime">
+          {{ currentTask.accessCodeExpireTime }}
+        </el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ currentTask.createTime }}</el-descriptions-item>
       </el-descriptions>
       <el-divider>分配教师</el-divider>
@@ -183,6 +199,59 @@
         </el-table-column>
       </el-table>
     </el-dialog>
+
+    <!-- 阅卷码对话框 -->
+    <el-dialog v-model="accessCodeVisible" title="阅卷码" width="450px">
+      <div class="access-code-container" v-if="currentTask">
+        <div class="task-info">
+          <p><strong>任务：</strong>{{ currentTask.name }}</p>
+          <p><strong>考试：</strong>{{ currentTask.examName }} - {{ currentTask.subjectName }}</p>
+        </div>
+
+        <div v-if="!hasAnyAccessCode(currentTask)" class="no-code">
+          <el-empty description="尚未生成阅卷码" :image-size="60">
+            <el-button type="primary" @click="handleGenerateCode">生成阅卷码</el-button>
+          </el-empty>
+        </div>
+
+        <div v-else class="code-display">
+          <div class="access-code-grid">
+            <div v-for="item in getAccessCodeEntries(currentTask)" :key="item.label" class="code-card">
+              <div class="code-card-header">
+                <span>{{ item.label }}</span>
+                <el-tag size="small" :type="item.role === 2 ? 'warning' : 'success'">
+                  {{ item.role === 2 ? '二评入口' : '一评入口' }}
+                </el-tag>
+              </div>
+              <div class="code-value">{{ item.code }}</div>
+              <div class="code-actions">
+                <el-button type="primary" @click="copyAccessCode(item.code, item.label)">
+                  复制{{ item.label }}
+                </el-button>
+                <el-button @click="copyAccessUrl(item.code, `${item.label}链接`)">复制链接</el-button>
+              </div>
+            </div>
+          </div>
+          <p class="code-expire" v-if="currentTask.accessCodeExpireTime">
+            有效期至：{{ currentTask.accessCodeExpireTime }}
+          </p>
+          <div class="code-toolbar">
+            <el-button @click="handleRefreshCode">刷新有效期</el-button>
+          </div>
+        </div>
+
+        <el-divider />
+
+        <div class="code-tips">
+          <h4>使用说明</h4>
+          <ol>
+            <li>将对应角色的阅卷码或链接发给老师</li>
+            <li>老师访问 <strong>{{ accessBaseUrl }}/marking</strong>，可直接使用复制的链接进入</li>
+            <li>双评任务请区分一评码、二评码，避免角色混用</li>
+          </ol>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -198,6 +267,8 @@ import {
   assignMarkingTask,
   startMarkingTask,
   completeMarkingTask,
+  generateAccessCode,
+  refreshAccessCode,
   type MarkingTaskVO,
   type MarkingTaskAssignDTO
 } from '@/api/marking'
@@ -216,15 +287,15 @@ const teacherList = ref<any[]>([])
 const queryForm = reactive({
   pageNum: 1,
   pageSize: 10,
-  examId: undefined as number | undefined,
-  examSubjectId: undefined as number | undefined,
+  examId: undefined as string | number | undefined,
+  examSubjectId: undefined as string | number | undefined,
   status: undefined as number | undefined
 })
 
 const generateVisible = ref(false)
 const generateForm = reactive({
-  examId: undefined as number | undefined,
-  examSubjectId: undefined as number | undefined
+  examId: undefined as string | number | undefined,
+  examSubjectId: undefined as string | number | undefined
 })
 
 const assignVisible = ref(false)
@@ -237,6 +308,8 @@ const assignForm = reactive({
 })
 
 const detailVisible = ref(false)
+const accessCodeVisible = ref(false)
+const accessBaseUrl = window.location.origin
 
 async function loadData() {
   loading.value = true
@@ -279,14 +352,14 @@ function handleReset() {
 }
 
 async function syncRouteExam() {
-  const routeExamId = Number(route.query.examId)
-  const routeExamSubjectId = Number(route.query.examSubjectId)
-  if (Number.isFinite(routeExamId) && routeExamId > 0) {
+  const routeExamId = typeof route.query.examId === 'string' ? route.query.examId : undefined
+  const routeExamSubjectId = typeof route.query.examSubjectId === 'string' ? route.query.examSubjectId : undefined
+  if (routeExamId && /^\d+$/.test(routeExamId)) {
     queryForm.examId = routeExamId
   } else {
     queryForm.examId = undefined
   }
-  queryForm.examSubjectId = Number.isFinite(routeExamSubjectId) && routeExamSubjectId > 0
+  queryForm.examSubjectId = routeExamSubjectId && /^\d+$/.test(routeExamSubjectId)
     ? routeExamSubjectId
     : undefined
   queryForm.pageNum = 1
@@ -332,6 +405,21 @@ async function handleAssign(row: MarkingTaskVO) {
 async function confirmAssign() {
   if (!currentTask.value) return
 
+  if (currentTask.value.enableDoubleMarking === 1) {
+    if (assignForm.firstTeachers.length === 0) {
+      ElMessage.warning('请选择一评教师')
+      return
+    }
+    if (assignForm.secondTeachers.length === 0) {
+      ElMessage.warning('请选择二评教师')
+      return
+    }
+    if (assignForm.arbitrationTeachers.length === 0) {
+      ElMessage.warning('请选择仲裁教师')
+      return
+    }
+  }
+
   const assigns: MarkingTaskAssignDTO['assigns'] = []
 
   if (currentTask.value.enableDoubleMarking !== 1) {
@@ -371,7 +459,11 @@ async function handleStart(row: MarkingTaskVO) {
   try {
     await ElMessageBox.confirm('确定要开始此阅卷任务吗？开始后将生成阅卷记录。', '提示')
     await startMarkingTask(row.id)
-    ElMessage.success('任务已开始')
+    const accessRes = await generateAccessCode(row.id)
+    if (currentTask.value?.id === row.id) {
+      currentTask.value = accessRes.data
+    }
+    ElMessage.success('任务已开始，阅卷码已同步生成')
     loadData()
   } catch (e: any) {
     if (e !== 'cancel') {
@@ -397,6 +489,79 @@ async function handleDetail(row: MarkingTaskVO) {
   const res = await getMarkingTaskDetail(row.id)
   currentTask.value = res.data
   detailVisible.value = true
+}
+
+async function handleAccessCode(row: MarkingTaskVO) {
+  const res = await getMarkingTaskDetail(row.id)
+  currentTask.value = res.data
+  accessCodeVisible.value = true
+}
+
+async function handleGenerateCode() {
+  if (!currentTask.value) return
+  try {
+    const res = await generateAccessCode(currentTask.value.id)
+    currentTask.value = res.data
+    ElMessage.success('阅卷码已生成')
+    loadData()
+  } catch (e: any) {
+    ElMessage.error(e.message || '生成失败')
+  }
+}
+
+async function handleRefreshCode() {
+  if (!currentTask.value) return
+  try {
+    await refreshAccessCode(currentTask.value.id, 24)
+    const res = await getMarkingTaskDetail(currentTask.value.id)
+    currentTask.value = res.data
+    ElMessage.success('有效期已刷新')
+    loadData()
+  } catch (e: any) {
+    ElMessage.error(e.message || '刷新失败')
+  }
+}
+
+function copyAccessCode(code: string, label = '阅卷码') {
+  navigator.clipboard.writeText(code).then(() => {
+    ElMessage.success(`${label}已复制`)
+  }).catch(() => {
+    ElMessage.error('复制失败')
+  })
+}
+
+function copyAccessUrl(code: string, label = '阅卷链接') {
+  const url = `${accessBaseUrl}/marking?accessCode=${code}`
+  navigator.clipboard.writeText(url).then(() => {
+    ElMessage.success(`${label}已复制`)
+  }).catch(() => {
+    ElMessage.error('复制失败')
+  })
+}
+
+function hasAnyAccessCode(task: MarkingTaskVO | null | undefined) {
+  return Boolean(task?.accessCode || task?.secondAccessCode)
+}
+
+function getAccessCodeEntries(task: MarkingTaskVO | null | undefined) {
+  if (!task) return []
+
+  const entries: Array<{ label: string; code: string; role: number }> = []
+  if (task.accessCode) {
+    entries.push({
+      label: task.enableDoubleMarking === 1 ? '一评阅卷码' : '阅卷码',
+      code: task.accessCode,
+      role: 1,
+    })
+  }
+  if (task.enableDoubleMarking === 1 && task.secondAccessCode) {
+    entries.push({
+      label: '二评阅卷码',
+      code: task.secondAccessCode,
+      role: 2,
+    })
+  }
+  return entries
 }
 
 async function handleDelete(row: MarkingTaskVO) {
@@ -486,5 +651,123 @@ function getStatusText(status: number) {
 
 .assign-info p {
   margin: 5px 0;
+}
+
+.access-code-tag {
+  font-size: 16px;
+  letter-spacing: 2px;
+  font-family: monospace;
+}
+
+.detail-code-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-code-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.detail-code-label {
+  min-width: 72px;
+  color: #606266;
+}
+
+.access-code-container {
+  padding: 10px 0;
+}
+
+.access-code-container .task-info {
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.access-code-container .task-info p {
+  margin: 4px 0;
+  color: #606266;
+}
+
+.no-code {
+  padding: 20px 0;
+}
+
+.code-display {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.access-code-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.code-card {
+  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  padding: 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%);
+}
+
+.code-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #606266;
+}
+
+.code-value {
+  font-size: 36px;
+  font-weight: bold;
+  letter-spacing: 6px;
+  color: #409eff;
+  font-family: monospace;
+  margin-bottom: 10px;
+}
+
+.code-expire {
+  color: #909399;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.code-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.code-toolbar {
+  display: flex;
+  justify-content: center;
+}
+
+.code-tips {
+  background: #fdf6ec;
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid #faecd8;
+}
+
+.code-tips h4 {
+  margin: 0 0 8px;
+  color: #e6a23c;
+}
+
+.code-tips ol {
+  margin: 0;
+  padding-left: 20px;
+  color: #909399;
+  font-size: 13px;
+}
+
+.code-tips li {
+  margin: 4px 0;
 }
 </style>

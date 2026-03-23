@@ -162,7 +162,7 @@ const unpublishing = ref(false)
 const currentExam = ref<Exam | null>(null)
 const checkResult = ref<ScorePublishCheck | null>(null)
 
-const examId = computed(() => Number(route.params.id))
+const examId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
 
 const resultDescription = computed(() => {
   if (!checkResult.value) {
@@ -179,7 +179,7 @@ onMounted(() => {
 })
 
 async function loadPage() {
-  if (!Number.isFinite(examId.value) || examId.value <= 0) {
+  if (!/^\d+$/.test(examId.value)) {
     ElMessage.error('考试参数无效')
     goBack()
     return

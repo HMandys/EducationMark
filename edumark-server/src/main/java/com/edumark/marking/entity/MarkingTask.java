@@ -49,6 +49,15 @@ public class MarkingTask extends BaseEntity {
     @Schema(description = "状态: 0-未开始 1-进行中 2-已完成")
     private Integer status;
 
+    @Schema(description = "阅卷码(8位数字)")
+    private String accessCode;
+
+    @Schema(description = "二评阅卷码(8位数字)")
+    private String secondAccessCode;
+
+    @Schema(description = "阅卷码过期时间")
+    private LocalDateTime accessCodeExpireTime;
+
     @Schema(description = "开始时间")
     private LocalDateTime startTime;
 
@@ -121,4 +130,13 @@ public class MarkingTask extends BaseEntity {
 
     public String getQuestionNo() { return questionNo; }
     public void setQuestionNo(String questionNo) { this.questionNo = questionNo; }
+
+    public String getAccessCode() { return accessCode; }
+    public void setAccessCode(String accessCode) { this.accessCode = accessCode; }
+
+    public String getSecondAccessCode() { return secondAccessCode; }
+    public void setSecondAccessCode(String secondAccessCode) { this.secondAccessCode = secondAccessCode; }
+
+    public LocalDateTime getAccessCodeExpireTime() { return accessCodeExpireTime; }
+    public void setAccessCodeExpireTime(LocalDateTime accessCodeExpireTime) { this.accessCodeExpireTime = accessCodeExpireTime; }
 }

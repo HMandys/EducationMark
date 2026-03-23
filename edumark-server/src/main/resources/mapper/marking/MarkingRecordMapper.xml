@@ -85,4 +85,49 @@
         AND question_id = #{questionId}
         ORDER BY marking_role
     </select>
+
+    <select id="selectNextPendingByTaskIdAndRole" resultMap="MarkingRecordVOMap">
+        SELECT
+            mr.*,
+            u.real_name AS teacher_name,
+            st.student_name AS student_name,
+            st.student_code AS student_number,
+            pq.question_no,
+            pq.score AS full_score
+        FROM marking_record mr
+        LEFT JOIN sys_user u ON mr.teacher_id = u.id
+        LEFT JOIN student st ON mr.student_id = st.id
+        LEFT JOIN paper_question pq ON mr.question_id = pq.id
+        WHERE mr.task_id = #{taskId}
+        AND mr.marking_role = #{markingRole}
+        AND mr.status = 0
+        ORDER BY mr.skip_count ASC, mr.id ASC
+        LIMIT 1
+    </select>
+
+    <select id="selectPendingIndexByRole" resultType="java.lang.Long">
+        SELECT COUNT(*) + 1
+        FROM marking_record
+        WHERE task_id = #{taskId}
+        AND marking_role = #{markingRole}
+        AND status = 0
+        AND id &lt; #{recordId}
+    </select>
+
+    <select id="selectProblemPageVO" resultMap="MarkingRecordVOMap">
+        SELECT
+            mr.*,
+            u.real_name AS teacher_name,
+            st.student_name AS student_name,
+            st.student_code AS student_number,
+            pq.question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
+        FROM marking_record mr
+        LEFT JOIN sys_user u ON mr.teacher_id = u.id
+        LEFT JOIN student st ON mr.student_id = st.id
+        LEFT JOIN paper_question pq ON mr.question_id = pq.id
+        WHERE mr.task_id = #{taskId}
+        AND mr.is_problem = 1
+        ORDER BY mr.create_time DESC
+    </select>
 </mapper>

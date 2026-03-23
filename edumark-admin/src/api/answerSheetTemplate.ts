@@ -1,10 +1,10 @@
 import { request } from '@/utils/request'
-import type { PageResult } from './types'
+import type { Id, PageResult } from './types'
 
 // 答题卡模板类型定义
 export interface AnswerSheetTemplate {
-  id: number
-  paperId: number
+  id: Id
+  paperId: Id
   paperName?: string
   examName?: string
   subjectName?: string
@@ -38,8 +38,8 @@ export interface StudentInfoConfig {
 }
 
 export interface AnswerSheetRegion {
-  id?: number
-  templateId?: number
+  id?: Id
+  templateId?: Id
   regionType: number
   regionTypeName?: string
   regionName: string
@@ -123,10 +123,10 @@ export interface TemplateValidationResult {
 export interface TemplateQuery {
   pageNum: number
   pageSize: number
-  paperId?: number
+  paperId?: Id
   name?: string
   status?: number
-  examId?: number
+  examId?: Id
   subjectName?: string
 }
 
@@ -136,42 +136,42 @@ export function getTemplatePage(params: TemplateQuery) {
   return request.get<PageResult<AnswerSheetTemplate>>('/answer-sheet-template/page', { params })
 }
 
-export function getTemplateDetail(id: number) {
+export function getTemplateDetail(id: Id) {
   return request.get<AnswerSheetTemplate>(`/answer-sheet-template/${id}`)
 }
 
-export function getTemplateByPaperId(paperId: number) {
+export function getTemplateByPaperId(paperId: Id) {
   return request.get<AnswerSheetTemplate>(`/answer-sheet-template/paper/${paperId}`)
 }
 
 export function createTemplate(data: Partial<AnswerSheetTemplate>) {
-  return request.post<number>('/answer-sheet-template', data)
+  return request.post<Id>('/answer-sheet-template', data)
 }
 
 export function updateTemplate(data: Partial<AnswerSheetTemplate>) {
   return request.put<void>('/answer-sheet-template', data)
 }
 
-export function deleteTemplate(id: number) {
+export function deleteTemplate(id: Id) {
   return request.delete<void>(`/answer-sheet-template/${id}`)
 }
 
-export function generateTemplateFromPaper(paperId: number) {
-  return request.post<number>(`/answer-sheet-template/generate/${paperId}`)
+export function generateTemplateFromPaper(paperId: Id) {
+  return request.post<Id>(`/answer-sheet-template/generate/${paperId}`)
 }
 
-export function publishTemplate(id: number) {
+export function publishTemplate(id: Id) {
   return request.post<void>(`/answer-sheet-template/${id}/publish`)
 }
 
-export function validateTemplate(id: number) {
+export function validateTemplate(id: Id) {
   return request.get<TemplateValidationResult>(`/answer-sheet-template/${id}/validate`)
 }
 
-export function getTemplatePreviewUrl(id: number) {
+export function getTemplatePreviewUrl(id: Id) {
   return request.get<string>(`/answer-sheet-template/${id}/preview`)
 }
 
-export function getTemplateDownloadUrl(id: number) {
+export function getTemplateDownloadUrl(id: Id) {
   return request.get<string>(`/answer-sheet-template/${id}/download`)
 }

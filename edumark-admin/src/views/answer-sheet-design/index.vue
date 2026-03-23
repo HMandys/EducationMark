@@ -128,8 +128,8 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="选择试卷" prop="paperId">
-          <el-select v-model="createForm.paperId" placeholder="请选择试卷" filterable style="width: 100%">
+        <el-form-item label="选择试卷">
+          <el-select v-model="createForm.paperId" placeholder="自动生成模式需选择试卷，手动创建可选" filterable clearable style="width: 100%">
             <el-option
               v-for="item in paperList"
               :key="item.id"
@@ -140,8 +140,8 @@
         </el-form-item>
         <el-form-item label="创建方式">
           <el-radio-group v-model="createForm.mode">
-            <el-radio value="auto">自动生成</el-radio>
-            <el-radio value="manual">手动创建</el-radio>
+            <el-radio value="auto">自动生成（需选择试卷）</el-radio>
+            <el-radio value="manual">手动创建（空白模板）</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -181,12 +181,13 @@ import {
   type TemplateValidationResult,
 } from '@/api/answerSheetTemplate'
 import { getExamPage, getExamSubjectList, type Exam, type ExamSubject } from '@/api/exam'
+import type { Id } from '@/api/types'
 import TemplateValidationDialog from './components/TemplateValidationDialog.vue'
 
 interface Paper {
-  id: number
+  id: Id
   name: string
-  examSubjectId: number
+  examSubjectId: Id
 }
 
 const router = useRouter()
@@ -225,7 +226,6 @@ const createForm = reactive({
 const createFormRules: FormRules = {
   examId: [{ required: true, message: '请选择考试', trigger: 'change' }],
   subjectId: [{ required: true, message: '请选择科目', trigger: 'change' }],
-  paperId: [{ required: true, message: '请选择试卷', trigger: 'change' }],
 }
 
 // 预览对话框
@@ -323,8 +323,12 @@ const handleCreateSubmit = async () => {
   createLoading.value = true
   try {
     if (createForm.mode === 'auto') {
-      // 自动生成
-      const id = await generateTemplateFromPaper(createForm.paperId!)
+      // 自动生成，需要试卷
+      if (!createForm.paperId) {
+        ElMessage.warning('自动生成模式需要先选择试卷')
+        return
+      }
+      const id = await generateTemplateFromPaper(createForm.paperId)
       ElMessage.success('模板创建成功')
       createDialogVisible.value = false
       // 跳转到编辑页

@@ -183,7 +183,42 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         }
 
         recalculateAnswerSheetScores(answerSheetId);
+
+        // 检查是否可以自动完成（只有客观题且都已评分）
+        tryAutoCompleteAnswerSheet(context.answerSheet());
+
         return listQuestionDetails(answerSheetId);
+    }
+
+    /**
+     * 检查是否可以自动完成答题卡
+     * 条件：所有题目都是客观题且都已评分完成
+     */
+    private void tryAutoCompleteAnswerSheet(AnswerSheet answerSheet) {
+        if (answerSheet.getStatus() == null || answerSheet.getStatus() != 2) {
+            return;
+        }
+
+        AnswerSheetContext context = loadContext(answerSheet.getId(), false);
+
+        // 检查是否有主观题
+        boolean hasSubjectiveQuestions = context.questions().stream()
+                .anyMatch(q -> !isObjectiveQuestion(q));
+
+        if (hasSubjectiveQuestions) {
+            // 有主观题，需要等待人工阅卷，不自动完成
+            return;
+        }
+
+        // 只有客观题，检查是否都已评分
+        boolean allCompleted = context.detailMap().values().stream()
+                .allMatch(detail -> detail.getStatus() != null && detail.getStatus() == DETAIL_STATUS_COMPLETED);
+
+        if (allCompleted) {
+            // 所有客观题都已评分，直接完成
+            answerSheet.setStatus(4);
+            answerSheetMapper.updateById(answerSheet);
+        }
     }
 
     @Override
@@ -631,10 +666,8 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         if (isObjectiveQuestion(question)) {
             return detectedAnomalyReason != null;
         }
+        // 主观题：只有真正异常的才显示，正常的主观题直接进入阅卷不需要核验
         if (detail != null && detail.getStatus() != null) {
-            if (detail.getStatus() == DETAIL_STATUS_SUBJECTIVE_VERIFIED) {
-                return false;
-            }
             if (detail.getStatus() == DETAIL_STATUS_SUBJECTIVE_ANOMALY) {
                 return true;
             }
@@ -986,18 +1019,35 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
     /**
      * 尝试推进答题卡状态
-     * 当所有题目都没有阻塞时，将答题卡状态从"已识别"推进到"待阅卷"
+     * 1. 从"已识别"推进到"待阅卷"（当所有题目都没有阻塞时）
+     * 2. 从"待阅卷"自动完成（当只有客观题且都已评分时）
      */
     private void tryAdvanceAnswerSheetStatus(Long answerSheetId, AnswerSheetContext context) {
         AnswerSheet answerSheet = context.answerSheet();
-        // 只有"已识别"状态的答题卡可以自动推进到"待阅卷"
-        if (answerSheet.getStatus() == null || answerSheet.getStatus() != 1) {
-            return;
-        }
+        int currentStatus = answerSheet.getStatus() == null ? 0 : answerSheet.getStatus();
 
-        if (canAdvanceToReadyForMarking(context)) {
+        // 从"已识别"(1)推进到"待阅卷"(2)
+        if (currentStatus == 1 && canAdvanceToReadyForMarking(context)) {
             answerSheet.setStatus(2);
             answerSheetMapper.updateById(answerSheet);
+            currentStatus = 2;
+        }
+
+        // 从"待阅卷"(2)自动完成(4)（只有客观题且都已评分时）
+        if (currentStatus == 2) {
+            boolean hasSubjectiveQuestions = context.questions().stream()
+                    .anyMatch(q -> !isObjectiveQuestion(q));
+
+            if (!hasSubjectiveQuestions) {
+                // 只有客观题，检查是否都已评分完成
+                boolean allCompleted = context.detailMap().values().stream()
+                        .allMatch(detail -> detail.getStatus() != null && detail.getStatus() == DETAIL_STATUS_COMPLETED);
+
+                if (allCompleted) {
+                    answerSheet.setStatus(4);
+                    answerSheetMapper.updateById(answerSheet);
+                }
+            }
         }
     }
 

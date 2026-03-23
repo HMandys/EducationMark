@@ -1,22 +1,22 @@
 import { request } from '@/utils/request'
-import type { PageResult } from './types'
+import type { Id, PageResult } from './types'
 
 // 阅卷任务相关接口
 export interface MarkingTaskQuery {
   pageNum?: number
   pageSize?: number
-  examId?: number
-  examSubjectId?: number
+  examId?: Id
+  examSubjectId?: Id
   status?: number
 }
 
 export interface MarkingTaskVO {
-  id: number
-  examId: number
+  id: Id
+  examId: Id
   examName: string
-  examSubjectId: number
+  examSubjectId: Id
   subjectName: string
-  questionId: number
+  questionId: Id
   questionNo: string
   name: string
   taskType: number
@@ -27,6 +27,9 @@ export interface MarkingTaskVO {
   doubleMarkingThreshold: number
   status: number
   statusName: string
+  accessCode?: string
+  secondAccessCode?: string
+  accessCodeExpireTime?: string
   startTime: string
   endTime: string
   remark: string
@@ -35,10 +38,10 @@ export interface MarkingTaskVO {
 }
 
 export interface MarkingTaskAssignVO {
-  id: number
-  taskId: number
+  id: Id
+  taskId: Id
   taskName: string
-  teacherId: number
+  teacherId: Id
   teacherName: string
   assignCount: number
   completedCount: number
@@ -53,13 +56,13 @@ export interface MarkingTaskAssignVO {
 }
 
 export interface TeacherAssign {
-  teacherId: number
+  teacherId: Id
   assignCount?: number
   markingRole: number
 }
 
 export interface MarkingTaskAssignDTO {
-  taskId: number
+  taskId: Id
   assigns: TeacherAssign[]
 }
 
@@ -133,15 +136,15 @@ export function pageMarkingTasks(params: MarkingTaskQuery) {
   return request.get<PageResult<MarkingTaskVO>>('/marking/task/page', { params })
 }
 
-export function getMarkingTaskDetail(id: number) {
+export function getMarkingTaskDetail(id: Id) {
   return request.get<MarkingTaskVO>(`/marking/task/${id}`)
 }
 
-export function generateMarkingTasks(examSubjectId: number) {
+export function generateMarkingTasks(examSubjectId: Id) {
   return request.post<void>(`/marking/task/generate/${examSubjectId}`)
 }
 
-export function deleteMarkingTask(id: number) {
+export function deleteMarkingTask(id: Id) {
   return request.delete<void>(`/marking/task/${id}`)
 }
 
@@ -149,15 +152,15 @@ export function assignMarkingTask(data: MarkingTaskAssignDTO) {
   return request.post<void>('/marking/task/assign', data)
 }
 
-export function startMarkingTask(id: number) {
+export function startMarkingTask(id: Id) {
   return request.post<void>(`/marking/task/start/${id}`)
 }
 
-export function completeMarkingTask(id: number) {
+export function completeMarkingTask(id: Id) {
   return request.post<void>(`/marking/task/complete/${id}`)
 }
 
-export function listMarkingTasksByExamSubject(examSubjectId: number) {
+export function listMarkingTasksByExamSubject(examSubjectId: Id) {
   return request.get<MarkingTaskVO[]>(`/marking/task/list/${examSubjectId}`)
 }
 
@@ -170,7 +173,7 @@ export function pageMarkingRecords(params: { taskId: number; status?: number; pa
   return request.get<PageResult<MarkingRecordVO>>('/marking/records', { params })
 }
 
-export function getNextPendingRecord(taskId: number) {
+export function getNextPendingRecord(taskId: Id) {
   return request.get<MarkingRecordVO>('/marking/next-pending', { params: { taskId } })
 }
 
@@ -187,7 +190,7 @@ export function pageArbitrations(params: { taskId: number; status?: number; page
   return request.get<PageResult<MarkingArbitrationVO>>('/marking/arbitrations', { params })
 }
 
-export function getNextArbitration(taskId: number) {
+export function getNextArbitration(taskId: Id) {
   return request.get<MarkingArbitrationVO>('/marking/next-arbitration', { params: { taskId } })
 }
 
@@ -201,4 +204,85 @@ export function submitArbitration(data: ArbitrationSubmitDTO) {
 
 export function autoMarkObjective(examSubjectId: number) {
   return request.post<void>(`/marking/auto-mark/${examSubjectId}`)
+}
+
+// ===================== 阅卷码访问 API =====================
+
+export interface MarkingSessionVO {
+  sessionToken: string
+  taskId: Id
+  examName: string
+  subjectName: string
+  questionNo: string
+  fullScore: number
+  markingRole: number
+  markingRoleName: string
+  totalCount: number
+  completedCount: number
+  pendingCount: number
+}
+
+export interface MarkingItemVO {
+  recordId: number
+  answerSheetId: number
+  questionId: number
+  questionImage: string
+  fullScore: number
+  questionNo: string
+  currentIndex: number
+  totalCount: number
+}
+
+export interface ScoreSubmitDTO {
+  recordId: number
+  score: number
+  comment?: string
+}
+
+// 阅卷码登录（免登录）
+export function accessCodeLogin(accessCode: string) {
+  return request.post<MarkingSessionVO>('/marking/access/login', { accessCode })
+}
+
+// 获取任务信息
+export function getAccessTaskInfo(sessionToken: string) {
+  return request.get<MarkingSessionVO>('/marking/access/task', {
+    headers: { 'X-Session-Token': sessionToken }
+  })
+}
+
+// 获取下一份待阅记录
+export function getNextAccessItem(sessionToken: string) {
+  return request.get<MarkingItemVO>('/marking/access/next', {
+    headers: { 'X-Session-Token': sessionToken }
+  })
+}
+
+// 提交评分
+export function submitAccessScore(sessionToken: string, data: ScoreSubmitDTO) {
+  return request.post<boolean>('/marking/access/submit', data, {
+    headers: { 'X-Session-Token': sessionToken }
+  })
+}
+
+// 跳过当前记录
+export function skipAccessRecord(sessionToken: string, recordId: number) {
+  return request.post<boolean>('/marking/access/skip', { recordId }, {
+    headers: { 'X-Session-Token': sessionToken }
+  })
+}
+
+// 生成阅卷码（需要管理员权限）
+export function generateAccessCode(taskId: Id) {
+  return request.post<MarkingTaskVO>(`/marking/access/generate/${taskId}`)
+}
+
+// 刷新阅卷码有效期
+export function refreshAccessCode(taskId: Id, hours: number = 24) {
+  return request.post<void>(`/marking/access/refresh/${taskId}?hours=${hours}`)
+}
+
+// 获取任务详情（含阅卷码）
+export function getTaskWithAccessCode(taskId: Id) {
+  return request.get<MarkingTaskVO>(`/marking/access/task/${taskId}`)
 }

@@ -17,10 +17,12 @@ import com.edumark.file.mapper.AnswerSheetDetailMapper;
 import com.edumark.file.mapper.AnswerSheetMapper;
 import com.edumark.file.service.AnswerSheetDetailService;
 import com.edumark.marking.dto.MarkingTaskAssignDTO;
+import com.edumark.marking.entity.MarkingArbitration;
 import com.edumark.marking.dto.MarkingTaskQueryDTO;
 import com.edumark.marking.entity.MarkingRecord;
 import com.edumark.marking.entity.MarkingTask;
 import com.edumark.marking.entity.MarkingTaskAssign;
+import com.edumark.marking.mapper.MarkingArbitrationMapper;
 import com.edumark.marking.mapper.MarkingRecordMapper;
 import com.edumark.marking.mapper.MarkingTaskAssignMapper;
 import com.edumark.marking.mapper.MarkingTaskMapper;
@@ -30,7 +32,11 @@ import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 阅卷任务服务实现
@@ -47,6 +53,9 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
 
     @Resource
     private MarkingRecordMapper markingRecordMapper;
+
+    @Resource
+    private MarkingArbitrationMapper markingArbitrationMapper;
 
     @Resource
     private ExamSubjectMapper examSubjectMapper;
@@ -220,12 +229,25 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         if (assignCount == 0) {
             throw new BusinessException("请先分配阅卷教师");
         }
+        if (task.getEnableDoubleMarking() != null && task.getEnableDoubleMarking() == 1) {
+            Long arbitrationAssignCount = markingTaskAssignMapper.selectCount(
+                    new LambdaQueryWrapper<MarkingTaskAssign>()
+                            .eq(MarkingTaskAssign::getTaskId, id)
+                            .eq(MarkingTaskAssign::getMarkingRole, 3)
+            );
+            if (arbitrationAssignCount == null || arbitrationAssignCount == 0) {
+                throw new BusinessException("双评任务请先分配仲裁教师");
+            }
+        }
 
         // 生成阅卷记录，并同步可进入阅卷的有效数量
         int eligibleCount = generateMarkingRecords(task);
         if (eligibleCount <= 0) {
             throw new BusinessException("当前没有可进入阅卷的主观题明细，请先处理异常项");
         }
+
+        // 将该科目的"待阅卷"答题卡状态更新为"阅卷中"
+        updateAnswerSheetsStatusToMarking(task.getExamSubjectId());
 
         // 更新状态为进行中
         task.setTotalCount(eligibleCount);
@@ -236,6 +258,21 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
     }
 
     /**
+     * 将该科目的"待阅卷"答题卡状态更新为"阅卷中"
+     */
+    private void updateAnswerSheetsStatusToMarking(Long examSubjectId) {
+        answerSheetMapper.selectList(
+                new LambdaQueryWrapper<AnswerSheet>()
+                        .eq(AnswerSheet::getExamSubjectId, examSubjectId)
+                        .eq(AnswerSheet::getStatus, 2)
+                        .eq(AnswerSheet::getDeleted, 0)
+        ).forEach(sheet -> {
+            sheet.setStatus(3);
+            answerSheetMapper.updateById(sheet);
+        });
+    }
+
+    /**
      * 生成阅卷记录
      */
     private int generateMarkingRecords(MarkingTask task) {
@@ -243,7 +280,7 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
                 new LambdaQueryWrapper<AnswerSheetDetail>()
                         .eq(AnswerSheetDetail::getQuestionId, task.getQuestionId())
                         .eq(AnswerSheetDetail::getDeleted, 0)
-                        .ne(AnswerSheetDetail::getStatus, DETAIL_STATUS_SUBJECTIVE_ANOMALY)
+                        .ne(AnswerSheetDetail::getStatus, DETAIL_STATUS_SUBJECTIVE_ANOMALY) // 只排除异常项
                         .orderByAsc(AnswerSheetDetail::getAnswerSheetId)
                         .orderByAsc(AnswerSheetDetail::getId)
         );
@@ -266,6 +303,9 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
 
         if (firstMarkers.isEmpty()) {
             throw new BusinessException("任务未分配一评教师");
+        }
+        if (task.getEnableDoubleMarking() == 1 && (secondMarkers == null || secondMarkers.isEmpty())) {
+            throw new BusinessException("双评任务未分配二评教师");
         }
 
         // 获取题目满分
@@ -338,6 +378,16 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         if (pendingCount > 0) {
             throw new BusinessException("还有未完成的阅卷记录，无法完成任务");
         }
+        if (task.getEnableDoubleMarking() != null && task.getEnableDoubleMarking() == 1) {
+            Long pendingArbitrationCount = markingArbitrationMapper.selectCount(
+                    new LambdaQueryWrapper<MarkingArbitration>()
+                            .eq(MarkingArbitration::getTaskId, id)
+                            .eq(MarkingArbitration::getStatus, 0)
+            );
+            if (pendingArbitrationCount != null && pendingArbitrationCount > 0) {
+                throw new BusinessException("还有待仲裁记录，无法完成任务");
+            }
+        }
 
         task.setStatus(2);
         updateById(task);
@@ -387,23 +437,54 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
 
     @Override
     public void updateProgress(Long taskId) {
-        // 统计已完成的阅卷记录数
-        Long completedCount = markingRecordMapper.selectCount(
+        MarkingTask task = getById(taskId);
+        if (task == null) {
+            return;
+        }
+
+        List<MarkingRecord> records = markingRecordMapper.selectList(
                 new LambdaQueryWrapper<MarkingRecord>()
                         .eq(MarkingRecord::getTaskId, taskId)
-                        .eq(MarkingRecord::getStatus, 1)
+        );
+        Map<Long, List<MarkingRecord>> recordsByAnswerSheet = records.stream()
+                .collect(Collectors.groupingBy(MarkingRecord::getAnswerSheetId));
+
+        Set<Long> pendingArbitrationAnswerSheetIds = new HashSet<>(
+                markingArbitrationMapper.selectList(
+                        new LambdaQueryWrapper<MarkingArbitration>()
+                                .eq(MarkingArbitration::getTaskId, taskId)
+                                .eq(MarkingArbitration::getStatus, 0)
+                ).stream().map(MarkingArbitration::getAnswerSheetId).collect(Collectors.toSet())
         );
 
-        Long pendingCount = markingRecordMapper.selectCount(
-                new LambdaQueryWrapper<MarkingRecord>()
-                        .eq(MarkingRecord::getTaskId, taskId)
-                        .eq(MarkingRecord::getStatus, 0)
-        );
+        int completedSampleCount = 0;
+        for (List<MarkingRecord> sampleRecords : recordsByAnswerSheet.values()) {
+            if (sampleRecords.isEmpty()) {
+                continue;
+            }
+
+            Long answerSheetId = sampleRecords.get(0).getAnswerSheetId();
+            boolean firstCompleted = sampleRecords.stream().anyMatch(record ->
+                    record.getMarkingRole() != null && record.getMarkingRole() == 1 && record.getStatus() != null && record.getStatus() == 1);
+
+            if (task.getEnableDoubleMarking() != null && task.getEnableDoubleMarking() == 1) {
+                boolean secondCompleted = sampleRecords.stream().anyMatch(record ->
+                        record.getMarkingRole() != null && record.getMarkingRole() == 2 && record.getStatus() != null && record.getStatus() == 1);
+                if (firstCompleted && secondCompleted && !pendingArbitrationAnswerSheetIds.contains(answerSheetId)) {
+                    completedSampleCount++;
+                }
+            } else if (firstCompleted) {
+                completedSampleCount++;
+            }
+        }
+
+        int totalCount = task.getTotalCount() != null ? task.getTotalCount() : recordsByAnswerSheet.size();
+        int pendingCount = Math.max(totalCount - completedSampleCount, 0);
 
         lambdaUpdate()
                 .eq(MarkingTask::getId, taskId)
-                .set(MarkingTask::getCompletedCount, completedCount.intValue())
-                .set(MarkingTask::getPendingCount, pendingCount.intValue())
+                .set(MarkingTask::getCompletedCount, completedSampleCount)
+                .set(MarkingTask::getPendingCount, pendingCount)
                 .update();
     }
 }

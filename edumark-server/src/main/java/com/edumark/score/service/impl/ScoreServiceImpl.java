@@ -1,6 +1,8 @@
 package com.edumark.score.service.impl;
 
 import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.write.builder.ExcelWriterSheetBuilder;
+import com.alibaba.excel.write.style.column.LongestMatchColumnWidthStyleStrategy;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.edumark.common.exception.BusinessException;
@@ -769,11 +771,11 @@ public class ScoreServiceImpl implements ScoreService {
             headers.add(Arrays.asList("排名", "年级排名"));
 
             // 写入Excel
-            ExcelWriterSheetBuilder sheetBuilder = EasyExcel.write(baos)
+            EasyExcel.write(baos)
                     .head(createDynamicHead(headers))
-                    .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy());
-
-            List<List<Object>> rows = exportData.stream().map(data -> {
+                    .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy())
+                    .sheet("成绩")
+                    .doWrite(exportData.stream().map(data -> {
                 List<Object> row = new ArrayList<>();
                 row.add(data.getStudentName());
                 row.add(data.getStudentNumber());
@@ -792,9 +794,8 @@ public class ScoreServiceImpl implements ScoreService {
                 row.add(data.getClassRank());
                 row.add(data.getGradeRank());
                 return row;
-            }).toList();
+            }).toList());
 
-            sheetBuilder.sheet("成绩").doWrite(rows);
             return baos.toByteArray();
         } catch (Exception e) {
             throw new BusinessException("导出失败: " + e.getMessage());

@@ -77,19 +77,25 @@
 
       <el-divider content-position="left">坐标标注</el-divider>
 
-      <div class="coordinate-toolbar">
-        <span class="coordinate-tip">坐标统一按当前整页百分比保存，支持在右侧预览区继续拖拽微调。</span>
+      <div class="coordinate-toolbar" :class="{ 'has-coords': hasCoordinates }">
+        <div class="coordinate-tip-wrapper">
+          <span class="coordinate-tip">坐标统一按当前整页百分比保存，支持在右侧预览区继续拖拽微调。</span>
+          <el-tag v-if="isFromDrawMode" type="success" size="small" effect="plain">
+            <el-icon><Check /></el-icon>
+            已从拉框获取坐标
+          </el-tag>
+        </div>
         <el-button text type="primary" @click="fillDefaultBounds">填充默认框</el-button>
       </div>
 
       <el-row :gutter="20">
         <el-col :span="12">
-          <el-form-item label="X(%)">
+          <el-form-item label="X(%)" :class="{ 'coord-filled': formData.config?.boxX !== undefined }">
             <el-input-number v-model="formData.config!.boxX" :min="0" :max="100" :precision="1" :step="0.5" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="Y(%)">
+          <el-form-item label="Y(%)" :class="{ 'coord-filled': formData.config?.boxY !== undefined }">
             <el-input-number v-model="formData.config!.boxY" :min="0" :max="100" :precision="1" :step="0.5" />
           </el-form-item>
         </el-col>
@@ -97,12 +103,12 @@
 
       <el-row :gutter="20">
         <el-col :span="12">
-          <el-form-item label="宽度(%)">
+          <el-form-item label="宽度(%)" :class="{ 'coord-filled': formData.config?.boxWidth !== undefined }">
             <el-input-number v-model="formData.config!.boxWidth" :min="1" :max="100" :precision="1" :step="0.5" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="高度(%)">
+          <el-form-item label="高度(%)" :class="{ 'coord-filled': formData.config?.boxHeight !== undefined }">
             <el-input-number v-model="formData.config!.boxHeight" :min="1" :max="100" :precision="1" :step="0.5" />
           </el-form-item>
         </el-col>
@@ -222,6 +228,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { Check } from '@element-plus/icons-vue'
 import type {
   AnswerSheetRegion,
   RegionConfig,
@@ -237,6 +244,20 @@ const emit = defineEmits<{
   'update:visible': [value: boolean]
   confirm: [region: AnswerSheetRegion]
 }>()
+
+// 检查坐标是否已填充（用于视觉提示）
+const hasCoordinates = computed(() => {
+  const config = formData.config
+  return config?.boxX !== undefined
+    && config?.boxY !== undefined
+    && config?.boxWidth !== undefined
+    && config?.boxHeight !== undefined
+})
+
+// 检查是否来自拉框创建（坐标已填充且是新区域）
+const isFromDrawMode = computed(() => {
+  return hasCoordinates.value && !props.region?.id
+})
 
 const formRef = ref<FormInstance>()
 
@@ -493,8 +514,28 @@ const handleConfirm = async () => {
   border-radius: 10px;
 }
 
+.coordinate-toolbar.has-coords {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.coordinate-tip-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .coordinate-tip {
   font-size: 12px;
   color: #606266;
+}
+
+/* 坐标已填充时的视觉提示 */
+:deep(.coord-filled .el-input-number) {
+  border-color: #86efac;
+}
+
+:deep(.coord-filled .el-input-number__wrapper) {
+  box-shadow: 0 0 0 1px #86efac inset;
 }
 </style>

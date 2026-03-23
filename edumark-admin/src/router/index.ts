@@ -19,6 +19,12 @@ export const publicRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/error/404.vue'),
     meta: { title: '页面不存在', hidden: true },
   },
+  {
+    path: '/marking',
+    name: 'MarkingAccess',
+    component: () => import('@/views/marking/access.vue'),
+    meta: { title: '阅卷', hidden: true, requiresAuth: false },
+  },
 ]
 
 // 需要认证的路由
@@ -220,7 +226,7 @@ const router = createRouter({
 })
 
 // 白名单路径
-const whiteList = ['/login', '/404']
+const whiteList = ['/login', '/404', '/marking']
 
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {

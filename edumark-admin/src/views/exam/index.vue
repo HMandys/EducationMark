@@ -391,6 +391,7 @@ import {
   type ExamSubject,
 } from '@/api/exam'
 import { getSchoolSelectList, getGradeListBySchool, getClassListByGrade, type School, type Grade, type ClassInfo } from '@/api/school'
+import type { Id } from '@/api/types'
 
 const router = useRouter()
 
@@ -416,7 +417,7 @@ const queryParams = reactive({
 const loading = ref(false)
 const tableData = ref<Exam[]>([])
 const total = ref(0)
-const selectedIds = ref<number[]>([])
+const selectedIds = ref<Id[]>([])
 
 // 对话框
 const dialogVisible = ref(false)
@@ -425,7 +426,7 @@ const formRef = ref<FormInstance>()
 const submitLoading = ref(false)
 
 interface FormDataType extends Partial<Exam> {
-  classIds?: number[]
+  classIds?: Id[]
 }
 
 const formData = reactive<FormDataType>({
@@ -662,10 +663,10 @@ const handleEdit = async (row: Exam) => {
   gradeList.value = []
   classList.value = []
   if (detail.schoolId) {
-    await loadGradeOptions(detail.schoolId)
+    await loadGradeOptions(Number(detail.schoolId))
   }
   if (detail.gradeId) {
-    await loadClassOptions(detail.gradeId)
+    await loadClassOptions(Number(detail.gradeId))
   }
   dialogVisible.value = true
 }
@@ -767,9 +768,13 @@ const handleUnpublish = async (row: Exam) => {
 }
 
 const handleWorkbench = (row: Exam) => {
+  if (!row.id) {
+    ElMessage.error('考试ID无效')
+    return
+  }
   router.push({
     name: 'ExamWorkbench',
-    params: { id: row.id },
+    params: { id: String(row.id) },
   })
 }
 

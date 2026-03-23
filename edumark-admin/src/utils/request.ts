@@ -5,6 +5,86 @@ import { useUserStore } from '@/store/user'
 import router from '@/router'
 import type { Result } from '@/api/types'
 
+export interface RequestConfig extends AxiosRequestConfig {
+  silentError?: boolean
+}
+
+function quoteLargeIntegers(json: string) {
+  let result = ''
+  let inString = false
+  let escaped = false
+
+  for (let index = 0; index < json.length; index++) {
+    const char = json[index]
+
+    if (inString) {
+      result += char
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inString = true
+      result += char
+      continue
+    }
+
+    const previousChar = result.trimEnd().slice(-1)
+    const canStartNumber = !previousChar || previousChar === ':' || previousChar === ',' || previousChar === '['
+    const isNegativeNumber = char === '-' && /\d/.test(json[index + 1] || '')
+    const isPositiveNumber = /\d/.test(char)
+
+    if (canStartNumber && (isNegativeNumber || isPositiveNumber)) {
+      let end = index + (char === '-' ? 1 : 0)
+      while (/\d/.test(json[end] || '')) {
+        end++
+      }
+
+      const numberText = json.slice(index, end)
+      const nextChar = json[end]
+      const isInteger = nextChar !== '.' && nextChar !== 'e' && nextChar !== 'E'
+      const digitCount = numberText.startsWith('-') ? numberText.length - 1 : numberText.length
+
+      if (isInteger && digitCount >= 16) {
+        result += `"${numberText}"`
+        index = end - 1
+        continue
+      }
+    }
+
+    result += char
+  }
+
+  return result
+}
+
+function parseJsonSafely(data: unknown) {
+  if (typeof data !== 'string') {
+    return data
+  }
+
+  const trimmed = data.trim()
+  if (!trimmed) {
+    return data
+  }
+
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return data
+  }
+
+  try {
+    return JSON.parse(quoteLargeIntegers(trimmed))
+  } catch {
+    return data
+  }
+}
+
 // 创建 axios 实例
 const service: AxiosInstance = axios.create({
   baseURL: '/api',
@@ -12,6 +92,7 @@ const service: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  transformResponse: [(data) => parseJsonSafely(data)],
 })
 
 // 请求拦截器
@@ -40,6 +121,7 @@ service.interceptors.response.use(
     }
 
     const res = response.data
+    const silentError = (response.config as RequestConfig).silentError === true
 
     // 成功
     if (res.code === 200) {
@@ -61,12 +143,15 @@ service.interceptors.response.use(
     }
 
     // 其他错误
-    ElMessage.error(res.message || '请求失败')
+    if (!silentError) {
+      ElMessage.error(res.message || '请求失败')
+    }
     return Promise.reject(new Error(res.message || '请求失败'))
   },
   (error) => {
     NProgress.done()
     let message = '请求失败'
+    const silentError = (error.config as RequestConfig | undefined)?.silentError === true
     if (error.response) {
       switch (error.response.status) {
         case 400:
@@ -95,26 +180,28 @@ service.interceptors.response.use(
     } else if (error.message.includes('Network Error')) {
       message = '网络错误'
     }
-    ElMessage.error(message)
+    if (!silentError) {
+      ElMessage.error(message)
+    }
     return Promise.reject(error)
   }
 )
 
 // 封装请求方法
 export const request = {
-  get<T = any>(url: string, config?: AxiosRequestConfig): Promise<Result<T>> {
+  get<T = any>(url: string, config?: RequestConfig): Promise<Result<T>> {
     return service.get(url, config)
   },
-  getRaw<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+  getRaw<T = any>(url: string, config?: RequestConfig): Promise<AxiosResponse<T>> {
     return service.get(url, config)
   },
-  post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<Result<T>> {
+  post<T = any>(url: string, data?: any, config?: RequestConfig): Promise<Result<T>> {
     return service.post(url, data, config)
   },
-  put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<Result<T>> {
+  put<T = any>(url: string, data?: any, config?: RequestConfig): Promise<Result<T>> {
     return service.put(url, data, config)
   },
-  delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<Result<T>> {
+  delete<T = any>(url: string, config?: RequestConfig): Promise<Result<T>> {
     return service.delete(url, config)
   },
 }

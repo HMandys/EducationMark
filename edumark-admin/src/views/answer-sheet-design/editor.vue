@@ -86,6 +86,31 @@
               </div>
             </div>
 
+            <div class="tools-card">
+              <div class="tools-card-title">快速拉框</div>
+              <div class="tools-card-desc">在样张上直接拖拽创建新区域，自动识别坐标。</div>
+              <div class="tools-actions">
+                <el-switch
+                  v-model="drawMode"
+                  :disabled="!sampleImageVisible"
+                  active-text="拉框模式"
+                  inactive-text="普通模式"
+                  @change="handleDrawModeChange"
+                />
+              </div>
+              <div class="tools-card-desc draw-tip">
+                <template v-if="!sampleImageVisible">
+                  请先上传样张并显示叠加后再使用拉框功能
+                </template>
+                <template v-else-if="drawMode">
+                  在右侧预览区样张上按下鼠标并拖拽，释放后自动打开配置弹窗
+                </template>
+                <template v-else>
+                  开启后可在样张上直接拖拽绘制区域
+                </template>
+              </div>
+            </div>
+
             <div class="tools-card" v-if="selectedChoiceRegion">
               <div class="tools-card-title">客观题选项识别</div>
               <div class="tools-card-desc">
@@ -128,8 +153,10 @@
             :sample-image-url="sampleImageUrl"
             :sample-image-visible="sampleImageVisible"
             :sample-image-opacity="sampleImageOpacity / 100"
+            :draw-mode="drawMode"
             @select-region="handleSelectRegion"
             @update-region="handlePreviewRegionUpdate"
+            @create-region="handleCreateRegion"
           />
         </div>
       </div>
@@ -173,6 +200,7 @@ import {
   type BubbleMapItem,
   type TemplateValidationResult,
 } from '@/api/answerSheetTemplate'
+import type { Id } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -219,6 +247,7 @@ const sampleImageOpacity = ref(35)
 const bubbleDetectLoading = ref(false)
 const autoDetecting = ref(false)
 const lastAutoDetectSignature = ref('')
+const drawMode = ref(false)
 
 const cloneRegion = (region: AnswerSheetRegion): AnswerSheetRegion => ({
   ...region,
@@ -320,7 +349,7 @@ const revokeSampleImage = () => {
 }
 
 // 获取模板详情
-const fetchTemplateDetail = async (id: number) => {
+const fetchTemplateDetail = async (id: Id) => {
   const res = await getTemplateDetail(id)
   Object.assign(templateForm, res.data)
 }
@@ -463,6 +492,37 @@ const handlePreviewRegionUpdate = ({ index, region }: { index: number; region: A
     return
   }
   templateForm.regions.splice(index, 1, cloneRegion(region))
+}
+
+// 处理拉框创建区域
+const handleCreateRegion = (bounds: { boxX: number; boxY: number; boxWidth: number; boxHeight: number }) => {
+  currentRegion.value = {
+    regionType: 1,
+    regionName: `新区域 ${(templateForm.regions?.length || 0) + 1}`,
+    pageNo: 1,
+    sortOrder: templateForm.regions?.length || 0,
+    questionStart: 1,
+    questionEnd: 10,
+    config: {
+      ...bounds,
+      regionRole: 'choice_block',
+      anchorType: 'none',
+      cropMode: 'range-question',
+      optionCount: 4,
+      questionsPerRow: 5,
+    },
+  }
+  editingRegionIndex.value = -1
+  regionDialogVisible.value = true
+  drawMode.value = false // 自动退出拉框模式
+  selectedRegionIndex.value = -1
+}
+
+// 拉框模式切换
+const handleDrawModeChange = (enabled: string | number | boolean) => {
+  if (Boolean(enabled)) {
+    selectedRegionIndex.value = -1 // 取消当前选中
+  }
 }
 
 const runValidationAndMaybeOpen = async () => {
@@ -945,10 +1005,10 @@ onMounted(async () => {
 
   if (id) {
     // 编辑模式
-    await fetchTemplateDetail(Number(id))
+    await fetchTemplateDetail(id)
   } else if (paperId) {
     // 新建模式，关联试卷
-    templateForm.paperId = Number(paperId)
+    templateForm.paperId = paperId
   }
 })
 
@@ -1033,6 +1093,14 @@ onBeforeUnmount(() => {
   font-size: 12px;
   line-height: 1.6;
   color: #6b7280;
+}
+
+.tools-card-desc.draw-tip {
+  margin-top: 12px;
+  padding: 8px 10px;
+  background: #fef3c7;
+  border-radius: 8px;
+  color: #92400e;
 }
 
 .tools-actions {

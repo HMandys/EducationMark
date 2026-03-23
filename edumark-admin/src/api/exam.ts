@@ -1,10 +1,10 @@
 import { request } from '@/utils/request'
-import type { PageResult } from './types'
+import type { Id, PageResult } from './types'
 
 // 考试类型定义
 export interface Exam {
-  id: number
-  schoolId: number
+  id: Id
+  schoolId: Id
   schoolName?: string
   name: string
   code: string
@@ -12,7 +12,7 @@ export interface Exam {
   typeName?: string
   academicYear: string
   semester: number
-  gradeId?: number
+  gradeId?: Id
   gradeName?: string
   startTime?: string
   endTime?: string
@@ -29,7 +29,7 @@ export interface Exam {
 }
 
 export interface ExamClass {
-  classId: number
+  classId: Id
   className?: string
   studentCount?: number
 }
@@ -37,20 +37,20 @@ export interface ExamClass {
 export interface ExamQuery {
   pageNum: number
   pageSize: number
-  schoolId?: number
+  schoolId?: Id
   name?: string
   code?: string
   type?: number
   academicYear?: string
   semester?: number
-  gradeId?: number
+  gradeId?: Id
   status?: number
 }
 
 // 考试科目类型定义
 export interface ExamSubject {
-  id: number
-  examId: number
+  id: Id
+  examId: Id
   examName?: string
   subjectName: string
   subjectCode?: string
@@ -69,7 +69,7 @@ export interface ExamSubject {
 }
 
 export interface ExamPublishCheck {
-  examId: number
+  examId: Id
   canPublish: boolean
   classCount: number
   subjectCount: number
@@ -114,64 +114,64 @@ export function getExamPage(params: ExamQuery) {
   return request.get<PageResult<Exam>>('/exam/page', { params })
 }
 
-export function getExamDetail(id: number) {
+export function getExamDetail(id: Id) {
   return request.get<Exam>(`/exam/${id}`)
 }
 
 export function createExam(data: Partial<Exam>) {
-  return request.post<number>('/exam', data)
+  return request.post<Id>('/exam', data)
 }
 
 export function updateExam(data: Partial<Exam>) {
   return request.put<void>('/exam', data)
 }
 
-export function deleteExam(id: number) {
+export function deleteExam(id: Id) {
   return request.delete<void>(`/exam/${id}`)
 }
 
-export function deleteExamBatch(ids: number[]) {
+export function deleteExamBatch(ids: Id[]) {
   return request.delete<void>('/exam/batch', { data: ids })
 }
 
-export function updateExamStatus(id: number, status: number) {
+export function updateExamStatus(id: Id, status: number) {
   return request.put<void>(`/exam/${id}/status`, null, { params: { status } })
 }
 
-export function publishExam(id: number) {
+export function publishExam(id: Id) {
   return request.post<void>(`/exam/${id}/publish`)
 }
 
-export function getExamPublishCheck(id: number) {
+export function getExamPublishCheck(id: Id) {
   return request.get<ExamPublishCheck>(`/exam/${id}/publish-check`)
 }
 
-export function unpublishExam(id: number) {
+export function unpublishExam(id: Id) {
   return request.post<void>(`/exam/${id}/unpublish`)
 }
 
 // ============ 考试科目 API ============
-export function getExamSubjectList(examId: number) {
+export function getExamSubjectList(examId: Id) {
   return request.get<ExamSubject[]>(`/exam-subject/list/${examId}`)
 }
 
-export function getExamSubjectDetail(id: number) {
+export function getExamSubjectDetail(id: Id) {
   return request.get<ExamSubject>(`/exam-subject/${id}`)
 }
 
 export function createExamSubject(data: Partial<ExamSubject>) {
-  return request.post<number>('/exam-subject', data)
+  return request.post<Id>('/exam-subject', data)
 }
 
 export function updateExamSubject(data: Partial<ExamSubject>) {
   return request.put<void>('/exam-subject', data)
 }
 
-export function deleteExamSubject(id: number) {
+export function deleteExamSubject(id: Id) {
   return request.delete<void>(`/exam-subject/${id}`)
 }
 
-export function batchCreateExamSubject(examId: number, subjects: Partial<ExamSubject>[]) {
+export function batchCreateExamSubject(examId: Id, subjects: Partial<ExamSubject>[]) {
   return request.post<void>(`/exam-subject/batch/${examId}`, subjects)
 }
 

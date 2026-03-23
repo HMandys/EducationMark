@@ -406,6 +406,7 @@ import {
   type AnswerSheetImage,
   type AnswerSheetQuestionDetail,
 } from '@/api/answerSheet'
+import type { Id } from '@/api/types'
 import { getExamPage, getExamSubjectList, type Exam, type ExamSubject } from '@/api/exam'
 
 const route = useRoute()
@@ -420,8 +421,8 @@ const uploadSubjectList = ref<ExamSubject[]>([])
 const queryParams = reactive({
   pageNum: 1,
   pageSize: 10,
-  examId: undefined as number | undefined,
-  examSubjectId: undefined as number | undefined,
+  examId: undefined as string | number | undefined,
+  examSubjectId: undefined as string | number | undefined,
   studentNumber: '',
   studentName: '',
   status: undefined as number | undefined,
@@ -431,7 +432,7 @@ const queryParams = reactive({
 const loading = ref(false)
 const tableData = ref<AnswerSheet[]>([])
 const total = ref(0)
-const selectedIds = ref<number[]>([])
+const selectedIds = ref<Id[]>([])
 
 // 上传对话框
 const uploadDialogVisible = ref(false)
@@ -440,11 +441,11 @@ const uploadLoading = ref(false)
 const uploadRef = ref()
 const fileList = ref<UploadFile[]>([])
 const uploadMode = ref<'create' | 'append'>('create')
-const appendTargetId = ref<number>()
+const appendTargetId = ref<Id>()
 
 const uploadForm = reactive({
-  examId: undefined as number | undefined,
-  examSubjectId: undefined as number | undefined,
+  examId: undefined as string | number | undefined,
+  examSubjectId: undefined as string | number | undefined,
 })
 
 const uploadFormRules: FormRules = {
@@ -460,9 +461,9 @@ const resolveLoading = ref(false)
 const rerunLoading = ref(false)
 const resolveImages = ref<AnswerSheetImage[]>([])
 const resolveForm = reactive({
-  id: undefined as number | undefined,
-  examId: undefined as number | undefined,
-  examSubjectId: undefined as number | undefined,
+  id: undefined as Id | undefined,
+  examId: undefined as string | number | undefined,
+  examSubjectId: undefined as string | number | undefined,
   studentNumber: '',
   seatNumber: '',
   remark: '',
@@ -518,7 +519,7 @@ const loadExamList = async () => {
   examList.value = res.data.list
 }
 
-const loadSubjectListByExam = async (examId?: number) => {
+const loadSubjectListByExam = async (examId?: string | number) => {
   subjectList.value = []
   if (!examId) {
     return
@@ -535,7 +536,7 @@ const handleExamChange = async (examId: number) => {
 }
 
 // 处理上传对话框考试变化
-const handleUploadExamChange = async (examId: number) => {
+const handleUploadExamChange = async (examId: string | number) => {
   uploadForm.examSubjectId = undefined
   uploadSubjectList.value = []
   if (examId) {
@@ -832,14 +833,14 @@ const handleBatchDelete = async () => {
 }
 
 const syncRouteExam = async () => {
-  const routeExamId = Number(route.query.examId)
-  const routeExamSubjectId = Number(route.query.examSubjectId)
+  const routeExamId = typeof route.query.examId === 'string' ? route.query.examId : undefined
+  const routeExamSubjectId = typeof route.query.examSubjectId === 'string' ? route.query.examSubjectId : undefined
   const routeStatus = Number(route.query.status)
   queryParams.status = Number.isFinite(routeStatus) && routeStatus >= 0 ? routeStatus : undefined
-  if (Number.isFinite(routeExamId) && routeExamId > 0) {
+  if (routeExamId && /^\d+$/.test(routeExamId)) {
     queryParams.examId = routeExamId
     await loadSubjectListByExam(routeExamId)
-    queryParams.examSubjectId = Number.isFinite(routeExamSubjectId) && routeExamSubjectId > 0
+    queryParams.examSubjectId = routeExamSubjectId && /^\d+$/.test(routeExamSubjectId)
       ? routeExamSubjectId
       : undefined
     await fetchData()

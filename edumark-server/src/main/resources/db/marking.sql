@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS `marking_task` (
     `enable_double_marking` TINYINT NOT NULL DEFAULT 0 COMMENT '是否启用双评: 0-否 1-是',
     `double_marking_threshold` INT DEFAULT NULL COMMENT '双评阈值',
     `status` TINYINT NOT NULL DEFAULT 0 COMMENT '状态: 0-未开始 1-进行中 2-已完成',
+    `access_code` VARCHAR(8) DEFAULT NULL COMMENT '阅卷码(8位数字)',
+    `second_access_code` VARCHAR(8) DEFAULT NULL COMMENT '二评阅卷码(8位数字)',
+    `access_code_expire_time` DATETIME DEFAULT NULL COMMENT '阅卷码过期时间',
     `start_time` DATETIME DEFAULT NULL COMMENT '开始时间',
     `end_time` DATETIME DEFAULT NULL COMMENT '结束时间',
     `remark` VARCHAR(500) DEFAULT NULL COMMENT '备注',
@@ -26,7 +29,9 @@ CREATE TABLE IF NOT EXISTS `marking_task` (
     KEY `idx_exam_id` (`exam_id`),
     KEY `idx_exam_subject_id` (`exam_subject_id`),
     KEY `idx_question_id` (`question_id`),
-    KEY `idx_status` (`status`)
+    KEY `idx_status` (`status`),
+    UNIQUE KEY `uk_access_code` (`access_code`),
+    UNIQUE KEY `uk_second_access_code` (`second_access_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='阅卷任务表';
 
 -- 阅卷任务分配表
@@ -61,6 +66,7 @@ CREATE TABLE IF NOT EXISTS `marking_record` (
     `comment` VARCHAR(500) DEFAULT NULL COMMENT '评语',
     `marking_time` DATETIME DEFAULT NULL COMMENT '阅卷时间',
     `status` TINYINT NOT NULL DEFAULT 0 COMMENT '状态: 0-待评 1-已评 2-待仲裁 3-仲裁完成',
+    `skip_count` INT NOT NULL DEFAULT 0 COMMENT '跳过次数',
     `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '是否删除',
@@ -68,7 +74,8 @@ CREATE TABLE IF NOT EXISTS `marking_record` (
     KEY `idx_task_id` (`task_id`),
     KEY `idx_answer_sheet_id` (`answer_sheet_id`),
     KEY `idx_teacher_id` (`teacher_id`),
-    KEY `idx_status` (`status`)
+    KEY `idx_status` (`status`),
+    KEY `idx_skip_count` (`skip_count`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='阅卷记录表';
 
 -- 阅卷仲裁表
@@ -115,3 +122,17 @@ CREATE TABLE IF NOT EXISTS `answer_sheet_detail` (
     KEY `idx_question_id` (`question_id`),
     UNIQUE KEY `uk_sheet_question` (`answer_sheet_id`, `question_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='答题卡明细表';
+
+-- 阅卷会话表
+CREATE TABLE IF NOT EXISTS `marking_session` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    `task_id` BIGINT NOT NULL COMMENT '阅卷任务ID',
+    `access_code` VARCHAR(8) NOT NULL COMMENT '使用的阅卷码',
+    `marking_role` TINYINT NOT NULL DEFAULT 1 COMMENT '评阅角色: 1-一评 2-二评',
+    `session_token` VARCHAR(64) NOT NULL COMMENT '会话令牌',
+    `expire_time` DATETIME NOT NULL COMMENT '过期时间',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX `idx_session_token` (`session_token`),
+    INDEX `idx_task_access` (`task_id`, `access_code`),
+    INDEX `idx_task_role` (`task_id`, `marking_role`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='阅卷会话表';

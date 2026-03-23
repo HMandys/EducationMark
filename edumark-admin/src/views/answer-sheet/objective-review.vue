@@ -209,11 +209,11 @@ const recognizing = ref(false)
 
 const answerSheet = ref<AnswerSheet | null>(null)
 const objectiveQuestions = ref<AnswerSheetQuestionDetail[]>([])
-const currentQuestionId = ref<number>()
+const currentQuestionId = ref<string | number>()
 const previewUrl = ref('')
 const draftAnswer = ref('')
 
-const answerSheetId = computed(() => Number(route.params.id))
+const answerSheetId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
 
 const currentQuestion = computed(() =>
   objectiveQuestions.value.find((item) => item.questionId === currentQuestionId.value) || null
@@ -247,7 +247,7 @@ const currentOptions = computed(() => {
 })
 
 const loadPage = async () => {
-  if (!Number.isFinite(answerSheetId.value) || answerSheetId.value <= 0) {
+  if (!/^\d+$/.test(answerSheetId.value)) {
     ElMessage.error('答题卡参数无效')
     goBack()
     return

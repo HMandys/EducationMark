@@ -334,8 +334,8 @@ const router = useRouter()
 const queryForm = reactive({
   pageNum: 1,
   pageSize: 20,
-  examId: undefined as number | undefined,
-  examSubjectId: undefined as number | undefined,
+  examId: undefined as string | number | undefined,
+  examSubjectId: undefined as string | number | undefined,
   classId: undefined as number | undefined,
   studentName: '',
   studentNumber: '',
@@ -378,7 +378,7 @@ const loadExamList = async () => {
   }
 }
 
-const ensureExamInList = async (examId: number) => {
+const ensureExamInList = async (examId: string | number) => {
   if (examList.value.some((item) => item.id === examId)) {
     return
   }
@@ -637,8 +637,8 @@ watch([() => viewMode.value, () => queryForm.examSubjectId, () => queryForm.clas
 const syncRouteState = async () => {
   viewMode.value = route.query.viewMode === 'statistics' ? 'statistics' : 'score'
 
-  const routeExamId = Number(route.query.examId)
-  if (Number.isFinite(routeExamId) && routeExamId > 0) {
+  const routeExamId = typeof route.query.examId === 'string' ? route.query.examId : undefined
+  if (routeExamId && /^\d+$/.test(routeExamId)) {
     queryForm.examId = routeExamId
     await ensureExamInList(routeExamId)
     await handleExamChange()

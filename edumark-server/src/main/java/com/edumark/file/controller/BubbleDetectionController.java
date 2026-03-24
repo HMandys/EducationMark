@@ -34,11 +34,12 @@ public class BubbleDetectionController {
             @Parameter(description = "起始题号") @RequestParam int questionStart,
             @Parameter(description = "结束题号") @RequestParam int questionEnd,
             @Parameter(description = "每题选项数") @RequestParam(defaultValue = "4") int optionCount,
-            @Parameter(description = "每行题数") @RequestParam(defaultValue = "5") int questionsPerRow) {
+            @Parameter(description = "每组题数") @RequestParam(defaultValue = "5") int questionsPerRow,
+            @Parameter(description = "布局方向: row=横向, column=纵向") @RequestParam(defaultValue = "column") String layoutDirection) {
 
         return Result.success(bubbleDetectionService.detectBubbles(
                 file, boxX, boxY, boxWidth, boxHeight,
-                questionStart, questionEnd, optionCount, questionsPerRow));
+                questionStart, questionEnd, optionCount, questionsPerRow, layoutDirection));
     }
 
     @Operation(summary = "检测已上传图片中的客观题气泡")
@@ -52,10 +53,11 @@ public class BubbleDetectionController {
             @Parameter(description = "起始题号") @RequestParam int questionStart,
             @Parameter(description = "结束题号") @RequestParam int questionEnd,
             @Parameter(description = "每题选项数") @RequestParam(defaultValue = "4") int optionCount,
-            @Parameter(description = "每行题数") @RequestParam(defaultValue = "5") int questionsPerRow) {
+            @Parameter(description = "每组题数") @RequestParam(defaultValue = "5") int questionsPerRow,
+            @Parameter(description = "布局方向: row=横向, column=纵向") @RequestParam(defaultValue = "column") String layoutDirection) {
 
         return Result.success(bubbleDetectionService.detectBubbles(
                 imagePath, boxX, boxY, boxWidth, boxHeight,
-                questionStart, questionEnd, optionCount, questionsPerRow));
+                questionStart, questionEnd, optionCount, questionsPerRow, layoutDirection));
     }
 }

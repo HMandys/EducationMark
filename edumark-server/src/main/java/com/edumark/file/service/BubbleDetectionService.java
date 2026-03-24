@@ -23,14 +23,15 @@ public interface BubbleDetectionService {
      * @param questionStart 起始题号
      * @param questionEnd 结束题号
      * @param optionCount 每题选项数
-     * @param questionsPerRow 每行题数
+     * @param questionsPerRow 每组题数
+     * @param layoutDirection 布局方向: row=横向, column=纵向
      * @return 气泡检测结果
      */
     BubbleDetectionResultVO detectBubbles(
             MultipartFile file,
             double boxX, double boxY, double boxWidth, double boxHeight,
             int questionStart, int questionEnd,
-            int optionCount, int questionsPerRow);
+            int optionCount, int questionsPerRow, String layoutDirection);
 
     /**
      * 检测已存储图片中的选项气泡
@@ -43,14 +44,15 @@ public interface BubbleDetectionService {
      * @param questionStart 起始题号
      * @param questionEnd 结束题号
      * @param optionCount 每题选项数
-     * @param questionsPerRow 每行题数
+     * @param questionsPerRow 每组题数
+     * @param layoutDirection 布局方向: row=横向, column=纵向
      * @return 气泡检测结果
      */
     BubbleDetectionResultVO detectBubbles(
             String imagePath,
             double boxX, double boxY, double boxWidth, double boxHeight,
             int questionStart, int questionEnd,
-            int optionCount, int questionsPerRow);
+            int optionCount, int questionsPerRow, String layoutDirection);
 
     /**
      * 检测BufferedImage中的选项气泡
@@ -63,12 +65,13 @@ public interface BubbleDetectionService {
      * @param questionStart 起始题号
      * @param questionEnd 结束题号
      * @param optionCount 每题选项数
-     * @param questionsPerRow 每行题数
+     * @param questionsPerRow 每组题数
+     * @param layoutDirection 布局方向: row=横向, column=纵向
      * @return 气泡检测结果
      */
     BubbleDetectionResultVO detectBubbles(
             BufferedImage image,
             double boxX, double boxY, double boxWidth, double boxHeight,
             int questionStart, int questionEnd,
-            int optionCount, int questionsPerRow);
+            int optionCount, int questionsPerRow, String layoutDirection);
 }

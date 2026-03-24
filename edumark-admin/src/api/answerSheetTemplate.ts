@@ -89,6 +89,7 @@ export interface RegionConfig {
   // 选择题配置
   optionCount?: number
   questionsPerRow?: number
+  layoutDirection?: 'row' | 'column' // 布局方向：row=横向排列，column=纵向排列
   bubbleStyle?: 'circle' | 'square'
   hasMultipleChoice?: boolean
   bubbleMap?: BubbleMapItem[]
@@ -246,7 +247,9 @@ export function getTemplateImageUrl(id: Id) {
 export function detectCorners(file: File) {
   const formData = new FormData()
   formData.append('file', file)
-  return request.post<CornerDetectionResult>('/corner-detection/detect', formData)
+  return request.post<CornerDetectionResult>('/corner-detection/detect', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
 }
 
 // 检测四角定位点(已上传图片)
@@ -275,11 +278,15 @@ export function detectBubbles(
     questionEnd: number
     optionCount?: number
     questionsPerRow?: number
+    layoutDirection?: 'row' | 'column'
   },
 ) {
   const formData = new FormData()
   formData.append('file', file)
-  return request.post<BubbleDetectionResult>('/bubble-detection/detect', formData, { params })
+  return request.post<BubbleDetectionResult>('/bubble-detection/detect', formData, {
+    params,
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
 }
 
 // 检测气泡(已上传图片)
@@ -294,6 +301,7 @@ export function detectBubblesByPath(
     questionEnd: number
     optionCount?: number
     questionsPerRow?: number
+    layoutDirection?: 'row' | 'column'
   },
 ) {
   return request.get<BubbleDetectionResult>('/bubble-detection/detect', {

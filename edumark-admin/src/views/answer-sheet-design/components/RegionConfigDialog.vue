@@ -142,20 +142,52 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="每行题数">
-              <el-input-number v-model="formData.config!.questionsPerRow" :min="1" :max="10" />
+            <el-form-item label="每组题数">
+              <el-input-number v-model="formData.config!.questionsPerRow" :min="1" :max="20" />
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="涂卡样式">
-          <el-radio-group v-model="formData.config!.bubbleStyle">
-            <el-radio value="circle">圆形</el-radio>
-            <el-radio value="square">方形</el-radio>
-          </el-radio-group>
-        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="布局方向">
+              <el-radio-group v-model="formData.config!.layoutDirection">
+                <el-radio value="column">纵向(1,2,3竖排)</el-radio>
+                <el-radio value="row">横向(1,2,3横排)</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="涂卡样式">
+              <el-radio-group v-model="formData.config!.bubbleStyle">
+                <el-radio value="circle">圆形</el-radio>
+                <el-radio value="square">方形</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="包含多选">
           <el-switch v-model="formData.config!.hasMultipleChoice" />
         </el-form-item>
+
+        <el-divider content-position="left">选项位置检测</el-divider>
+        <div class="detect-section">
+          <div class="detect-tip">
+            填写题号范围后，点击自动检测，系统将识别每道题的 ABCD 选项位置
+          </div>
+          <div class="detect-actions">
+            <el-button
+              type="primary"
+              @click="handleDetectBubbles"
+              :loading="detectingBubbles"
+              :disabled="!formData.questionStart || !formData.questionEnd"
+            >
+              自动检测选项位置
+            </el-button>
+            <span v-if="formData.config?.bubbleMap?.length" class="detect-result">
+              已检测到 {{ formData.config.bubbleMap.length }} 个选项
+            </span>
+          </div>
+        </div>
 
         <el-divider content-position="left">正确答案配置</el-divider>
         <div class="answer-config-section">
@@ -280,7 +312,23 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   confirm: [region: AnswerSheetRegion]
+  'detect-bubbles': [region: AnswerSheetRegion, callback: (result: BubbleDetectResult | null) => void]
 }>()
+
+interface BubbleDetectResult {
+  bubbleMap: Array<{
+    questionNo: number
+    option: string
+    x: number
+    y: number
+    width: number
+    height: number
+  }>
+  detectedCount: number
+  expectedCount: number
+}
+
+const detectingBubbles = ref(false)
 
 // 检查坐标是否已填充（用于视觉提示）
 const hasCoordinates = computed(() => {
@@ -358,7 +406,8 @@ const getDefaultConfig = (type: number): RegionConfig => {
         ...base,
         optionCount: 4,
         questionsPerRow: 5,
-        bubbleStyle: 'circle',
+        layoutDirection: 'column', // 默认纵向布局（更常见）
+        bubbleStyle: 'square',
         hasMultipleChoice: false,
       }
     case 2:
@@ -586,6 +635,23 @@ const validateQuestionRange = () => {
   if (formData.questionStart > formData.questionEnd) {
     throw new Error('结束题号不能小于起始题号')
   }
+}
+
+const handleDetectBubbles = () => {
+  detectingBubbles.value = true
+
+  emit('detect-bubbles', cloneRegion(formData), (result) => {
+    detectingBubbles.value = false
+
+    if (result && result.bubbleMap) {
+      if (!formData.config) {
+        formData.config = {}
+      }
+      formData.config.bubbleMap = result.bubbleMap
+      formData.config.detectedBubbleCount = result.detectedCount
+      formData.config.expectedBubbleCount = result.expectedCount
+    }
+  })
 }
 
 const handleConfirm = async () => {

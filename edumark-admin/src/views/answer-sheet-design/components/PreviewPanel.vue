@@ -23,16 +23,29 @@
     <div
       ref="pageRef"
       class="preview-panel"
-      :class="{ 'is-draw-mode': drawMode }"
-      :style="pageStyle"
+      :class="{ 'is-draw-mode': drawMode, 'is-image-only': imageOnlyMode }"
+      :style="panelStyle"
       @click="handleBlankClick"
       @mousedown="handleDrawStart"
     >
-      <div v-if="sampleImageVisible && sampleImageUrl" class="sample-image-layer" :style="{ opacity: sampleImageOpacity }">
+      <!-- 图片模式：直接显示上传的答题卡图片 -->
+      <div v-if="imageOnlyMode && sampleImageUrl" class="template-image-layer">
+        <img
+          :src="sampleImageUrl"
+          alt="答题卡模板"
+          class="template-image"
+          draggable="false"
+          @load="handleTemplateImageLoad"
+          @dragstart.prevent
+        />
+      </div>
+
+      <!-- 样张叠加模式（传统模式） -->
+      <div v-else-if="sampleImageVisible && sampleImageUrl" class="sample-image-layer" :style="{ opacity: sampleImageOpacity }">
         <img :src="sampleImageUrl" alt="答题卡样张" class="sample-image" />
       </div>
 
-      <div class="preview-base">
+      <div class="preview-base" v-if="!imageOnlyMode">
         <div class="preview-header" v-if="template.headerConfig?.showTitle">
           <h2 class="preview-title">{{ template.headerConfig.title || template.name }}</h2>
           <p class="preview-subtitle" v-if="template.examName || template.subjectName">
@@ -231,9 +244,10 @@
             class="bubble-box"
             :class="{ 'is-selected-region': selectedRegionIndex === regionIndex }"
             :style="getBubbleStyle(bubble)"
+            :title="`第${bubble.questionNo}题 选项${bubble.option}`"
             @click.stop="handleSelect(regionIndex)"
           >
-            {{ bubble.option }}
+            <span class="bubble-label">{{ bubble.questionNo }}-{{ bubble.option }}</span>
           </div>
         </template>
       </div>
@@ -266,6 +280,7 @@ const props = withDefaults(defineProps<{
   sampleImageVisible?: boolean
   sampleImageOpacity?: number
   drawMode?: boolean
+  imageOnlyMode?: boolean // 纯图片模式：只显示上传的图片，不显示生成的预览
 }>(), {
   editable: false,
   selectedRegionIndex: -1,
@@ -273,6 +288,7 @@ const props = withDefaults(defineProps<{
   sampleImageVisible: false,
   sampleImageOpacity: 0.35,
   drawMode: false,
+  imageOnlyMode: false,
 })
 
 const emit = defineEmits<{
@@ -283,6 +299,7 @@ const emit = defineEmits<{
 
 const pageRef = ref<HTMLDivElement>()
 const activeInteraction = ref<ActiveInteraction | null>(null)
+const templateImageSize = ref({ width: 0, height: 0 })
 
 // 拉框绘制状态
 const drawingState = ref({
@@ -330,6 +347,31 @@ const pageStyle = computed(() => {
     padding: `${((props.template.marginTop || 20) * scale) / 3}px ${((props.template.marginRight || 15) * scale) / 3}px ${((props.template.marginBottom || 20) * scale) / 3}px ${((props.template.marginLeft || 15) * scale) / 3}px`,
   }
 })
+
+// 图片模式下的面板样式
+const panelStyle = computed(() => {
+  if (props.imageOnlyMode && templateImageSize.value.width > 0) {
+    // 限制最大宽度，保持比例
+    const maxWidth = 800
+    const ratio = templateImageSize.value.height / templateImageSize.value.width
+    const displayWidth = Math.min(templateImageSize.value.width, maxWidth)
+    const displayHeight = displayWidth * ratio
+    return {
+      width: `${displayWidth}px`,
+      height: `${displayHeight}px`,
+      padding: '0',
+    }
+  }
+  return pageStyle.value
+})
+
+const handleTemplateImageLoad = (event: Event) => {
+  const img = event.target as HTMLImageElement
+  templateImageSize.value = {
+    width: img.naturalWidth,
+    height: img.naturalHeight,
+  }
+}
 
 const showStudentInfo = computed(() => {
   const config = props.template.studentInfoConfig
@@ -660,6 +702,27 @@ onBeforeUnmount(() => {
   object-fit: fill;
 }
 
+/* 图片模式 */
+.preview-panel.is-image-only {
+  padding: 0 !important;
+}
+
+.template-image-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.template-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
 .preview-base {
   position: relative;
   z-index: 1;
@@ -718,17 +781,27 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(16, 185, 129, 0.95);
-  background: rgba(16, 185, 129, 0.18);
-  color: #047857;
-  font-size: 10px;
-  font-weight: 700;
+  border: 2px solid rgba(16, 185, 129, 0.95);
+  background: rgba(16, 185, 129, 0.25);
   pointer-events: auto;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.bubble-box .bubble-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #047857;
+  white-space: nowrap;
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff;
 }
 
 .bubble-box.is-selected-region {
   border-color: rgba(220, 38, 38, 0.95);
-  background: rgba(220, 38, 38, 0.14);
+  background: rgba(220, 38, 38, 0.2);
+}
+
+.bubble-box.is-selected-region .bubble-label {
   color: #b91c1c;
 }
 

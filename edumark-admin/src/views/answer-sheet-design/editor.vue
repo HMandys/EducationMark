@@ -200,6 +200,7 @@
             :sample-image-visible="sampleImageVisible"
             :sample-image-opacity="sampleImageOpacity / 100"
             :draw-mode="drawMode"
+            :image-only-mode="hasTemplateImage"
             @select-region="handleSelectRegion"
             @update-region="handlePreviewRegionUpdate"
             @create-region="handleCreateRegion"
@@ -213,6 +214,7 @@
       v-model:visible="regionDialogVisible"
       :region="currentRegion"
       @confirm="handleRegionConfirm"
+      @detect-bubbles="handleDetectBubblesFromDialog"
     />
 
     <TemplateValidationDialog
@@ -245,6 +247,7 @@ import {
   uploadTemplateImage,
   saveCornerConfig,
   detectCorners,
+  detectBubbles,
   type AnswerSheetTemplate,
   type AnswerSheetRegion,
   type BubbleMapItem,
@@ -308,6 +311,11 @@ const templateImageUploading = ref(false)
 const cornerDetecting = ref(false)
 const cornerConfig = ref<CornerConfig>({})
 const showCornerPanel = ref(false)
+
+// 是否有模板图片（本地上传的或已保存的）
+const hasTemplateImage = computed(() => {
+  return !!(templateImageUrl.value || templateForm.templateImageUrl)
+})
 
 const cloneRegion = (region: AnswerSheetRegion): AnswerSheetRegion => ({
   ...region,
@@ -439,10 +447,7 @@ const handleSave = async () => {
     ElMessage.warning('请输入模板名称')
     return
   }
-  if (!templateForm.paperId) {
-    ElMessage.warning('请关联试卷')
-    return
-  }
+  // paperId 非必填，允许独立设计答题卡模板
 
   saveLoading.value = true
   try {
@@ -576,13 +581,14 @@ const handlePreviewRegionUpdate = ({ index, region }: { index: number; region: A
 
 // 处理拉框创建区域
 const handleCreateRegion = (bounds: { boxX: number; boxY: number; boxWidth: number; boxHeight: number }) => {
+  // 创建新区域，让用户填写题号范围
   currentRegion.value = {
     regionType: 1,
-    regionName: `新区域 ${(templateForm.regions?.length || 0) + 1}`,
+    regionName: `选择题区域`,
     pageNo: 1,
     sortOrder: templateForm.regions?.length || 0,
-    questionStart: 1,
-    questionEnd: 10,
+    questionStart: undefined,
+    questionEnd: undefined,
     config: {
       ...bounds,
       regionRole: 'choice_block',
@@ -590,13 +596,74 @@ const handleCreateRegion = (bounds: { boxX: number; boxY: number; boxWidth: numb
       cropMode: 'range-question',
       optionCount: 4,
       questionsPerRow: 5,
+      bubbleStyle: 'square',
     },
   }
+
   editingRegionIndex.value = -1
   regionDialogVisible.value = true
-  drawMode.value = false // 自动退出拉框模式
+  drawMode.value = false
   selectedRegionIndex.value = -1
 }
+
+// 自动检测气泡（供 RegionConfigDialog 调用）
+const handleAutoDetectBubbles = async (region: AnswerSheetRegion) => {
+  if (!templateImageFile.value) {
+    ElMessage.warning('请先上传答题卡图片')
+    return null
+  }
+
+  if (!region.questionStart || !region.questionEnd) {
+    ElMessage.warning('请先填写起始题号和结束题号')
+    return null
+  }
+
+  const config = region.config
+  if (!config?.boxX || !config?.boxY || !config?.boxWidth || !config?.boxHeight) {
+    ElMessage.warning('区域坐标不完整')
+    return null
+  }
+
+  ElMessage.info('正在自动检测选项位置...')
+
+  try {
+    const result = await detectBubbles(templateImageFile.value, {
+      boxX: config.boxX,
+      boxY: config.boxY,
+      boxWidth: config.boxWidth,
+      boxHeight: config.boxHeight,
+      questionStart: region.questionStart,
+      questionEnd: region.questionEnd,
+      optionCount: config.optionCount || 4,
+      questionsPerRow: config.questionsPerRow || 5,
+      layoutDirection: config.layoutDirection || 'column',
+    })
+
+    if (result.data.success && result.data.bubbleMap) {
+      ElMessage.success(`检测到 ${result.data.detectedCount} 个选项位置`)
+      return result.data
+    } else {
+      ElMessage.warning(result.data.errorMessage || '气泡检测失败')
+      return null
+    }
+  } catch (error) {
+    console.error('气泡检测失败', error)
+    ElMessage.error('气泡检测失败')
+    return null
+  }
+}
+
+// 处理弹窗中的气泡检测请求
+const handleDetectBubblesFromDialog = async (
+  region: AnswerSheetRegion,
+  callback: (result: { bubbleMap: BubbleMapItem[]; detectedCount: number; expectedCount: number } | null) => void
+) => {
+  const result = await handleAutoDetectBubbles(region)
+  callback(result)
+}
+
+// 暴露给子组件
+defineExpose({ handleAutoDetectBubbles })
 
 // 拉框模式切换
 const handleDrawModeChange = (enabled: string | number | boolean) => {
@@ -1162,6 +1229,13 @@ const clearDetectedChoiceBubbles = () => {
 
 const runAutoDetectChoiceBubbles = useDebounceFn(async (signature: string) => {
   if (!signature || !canDetectChoiceBubbles.value || signature === lastAutoDetectSignature.value) {
+    return
+  }
+
+  // 如果区域已经有 bubbleMap（可能是从后端检测得到的），就不再自动检测
+  const region = selectedChoiceRegion.value
+  if (region?.config?.bubbleMap?.length) {
+    lastAutoDetectSignature.value = signature
     return
   }
 

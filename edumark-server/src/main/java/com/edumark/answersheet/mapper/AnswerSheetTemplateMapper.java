@@ -30,4 +30,9 @@ public interface AnswerSheetTemplateMapper extends BaseMapper<AnswerSheetTemplat
      * 根据试卷ID查询模板
      */
     AnswerSheetTemplateVO selectVOByPaperId(@Param("paperId") Long paperId);
+
+    /**
+     * 根据考试ID和科目名称查询模板
+     */
+    AnswerSheetTemplateVO selectVOByExamIdAndSubjectName(@Param("examId") Long examId, @Param("subjectName") String subjectName);
 }

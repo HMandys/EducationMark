@@ -29,12 +29,13 @@
     <select id="selectPageVO" resultMap="AnswerSheetTemplateVOMap">
         SELECT t.*,
             p.name AS paper_name,
-            e.name AS exam_name,
-            es.subject_name
+            COALESCE(e.name, e2.name) AS exam_name,
+            COALESCE(es.subject_name, t.subject_name) AS subject_name
         FROM answer_sheet_template t
         LEFT JOIN paper p ON p.id = t.paper_id
         LEFT JOIN exam_subject es ON es.id = p.exam_subject_id
         LEFT JOIN exam e ON e.id = es.exam_id
+        LEFT JOIN exam e2 ON e2.id = t.exam_id
         WHERE t.deleted = 0
         <if test="query.paperId != null">
             AND t.paper_id = #{query.paperId}
@@ -46,10 +47,11 @@
             AND t.status = #{query.status}
         </if>
         <if test="query.examId != null">
-            AND e.id = #{query.examId}
+            AND (e.id = #{query.examId} OR t.exam_id = #{query.examId})
         </if>
         <if test="query.subjectName != null and query.subjectName != ''">
-            AND es.subject_name LIKE CONCAT('%', #{query.subjectName}, '%')
+            AND (es.subject_name LIKE CONCAT('%', #{query.subjectName}, '%')
+                 OR t.subject_name LIKE CONCAT('%', #{query.subjectName}, '%'))
         </if>
         ORDER BY t.create_time DESC
     </select>
@@ -57,12 +59,13 @@
     <select id="selectVOById" resultMap="AnswerSheetTemplateVOMap">
         SELECT t.*,
             p.name AS paper_name,
-            e.name AS exam_name,
-            es.subject_name
+            COALESCE(e.name, e2.name) AS exam_name,
+            COALESCE(es.subject_name, t.subject_name) AS subject_name
         FROM answer_sheet_template t
         LEFT JOIN paper p ON p.id = t.paper_id
         LEFT JOIN exam_subject es ON es.id = p.exam_subject_id
         LEFT JOIN exam e ON e.id = es.exam_id
+        LEFT JOIN exam e2 ON e2.id = t.exam_id
         WHERE t.id = #{id} AND t.deleted = 0
     </select>
 
@@ -76,6 +79,21 @@
         LEFT JOIN exam_subject es ON es.id = p.exam_subject_id
         LEFT JOIN exam e ON e.id = es.exam_id
         WHERE t.paper_id = #{paperId} AND t.deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectVOByExamIdAndSubjectName" resultMap="AnswerSheetTemplateVOMap">
+        SELECT t.*,
+            NULL AS paper_name,
+            e.name AS exam_name,
+            t.subject_name
+        FROM answer_sheet_template t
+        LEFT JOIN exam e ON e.id = t.exam_id
+        WHERE t.exam_id = #{examId}
+          AND t.subject_name = #{subjectName}
+          AND t.deleted = 0
+          AND t.status = 1
+        ORDER BY t.create_time DESC
         LIMIT 1
     </select>
 

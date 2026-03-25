@@ -152,27 +152,26 @@ public class CropServiceImpl implements CropService {
             return result;
         }
 
-        Paper paper = paperMapper.selectByExamSubjectId(answerSheet.getExamSubjectId());
-        if (paper == null) {
-            result.setSuccess(false);
-            result.setErrorMessage("当前科目未关联试卷");
-            return result;
-        }
-
-        AnswerSheetTemplateVO template = answerSheetTemplateService.getByPaperId(paper.getId());
+        // 先尝试获取答题卡模板（支持通过paperId或examId+subjectName）
+        AnswerSheetTemplateVO template = answerSheetTemplateService.getByExamSubjectId(answerSheet.getExamSubjectId());
         if (template == null) {
             result.setSuccess(false);
-            result.setErrorMessage("当前试卷未配置答题卡模板");
+            result.setErrorMessage("当前考试未配置答题卡模板");
             return result;
         }
 
-        List<PaperQuestion> questions = paperQuestionMapper.selectList(
-                new LambdaQueryWrapper<PaperQuestion>()
-                        .eq(PaperQuestion::getPaperId, paper.getId())
-                        .eq(PaperQuestion::getDeleted, 0)
-                        .orderByAsc(PaperQuestion::getSort)
-                        .orderByAsc(PaperQuestion::getId)
-        );
+        // 尝试获取试卷和题目（如果有关联试卷的话）
+        List<PaperQuestion> questions = new ArrayList<>();
+        Paper paper = paperMapper.selectByExamSubjectId(answerSheet.getExamSubjectId());
+        if (paper != null) {
+            questions = paperQuestionMapper.selectList(
+                    new LambdaQueryWrapper<PaperQuestion>()
+                            .eq(PaperQuestion::getPaperId, paper.getId())
+                            .eq(PaperQuestion::getDeleted, 0)
+                            .orderByAsc(PaperQuestion::getSort)
+                            .orderByAsc(PaperQuestion::getId)
+            );
+        }
 
         Map<Long, AnswerSheetDetail> detailMap = loadDetailMap(answerSheetId);
         List<AnswerSheetImageVO> images = answerSheetImageMapper.selectListByAnswerSheetId(answerSheetId);

@@ -367,11 +367,14 @@ const handleCreateSubmit = async () => {
       router.push(`/answer-sheet-design/edit/${id.data}`)
     } else {
       // 手动创建，跳转到编辑页
+      // 获取科目名称
+      const subject = subjectList.value.find((s) => s.id === createForm.subjectId)
       router.push({
-        path: '/answer-sheet-design/edit',
+        path: '/answer-sheet-design/new',
         query: {
           ...(createForm.paperId ? { paperId: String(createForm.paperId) } : {}),
           ...(createForm.examId ? { examId: String(createForm.examId) } : {}),
+          ...(subject ? { subjectName: subject.subjectName } : {}),
         },
       })
       createDialogVisible.value = false

@@ -31,6 +31,12 @@ public interface AnswerSheetTemplateService extends IService<AnswerSheetTemplate
     AnswerSheetTemplateVO getByPaperId(Long paperId);
 
     /**
+     * 根据考试科目ID查询模板
+     * 优先通过 paperId 关联查找，如果找不到则通过 examId + subjectName 查找
+     */
+    AnswerSheetTemplateVO getByExamSubjectId(Long examSubjectId);
+
+    /**
      * 创建模板
      */
     Long create(AnswerSheetTemplateDTO dto);

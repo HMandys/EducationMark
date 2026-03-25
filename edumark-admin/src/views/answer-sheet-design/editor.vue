@@ -268,6 +268,8 @@ const publishLoading = ref(false)
 const templateForm = reactive<Partial<AnswerSheetTemplate>>({
   id: undefined,
   paperId: undefined,
+  examId: undefined,
+  subjectName: undefined,
   name: '答题卡模板',
   pageSize: 'A4',
   orientation: 1,
@@ -1264,6 +1266,7 @@ watch(
 onMounted(async () => {
   const id = route.params.id as string
   const paperId = route.query.paperId as string
+  const subjectName = route.query.subjectName as string
 
   if (id) {
     // 编辑模式
@@ -1280,9 +1283,19 @@ onMounted(async () => {
       sampleImageName.value = '模板图片'
       sampleImageVisible.value = true
     }
-  } else if (paperId) {
-    // 新建模式，关联试卷
-    templateForm.paperId = paperId
+  } else {
+    // 新建模式
+    if (paperId) {
+      templateForm.paperId = paperId
+    }
+    // 设置考试ID
+    if (currentExamId.value) {
+      templateForm.examId = currentExamId.value
+    }
+    if (subjectName) {
+      templateForm.subjectName = subjectName
+      templateForm.name = `${subjectName} - 答题卡`
+    }
   }
 })
 

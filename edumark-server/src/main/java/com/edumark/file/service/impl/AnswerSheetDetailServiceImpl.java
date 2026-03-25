@@ -30,6 +30,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -109,12 +110,25 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             return;
         }
 
+        // 尝试传统模式：从 PaperQuestion 创建明细
         Paper paper = paperMapper.selectByExamSubjectId(answerSheet.getExamSubjectId());
-        if (paper == null) {
+        if (paper != null) {
+            initializeFromPaper(answerSheetId, paper.getId());
             return;
         }
 
-        List<PaperQuestion> questions = loadPaperQuestions(paper.getId());
+        // 独立模式：从模板区域创建明细
+        AnswerSheetTemplateVO template = answerSheetTemplateService.getByExamSubjectId(answerSheet.getExamSubjectId());
+        if (template != null && template.getRegions() != null) {
+            initializeFromTemplate(answerSheetId, template);
+        }
+    }
+
+    /**
+     * 传统模式：从试卷题目创建明细
+     */
+    private void initializeFromPaper(Long answerSheetId, Long paperId) {
+        List<PaperQuestion> questions = loadPaperQuestions(paperId);
         if (questions.isEmpty()) {
             return;
         }
@@ -127,16 +141,97 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             AnswerSheetDetail detail = new AnswerSheetDetail();
             detail.setAnswerSheetId(answerSheetId);
             detail.setQuestionId(question.getId());
+            detail.setQuestionNo(parseQuestionNo(question.getQuestionNo()));
+            detail.setFullScore(question.getScore());
+            detail.setCorrectAnswer(question.getCorrectAnswer());
+            detail.setIsObjective(question.getIsObjective());
             detail.setStatus(DETAIL_STATUS_PENDING);
             detail.setScore(0);
             answerSheetDetailMapper.insert(detail);
         }
     }
 
+    /**
+     * 独立模式：从模板区域创建明细
+     */
+    private void initializeFromTemplate(Long answerSheetId, AnswerSheetTemplateVO template) {
+        // 检查是否已存在明细（通过题号判断）
+        List<AnswerSheetDetail> existingDetails = answerSheetDetailMapper.selectList(
+                new LambdaQueryWrapper<AnswerSheetDetail>()
+                        .eq(AnswerSheetDetail::getAnswerSheetId, answerSheetId)
+        );
+        Set<Integer> existingQuestionNos = existingDetails.stream()
+                .map(AnswerSheetDetail::getQuestionNo)
+                .filter(no -> no != null)
+                .collect(Collectors.toSet());
+
+        for (AnswerSheetRegionVO region : template.getRegions()) {
+            if (region.getQuestionStart() == null || region.getQuestionEnd() == null) {
+                continue;
+            }
+
+            String regionRole = getConfigString(region.getConfig(), "regionRole");
+            boolean isObjective = "choice_block".equals(regionRole);
+
+            // 获取分数配置
+            int scorePerQuestion = getConfigInt(region.getConfig(), "scorePerQuestion", 0);
+            int totalScore = getConfigInt(region.getConfig(), "totalScore", 0);
+            Map<String, String> correctAnswers = getCorrectAnswersMap(region.getConfig());
+
+            int questionCount = region.getQuestionEnd() - region.getQuestionStart() + 1;
+            // 如果是客观题用每题分数，否则用总分平均分配
+            int perQuestionScore = isObjective ? scorePerQuestion :
+                    (questionCount > 0 ? totalScore / questionCount : 0);
+
+            for (int questionNo = region.getQuestionStart(); questionNo <= region.getQuestionEnd(); questionNo++) {
+                if (existingQuestionNos.contains(questionNo)) {
+                    continue;
+                }
+
+                AnswerSheetDetail detail = new AnswerSheetDetail();
+                detail.setAnswerSheetId(answerSheetId);
+                detail.setRegionId(region.getId());
+                detail.setQuestionNo(questionNo);
+                detail.setFullScore(perQuestionScore);
+                detail.setIsObjective(isObjective ? 1 : 0);
+                detail.setCorrectAnswer(correctAnswers.get(String.valueOf(questionNo)));
+                detail.setStatus(DETAIL_STATUS_PENDING);
+                detail.setScore(0);
+                answerSheetDetailMapper.insert(detail);
+                existingQuestionNos.add(questionNo);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, String> getCorrectAnswersMap(Map<String, Object> config) {
+        if (config == null) {
+            return Collections.emptyMap();
+        }
+        Object answers = config.get("correctAnswers");
+        if (answers instanceof Map) {
+            return (Map<String, String>) answers;
+        }
+        return Collections.emptyMap();
+    }
+
+    private int getConfigInt(Map<String, Object> config, String key, int defaultValue) {
+        if (config == null) {
+            return defaultValue;
+        }
+        Object value = config.get(key);
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        return defaultValue;
+    }
+
     @Override
     public List<AnswerSheetQuestionDetailVO> recognizeObjectiveAnswers(Long answerSheetId) {
         AnswerSheetContext context = loadContext(answerSheetId, true);
         Map<String, BufferedImage> imageCache = new HashMap<>();
+
+        boolean isIndependentMode = context.questions().isEmpty();
 
         for (AnswerSheetRegionVO region : context.template().getRegions()) {
             String regionRole = getConfigString(region.getConfig(), "regionRole");
@@ -162,35 +257,44 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             Map<Integer, List<BubbleDefinition>> bubbleMapByQuestionNo = bubbleDefinitions.stream()
                     .collect(Collectors.groupingBy(BubbleDefinition::questionNo, LinkedHashMap::new, Collectors.toList()));
 
-            // 获取区域配置中的正确答案（如果存在）
+            // 获取区域配置中的正确答案
             Map<String, String> regionCorrectAnswers = parseCorrectAnswers(region.getConfig());
+            int scorePerQuestion = getConfigInt(region.getConfig(), "scorePerQuestion", 2);
 
-            for (PaperQuestion question : resolveQuestionsForRegion(region, context.questions())) {
-                if (!isObjectiveQuestion(question)) {
-                    continue;
+            if (isIndependentMode) {
+                // 独立模式：直接从区域配置处理
+                recognizeObjectiveAnswersIndependent(
+                        context.answerSheet().getId(), region, pageImage,
+                        bubbleMapByQuestionNo, regionCorrectAnswers, scorePerQuestion, context.detailMap());
+            } else {
+                // 传统模式：从 PaperQuestion 处理
+                for (PaperQuestion question : resolveQuestionsForRegion(region, context.questions())) {
+                    if (!isObjectiveQuestion(question)) {
+                        continue;
+                    }
+
+                    Integer questionOrderNo = resolveQuestionOrderIndex(question);
+                    if (questionOrderNo == null) {
+                        continue;
+                    }
+
+                    List<BubbleDefinition> questionBubbles = bubbleMapByQuestionNo.get(questionOrderNo);
+                    if (questionBubbles == null || questionBubbles.isEmpty()) {
+                        continue;
+                    }
+
+                    String recognizedAnswer = resolveRecognizedAnswer(question, pageImage, questionBubbles);
+
+                    // 优先使用区域配置中的正确答案进行评分
+                    String correctAnswer = regionCorrectAnswers.get(String.valueOf(questionOrderNo));
+                    if (correctAnswer == null || correctAnswer.isBlank()) {
+                        correctAnswer = question.getCorrectAnswer();
+                    }
+
+                    persistObjectiveAnswerWithCorrectAnswer(
+                            context.answerSheet().getId(), question, context.detailMap(),
+                            recognizedAnswer, correctAnswer, false);
                 }
-
-                Integer questionOrderNo = resolveQuestionOrderIndex(question);
-                if (questionOrderNo == null) {
-                    continue;
-                }
-
-                List<BubbleDefinition> questionBubbles = bubbleMapByQuestionNo.get(questionOrderNo);
-                if (questionBubbles == null || questionBubbles.isEmpty()) {
-                    continue;
-                }
-
-                String recognizedAnswer = resolveRecognizedAnswer(question, pageImage, questionBubbles);
-
-                // 优先使用区域配置中的正确答案进行评分
-                String correctAnswer = regionCorrectAnswers.get(String.valueOf(questionOrderNo));
-                if (correctAnswer == null || correctAnswer.isBlank()) {
-                    correctAnswer = question.getCorrectAnswer();
-                }
-
-                persistObjectiveAnswerWithCorrectAnswer(
-                        context.answerSheet().getId(), question, context.detailMap(),
-                        recognizedAnswer, correctAnswer, false);
             }
         }
 
@@ -200,6 +304,115 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         tryAutoCompleteAnswerSheet(context.answerSheet());
 
         return listQuestionDetails(answerSheetId);
+    }
+
+    /**
+     * 独立模式：识别客观题答案
+     */
+    private void recognizeObjectiveAnswersIndependent(
+            Long answerSheetId,
+            AnswerSheetRegionVO region,
+            BufferedImage pageImage,
+            Map<Integer, List<BubbleDefinition>> bubbleMapByQuestionNo,
+            Map<String, String> correctAnswers,
+            int scorePerQuestion,
+            Map<Long, AnswerSheetDetail> detailMap) {
+
+        if (region.getQuestionStart() == null || region.getQuestionEnd() == null) {
+            return;
+        }
+
+        for (int questionNo = region.getQuestionStart(); questionNo <= region.getQuestionEnd(); questionNo++) {
+            List<BubbleDefinition> questionBubbles = bubbleMapByQuestionNo.get(questionNo);
+            if (questionBubbles == null || questionBubbles.isEmpty()) {
+                continue;
+            }
+
+            // 识别学生答案
+            String recognizedAnswer = recognizeAnswerFromBubbles(pageImage, questionBubbles);
+
+            // 获取正确答案
+            String correctAnswer = correctAnswers.get(String.valueOf(questionNo));
+
+            // 获取或创建明细
+            AnswerSheetDetail detail = getDetailByQuestionNo(detailMap, questionNo);
+            if (detail == null) {
+                continue;
+            }
+
+            // 评分
+            boolean isCorrect = correctAnswer != null && !correctAnswer.isBlank()
+                    && normalizeAnswer(recognizedAnswer).equals(normalizeAnswer(correctAnswer));
+            int score = isCorrect ? (detail.getFullScore() != null ? detail.getFullScore() : scorePerQuestion) : 0;
+
+            // 更新明细
+            detail.setStudentAnswer(recognizedAnswer);
+            detail.setScore(score);
+            detail.setStatus(DETAIL_STATUS_COMPLETED);
+            answerSheetDetailMapper.updateById(detail);
+        }
+    }
+
+    /**
+     * 从气泡图识别答案
+     */
+    private String recognizeAnswerFromBubbles(BufferedImage pageImage, List<BubbleDefinition> bubbles) {
+        StringBuilder answer = new StringBuilder();
+        for (BubbleDefinition bubble : bubbles) {
+            if (isBubbleFilled(pageImage, bubble)) {
+                answer.append(bubble.option());
+            }
+        }
+        return answer.toString();
+    }
+
+    /**
+     * 检测气泡是否被填涂
+     */
+    private boolean isBubbleFilled(BufferedImage image, BubbleDefinition bubble) {
+        int x = (int) (bubble.x() * image.getWidth() / 100.0);
+        int y = (int) (bubble.y() * image.getHeight() / 100.0);
+        int w = (int) (bubble.width() * image.getWidth() / 100.0);
+        int h = (int) (bubble.height() * image.getHeight() / 100.0);
+
+        // 边界检查
+        x = Math.max(0, Math.min(x, image.getWidth() - 1));
+        y = Math.max(0, Math.min(y, image.getHeight() - 1));
+        w = Math.min(w, image.getWidth() - x);
+        h = Math.min(h, image.getHeight() - y);
+
+        if (w <= 0 || h <= 0) {
+            return false;
+        }
+
+        // 统计黑色像素比例
+        int blackPixels = 0;
+        int totalPixels = w * h;
+
+        for (int py = y; py < y + h; py++) {
+            for (int px = x; px < x + w; px++) {
+                int rgb = image.getRGB(px, py);
+                int gray = ((rgb >> 16) & 0xFF) * 30 + ((rgb >> 8) & 0xFF) * 59 + (rgb & 0xFF) * 11;
+                gray /= 100;
+                if (gray < 128) {
+                    blackPixels++;
+                }
+            }
+        }
+
+        double fillRate = (double) blackPixels / totalPixels;
+        return fillRate > 0.3; // 填涂率超过30%认为被选中
+    }
+
+    private Integer parseQuestionNo(String questionNo) {
+        if (questionNo == null || questionNo.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(questionNo.replaceAll("[^0-9]", ""));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**
@@ -213,9 +426,16 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
         AnswerSheetContext context = loadContext(answerSheet.getId(), false);
 
-        // 检查是否有主观题
-        boolean hasSubjectiveQuestions = context.questions().stream()
-                .anyMatch(q -> !isObjectiveQuestion(q));
+        boolean hasSubjectiveQuestions;
+        if (context.questions().isEmpty()) {
+            // 独立模式：从 detailMap 检查是否有主观题
+            hasSubjectiveQuestions = context.detailMap().values().stream()
+                    .anyMatch(d -> d.getIsObjective() == null || d.getIsObjective() != 1);
+        } else {
+            // 传统模式：从 questions 检查
+            hasSubjectiveQuestions = context.questions().stream()
+                    .anyMatch(q -> !isObjectiveQuestion(q));
+        }
 
         if (hasSubjectiveQuestions) {
             // 有主观题，需要等待人工阅卷，不自动完成
@@ -238,11 +458,87 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         AnswerSheetContext context = loadContext(answerSheetId, true);
         List<AnswerSheetQuestionDetailVO> result = new ArrayList<>();
 
-        for (PaperQuestion question : context.questions()) {
-            result.add(buildQuestionDetailVO(context, question));
+        if (context.questions().isEmpty()) {
+            // 独立模式：从 detailMap 构建结果
+            List<AnswerSheetDetail> details = context.detailMap().values().stream()
+                    .filter(d -> d.getQuestionNo() != null)
+                    .sorted(Comparator.comparing(AnswerSheetDetail::getQuestionNo))
+                    .toList();
+
+            for (AnswerSheetDetail detail : details) {
+                result.add(buildQuestionDetailVOFromDetail(context, detail));
+            }
+        } else {
+            // 传统模式：从 questions 构建
+            for (PaperQuestion question : context.questions()) {
+                result.add(buildQuestionDetailVO(context, question));
+            }
         }
 
         return result;
+    }
+
+    /**
+     * 独立模式：从明细构建 VO
+     */
+    private AnswerSheetQuestionDetailVO buildQuestionDetailVOFromDetail(AnswerSheetContext context, AnswerSheetDetail detail) {
+        AnswerSheetQuestionDetailVO vo = new AnswerSheetQuestionDetailVO();
+        vo.setId(detail.getId());
+        vo.setAnswerSheetId(detail.getAnswerSheetId());
+        vo.setQuestionNo(detail.getQuestionNo() != null ? String.valueOf(detail.getQuestionNo()) : null);
+        vo.setFullScore(detail.getFullScore() != null ? detail.getFullScore() : 0);
+        vo.setCorrectAnswer(detail.getCorrectAnswer());
+        vo.setIsObjective(detail.getIsObjective());
+        vo.setStudentAnswer(detail.getStudentAnswer());
+        vo.setScore(detail.getScore() != null ? detail.getScore() : 0);
+        vo.setStatus(detail.getStatus() != null ? detail.getStatus() : 0);
+        vo.setStatusName(getDetailStatusName(detail.getStatus()));
+
+        // 查找区域信息
+        if (detail.getRegionId() != null && context.template().getRegions() != null) {
+            for (AnswerSheetRegionVO region : context.template().getRegions()) {
+                if (region.getId().equals(detail.getRegionId())) {
+                    String role = getConfigString(region.getConfig(), "regionRole");
+                    vo.setRegionRole(role);
+                    vo.setRegionRoleName(getRegionRoleName(role));
+                    vo.setCropMode(getConfigString(region.getConfig(), "cropMode"));
+                    vo.setPageNo(region.getPageNo());
+                    if ("choice_block".equals(role)) {
+                        vo.setOptionCount(getConfigInt(region.getConfig(), "optionCount", 4));
+                    }
+                    break;
+                }
+            }
+        }
+
+        vo.setPreviewAvailable(vo.getRegionRole() != null && !"choice_block".equals(vo.getRegionRole()));
+        return vo;
+    }
+
+    private String getDetailStatusName(Integer status) {
+        if (status == null) return "待处理";
+        return switch (status) {
+            case 0 -> "待处理";
+            case 1 -> "已评分";
+            case 2 -> "已核验";
+            case 3 -> "待修正";
+            default -> "未知";
+        };
+    }
+
+    private String getRegionRoleName(String role) {
+        if (role == null) return "未知";
+        return switch (role) {
+            case "choice_block" -> "客观题涂卡区";
+            case "subjective_crop" -> "主观题裁题区";
+            case "essay_crop" -> "作文裁题区";
+            case "score_box" -> "评分框";
+            case "student_id" -> "学号识别区";
+            case "student_name" -> "姓名识别区";
+            case "class_name" -> "班级识别区";
+            case "barcode" -> "条码区";
+            default -> role;
+        };
     }
 
     @Override
@@ -470,31 +766,62 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             initializeQuestionDetails(answerSheetId);
         }
 
-        Paper paper = paperMapper.selectByExamSubjectId(answerSheet.getExamSubjectId());
-        if (paper == null) {
-            throw new BusinessException("当前科目未关联试卷");
+        // 先尝试获取答题卡模板（支持通过paperId或examId+subjectName）
+        AnswerSheetTemplateVO template = answerSheetTemplateService.getByExamSubjectId(answerSheet.getExamSubjectId());
+        if (template == null) {
+            throw new BusinessException("当前考试未配置答题卡模板");
         }
 
-        List<PaperQuestion> questions = loadPaperQuestions(paper.getId());
-        Map<Long, PaperQuestion> questionMap = questions.stream()
-                .collect(Collectors.toMap(PaperQuestion::getId, question -> question, (left, right) -> left, LinkedHashMap::new));
+        // 尝试获取试卷和题目（如果有关联试卷的话）
+        List<PaperQuestion> questions = new ArrayList<>();
+        Map<Long, PaperQuestion> questionMap = new LinkedHashMap<>();
+        Paper paper = paperMapper.selectByExamSubjectId(answerSheet.getExamSubjectId());
+        if (paper != null) {
+            questions = loadPaperQuestions(paper.getId());
+            questionMap = questions.stream()
+                    .collect(Collectors.toMap(PaperQuestion::getId, question -> question, (left, right) -> left, LinkedHashMap::new));
+        }
 
         Map<Long, AnswerSheetDetail> detailMap = loadDetailMap(answerSheetId);
         List<AnswerSheetImageVO> images = answerSheetImageMapper.selectListByAnswerSheetId(answerSheetId);
-        AnswerSheetTemplateVO template = answerSheetTemplateService.getByPaperId(paper.getId());
-        if (template == null) {
-            throw new BusinessException("当前试卷未配置答题卡模板");
-        }
 
         return new AnswerSheetContext(answerSheet, questions, questionMap, detailMap, images, template);
     }
 
     private Map<Long, AnswerSheetDetail> loadDetailMap(Long answerSheetId) {
-        return answerSheetDetailMapper.selectList(
-                        new LambdaQueryWrapper<AnswerSheetDetail>()
-                                .eq(AnswerSheetDetail::getAnswerSheetId, answerSheetId))
-                .stream()
-                .collect(Collectors.toMap(AnswerSheetDetail::getQuestionId, detail -> detail, (left, right) -> left, LinkedHashMap::new));
+        List<AnswerSheetDetail> details = answerSheetDetailMapper.selectList(
+                new LambdaQueryWrapper<AnswerSheetDetail>()
+                        .eq(AnswerSheetDetail::getAnswerSheetId, answerSheetId));
+
+        Map<Long, AnswerSheetDetail> map = new LinkedHashMap<>();
+        for (AnswerSheetDetail detail : details) {
+            // 优先使用 questionId（传统模式），否则使用 questionNo（独立模式）
+            Long key = detail.getQuestionId();
+            if (key == null && detail.getQuestionNo() != null) {
+                // 独立模式：使用 questionNo 的负值作为 key 以区分
+                key = -detail.getQuestionNo().longValue();
+            }
+            if (key != null) {
+                map.put(key, detail);
+            }
+        }
+        return map;
+    }
+
+    /**
+     * 根据题号获取明细（用于独立模式）
+     */
+    private AnswerSheetDetail getDetailByQuestionNo(Map<Long, AnswerSheetDetail> detailMap, int questionNo) {
+        // 先尝试独立模式的 key
+        AnswerSheetDetail detail = detailMap.get(-((long) questionNo));
+        if (detail != null) {
+            return detail;
+        }
+        // 再遍历查找（兼容传统模式）
+        return detailMap.values().stream()
+                .filter(d -> d.getQuestionNo() != null && d.getQuestionNo() == questionNo)
+                .findFirst()
+                .orElse(null);
     }
 
     private List<PaperQuestion> loadPaperQuestions(Long paperId) {

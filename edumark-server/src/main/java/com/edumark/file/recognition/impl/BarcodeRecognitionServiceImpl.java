@@ -72,14 +72,9 @@ public class BarcodeRecognitionServiceImpl implements BarcodeRecognitionService 
             return BarcodeRecognitionResult.failure("未提供可识别的答题卡图片");
         }
 
-        Paper paper = paperMapper.selectByExamSubjectId(examSubjectId);
-        if (paper == null) {
-            return BarcodeRecognitionResult.failure("当前科目未关联试卷，无法读取条码区模板");
-        }
-
-        AnswerSheetTemplateVO template = answerSheetTemplateService.getByPaperId(paper.getId());
+        AnswerSheetTemplateVO template = answerSheetTemplateService.getByExamSubjectId(examSubjectId);
         if (template == null || template.getRegions() == null || template.getRegions().isEmpty()) {
-            return BarcodeRecognitionResult.failure("当前试卷未配置答题卡模板");
+            return BarcodeRecognitionResult.failure("当前考试未配置答题卡模板");
         }
 
         List<AnswerSheetRegionVO> barcodeRegions = template.getRegions().stream()

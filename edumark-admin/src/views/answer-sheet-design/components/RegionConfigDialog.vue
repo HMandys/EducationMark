@@ -20,6 +20,7 @@
               <el-option label="填空题" :value="2" />
               <el-option label="解答题" :value="3" />
               <el-option label="作文题" :value="4" />
+              <el-option label="条码区" :value="5" />
             </el-select>
           </el-form-item>
         </el-col>
@@ -189,6 +190,20 @@
           </div>
         </div>
 
+        <el-divider content-position="left">分数配置</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="每题分数">
+              <el-input-number v-model="formData.config!.scorePerQuestion" :min="0" :max="100" :precision="1" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="区域总分">
+              <span class="total-score">{{ calculateRegionTotalScore() }} 分</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
         <el-divider content-position="left">正确答案配置</el-divider>
         <div class="answer-config-section">
           <div class="answer-config-tip">
@@ -249,9 +264,18 @@
       </template>
 
       <template v-if="formData.regionType === 3">
-        <el-form-item label="区域高度(mm)">
-          <el-input-number v-model="formData.config!.height" :min="10" :max="500" :step="10" />
-        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="区域总分">
+              <el-input-number v-model="formData.config!.totalScore" :min="0" :max="200" :precision="1" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="区域高度(mm)">
+              <el-input-number v-model="formData.config!.height" :min="10" :max="500" :step="10" />
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="显示边框">
           <el-switch v-model="formData.config!.showBorder" />
         </el-form-item>
@@ -266,6 +290,13 @@
       </template>
 
       <template v-if="formData.regionType === 4">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="作文总分">
+              <el-input-number v-model="formData.config!.totalScore" :min="0" :max="200" :precision="1" />
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="格子类型">
           <el-radio-group v-model="formData.config!.gridType">
             <el-radio value="square">方格</el-radio>
@@ -363,6 +394,7 @@ const regionTypeNames: Record<number, string> = {
   2: '填空题',
   3: '解答题',
   4: '作文题',
+  5: '条码区',
 }
 
 const getDefaultBounds = (type: number) => {
@@ -375,6 +407,8 @@ const getDefaultBounds = (type: number) => {
       return { boxX: 8, boxY: 60, boxWidth: 84, boxHeight: 18 }
     case 4:
       return { boxX: 8, boxY: 22, boxWidth: 84, boxHeight: 58 }
+    case 5:
+      return { boxX: 70, boxY: 5, boxWidth: 25, boxHeight: 8 } // 条码区默认在右上角
     default:
       return { boxX: 8, boxY: 22, boxWidth: 84, boxHeight: 16 }
   }
@@ -386,6 +420,8 @@ const getDefaultRole = (type: number): RegionRole => {
       return 'choice_block'
     case 4:
       return 'essay_crop'
+    case 5:
+      return 'barcode'
     default:
       return 'subjective_crop'
   }
@@ -409,6 +445,7 @@ const getDefaultConfig = (type: number): RegionConfig => {
         layoutDirection: 'column', // 默认纵向布局（更常见）
         bubbleStyle: 'square',
         hasMultipleChoice: false,
+        scorePerQuestion: 2, // 客观题默认每题2分
       }
     case 2:
       return {
@@ -416,6 +453,7 @@ const getDefaultConfig = (type: number): RegionConfig => {
         lineHeight: 30,
         linesPerQuestion: 1,
         lineStyle: 'underline',
+        totalScore: 10, // 填空题默认10分
       }
     case 3:
       return {
@@ -423,6 +461,7 @@ const getDefaultConfig = (type: number): RegionConfig => {
         height: 100,
         showBorder: true,
         scoreBoxPosition: 'top-right',
+        totalScore: 10, // 主观题默认10分
       }
     case 4:
       return {
@@ -430,6 +469,13 @@ const getDefaultConfig = (type: number): RegionConfig => {
         gridType: 'square',
         gridSize: 10,
         wordCount: 800,
+        totalScore: 60, // 作文默认60分
+      }
+    case 5:
+      return {
+        ...base,
+        regionRole: 'barcode',
+        cropMode: 'full-region',
       }
     default:
       return base
@@ -461,9 +507,20 @@ const formRules: FormRules = {
 }
 
 const requiresQuestionRange = computed(() => {
+  // 条码区不需要题号范围
+  if (formData.regionType === 5) return false
   const role = formData.config?.regionRole
   return role === 'choice_block' || role === 'subjective_crop' || role === 'essay_crop' || !role
 })
+
+// 分数计算
+const calculateRegionTotalScore = () => {
+  const start = formData.questionStart || 0
+  const end = formData.questionEnd || 0
+  const questionCount = Math.max(end - start + 1, 0)
+  const scorePerQuestion = formData.config?.scorePerQuestion || 0
+  return questionCount * scorePerQuestion
+}
 
 // 正确答案配置相关方法
 const getQuestionRange = () => {
@@ -708,6 +765,17 @@ const handleConfirm = async () => {
 
 :deep(.coord-filled .el-input-number__wrapper) {
   box-shadow: 0 0 0 1px #86efac inset;
+}
+
+/* 分数显示样式 */
+.total-score {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #059669;
+  background: #d1fae5;
+  border-radius: 6px;
 }
 
 /* 正确答案配置样式 */

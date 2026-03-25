@@ -18,8 +18,23 @@ public class AnswerSheetDetail extends BaseEntity {
     @Schema(description = "答题卡ID")
     private Long answerSheetId;
 
-    @Schema(description = "题目ID")
+    @Schema(description = "题目ID（关联试卷时使用）")
     private Long questionId;
+
+    @Schema(description = "区域ID（独立模式时使用）")
+    private Long regionId;
+
+    @Schema(description = "题号")
+    private Integer questionNo;
+
+    @Schema(description = "满分")
+    private Integer fullScore;
+
+    @Schema(description = "正确答案")
+    private String correctAnswer;
+
+    @Schema(description = "是否客观题: 0-否 1-是")
+    private Integer isObjective;
 
     @Schema(description = "学生答案")
     private String studentAnswer;
@@ -36,6 +51,21 @@ public class AnswerSheetDetail extends BaseEntity {
 
     public Long getQuestionId() { return questionId; }
     public void setQuestionId(Long questionId) { this.questionId = questionId; }
+
+    public Long getRegionId() { return regionId; }
+    public void setRegionId(Long regionId) { this.regionId = regionId; }
+
+    public Integer getQuestionNo() { return questionNo; }
+    public void setQuestionNo(Integer questionNo) { this.questionNo = questionNo; }
+
+    public Integer getFullScore() { return fullScore; }
+    public void setFullScore(Integer fullScore) { this.fullScore = fullScore; }
+
+    public String getCorrectAnswer() { return correctAnswer; }
+    public void setCorrectAnswer(String correctAnswer) { this.correctAnswer = correctAnswer; }
+
+    public Integer getIsObjective() { return isObjective; }
+    public void setIsObjective(Integer isObjective) { this.isObjective = isObjective; }
 
     public String getStudentAnswer() { return studentAnswer; }
     public void setStudentAnswer(String studentAnswer) { this.studentAnswer = studentAnswer; }

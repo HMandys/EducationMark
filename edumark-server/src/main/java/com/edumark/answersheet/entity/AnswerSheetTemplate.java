@@ -21,6 +21,9 @@ public class AnswerSheetTemplate extends BaseEntity {
     @Schema(description = "关联试卷ID")
     private Long paperId;
 
+    @Schema(description = "考试ID")
+    private Long examId;
+
     @Schema(description = "模板名称")
     private String name;
 
@@ -74,7 +77,6 @@ public class AnswerSheetTemplate extends BaseEntity {
     @Schema(description = "考试名称")
     private String examName;
 
-    @TableField(exist = false)
     @Schema(description = "科目名称")
     private String subjectName;
 
@@ -85,6 +87,9 @@ public class AnswerSheetTemplate extends BaseEntity {
     // Getters and Setters
     public Long getPaperId() { return paperId; }
     public void setPaperId(Long paperId) { this.paperId = paperId; }
+
+    public Long getExamId() { return examId; }
+    public void setExamId(Long examId) { this.examId = examId; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

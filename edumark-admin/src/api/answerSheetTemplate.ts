@@ -5,6 +5,7 @@ import type { Id, PageResult } from './types'
 export interface AnswerSheetTemplate {
   id: Id
   paperId: Id
+  examId?: Id
   paperName?: string
   examName?: string
   subjectName?: string

@@ -2,7 +2,6 @@ package com.edumark.answersheet.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 import java.util.Map;
@@ -18,9 +17,14 @@ public class AnswerSheetTemplateDTO {
     @Schema(description = "模板ID")
     private Long id;
 
-    @NotNull(message = "试卷ID不能为空")
-    @Schema(description = "关联试卷ID")
+    @Schema(description = "关联试卷ID（可选，支持独立创建答题卡模板）")
     private Long paperId;
+
+    @Schema(description = "考试ID")
+    private Long examId;
+
+    @Schema(description = "科目名称")
+    private String subjectName;
 
     @NotBlank(message = "模板名称不能为空")
     @Schema(description = "模板名称")
@@ -68,6 +72,12 @@ public class AnswerSheetTemplateDTO {
 
     public Long getPaperId() { return paperId; }
     public void setPaperId(Long paperId) { this.paperId = paperId; }
+
+    public Long getExamId() { return examId; }
+    public void setExamId(Long examId) { this.examId = examId; }
+
+    public String getSubjectName() { return subjectName; }
+    public void setSubjectName(String subjectName) { this.subjectName = subjectName; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

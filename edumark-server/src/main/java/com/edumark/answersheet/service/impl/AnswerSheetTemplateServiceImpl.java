@@ -16,8 +16,10 @@ import com.edumark.answersheet.vo.AnswerSheetTemplateVO;
 import com.edumark.answersheet.vo.AnswerSheetTemplateValidateVO;
 import com.edumark.common.exception.BusinessException;
 import com.edumark.common.result.PageResult;
+import com.edumark.exam.entity.ExamSubject;
 import com.edumark.exam.entity.Paper;
 import com.edumark.exam.entity.PaperQuestion;
+import com.edumark.exam.mapper.ExamSubjectMapper;
 import com.edumark.exam.mapper.PaperMapper;
 import com.edumark.exam.mapper.PaperQuestionMapper;
 import com.edumark.file.service.FileService;
@@ -46,6 +48,9 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
 
     @Resource
     private PaperQuestionMapper paperQuestionMapper;
+
+    @Resource
+    private ExamSubjectMapper examSubjectMapper;
 
     @Resource
     private FileService fileService;
@@ -123,18 +128,56 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public Long create(AnswerSheetTemplateDTO dto) {
-        // 检查试卷是否已有模板
-        AnswerSheetTemplateVO existing = baseMapper.selectVOByPaperId(dto.getPaperId());
-        if (existing != null) {
-            throw new BusinessException("该试卷已存在答题卡模板");
+    public AnswerSheetTemplateVO getByExamSubjectId(Long examSubjectId) {
+        // 1. 首先尝试通过 paperId 查找（传统方式）
+        Paper paper = paperMapper.selectByExamSubjectId(examSubjectId);
+        if (paper != null) {
+            AnswerSheetTemplateVO vo = getByPaperId(paper.getId());
+            if (vo != null) {
+                return vo;
+            }
         }
 
-        // 检查试卷是否存在
-        Paper paper = paperMapper.selectById(dto.getPaperId());
-        if (paper == null) {
-            throw new BusinessException("试卷不存在");
+        // 2. 如果通过 paperId 找不到，尝试通过 examId + subjectName 查找
+        ExamSubject examSubject = examSubjectMapper.selectById(examSubjectId);
+        if (examSubject == null) {
+            return null;
+        }
+
+        AnswerSheetTemplateVO vo = baseMapper.selectVOByExamIdAndSubjectName(
+                examSubject.getExamId(), examSubject.getSubjectName());
+        if (vo != null) {
+            List<AnswerSheetRegionVO> regions = regionMapper.selectListByTemplateId(vo.getId());
+            for (AnswerSheetRegionVO region : regions) {
+                region.setRegionTypeName(REGION_TYPE_NAMES.getOrDefault(region.getRegionType(), "未知"));
+            }
+            vo.setRegions(regions);
+
+            if (vo.getPdfObjectName() != null) {
+                vo.setPdfUrl(fileService.getUrl(vo.getPdfObjectName()));
+            }
+            if (vo.getTemplateImagePath() != null) {
+                vo.setTemplateImageUrl(fileService.getUrl(vo.getTemplateImagePath()));
+            }
+        }
+        return vo;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long create(AnswerSheetTemplateDTO dto) {
+        // 如果关联了试卷，检查试卷是否已有模板
+        if (dto.getPaperId() != null) {
+            AnswerSheetTemplateVO existing = baseMapper.selectVOByPaperId(dto.getPaperId());
+            if (existing != null) {
+                throw new BusinessException("该试卷已存在答题卡模板");
+            }
+
+            // 检查试卷是否存在
+            Paper paper = paperMapper.selectById(dto.getPaperId());
+            if (paper == null) {
+                throw new BusinessException("试卷不存在");
+            }
         }
 
         // 创建模板

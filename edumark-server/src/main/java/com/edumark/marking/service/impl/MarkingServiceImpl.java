@@ -114,6 +114,14 @@ public class MarkingServiceImpl implements MarkingService {
             throw new BusinessException("该记录已完成评分");
         }
 
+        // 分数范围校验
+        if (dto.getScore() == null || dto.getScore() < 0) {
+            throw new BusinessException("分数不能为空或小于0");
+        }
+        if (record.getFullScore() != null && dto.getScore() > record.getFullScore()) {
+            throw new BusinessException("分数不能超过满分" + record.getFullScore());
+        }
+
         // 更新阅卷记录
         record.setScore(dto.getScore());
         record.setComment(dto.getComment());
@@ -182,6 +190,17 @@ public class MarkingServiceImpl implements MarkingService {
      * 创建仲裁记录
      */
     private void createArbitration(MarkingRecord currentRecord, MarkingRecord first, MarkingRecord second, MarkingTask task, int diff) {
+        // 防止重复创建仲裁记录
+        Long existCount = markingArbitrationMapper.selectCount(
+                new LambdaQueryWrapper<MarkingArbitration>()
+                        .eq(MarkingArbitration::getTaskId, task.getId())
+                        .eq(MarkingArbitration::getAnswerSheetId, currentRecord.getAnswerSheetId())
+                        .eq(MarkingArbitration::getQuestionId, currentRecord.getQuestionId())
+        );
+        if (existCount != null && existCount > 0) {
+            return;
+        }
+
         MarkingArbitration arbitration = new MarkingArbitration();
         arbitration.setTaskId(task.getId());
         arbitration.setAnswerSheetId(currentRecord.getAnswerSheetId());
@@ -231,6 +250,11 @@ public class MarkingServiceImpl implements MarkingService {
         }
         if (arbitration.getStatus() != 0) {
             throw new BusinessException("该记录已完成仲裁");
+        }
+
+        // 分数范围校验
+        if (dto.getScore() == null || dto.getScore() < 0) {
+            throw new BusinessException("仲裁分数不能为空或小于0");
         }
 
         // 更新仲裁记录

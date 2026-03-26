@@ -1,10 +1,27 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
+import { getExamPage, type Exam } from '@/api/exam'
+import { pageMarkingTasks, type MarkingTaskVO } from '@/api/marking'
+import { getStudentPage } from '@/api/school'
+import { getClassPage } from '@/api/school'
 
 const router = useRouter()
 const userStore = useUserStore()
+
+const loading = ref(false)
+
+// 统计数据
+const examTotal = ref(0)
+const examInProgressCount = ref(0)
+const examPublishedCount = ref(0)
+const pendingMarkingCount = ref(0)
+const nearDeadlineMarkingCount = ref(0)
+const studentTotal = ref(0)
+const classTotal = ref(0)
+const recentExams = ref<Exam[]>([])
+const pendingTasks = ref<MarkingTaskVO[]>([])
 
 const todayText = computed(() => {
   return new Date().toLocaleDateString('zh-CN', {
@@ -15,36 +32,38 @@ const todayText = computed(() => {
   })
 })
 
-const statsCards = ref([
+const statsCards = computed(() => [
   {
     title: '考试总量',
-    value: '128',
+    value: examTotal.value.toLocaleString(),
     suffix: '场',
-    detail: '本学期已归档 93 场，进行中 12 场',
+    detail: `已发布 ${examPublishedCount.value} 场，进行中 ${examInProgressCount.value} 场`,
     icon: 'Tickets',
     tone: 'primary',
   },
   {
     title: '待处理阅卷',
-    value: '24',
+    value: pendingMarkingCount.value.toLocaleString(),
     suffix: '项',
-    detail: '其中 6 项接近截止时间，需要优先处理',
+    detail: nearDeadlineMarkingCount.value > 0
+      ? `其中 ${nearDeadlineMarkingCount.value} 项未完成，需要优先处理`
+      : '当前无积压任务',
     icon: 'EditPen',
     tone: 'warning',
   },
   {
     title: '学生覆盖',
-    value: '3,680',
+    value: studentTotal.value.toLocaleString(),
     suffix: '人',
-    detail: '覆盖 42 个班级，在线绑定率 88%',
+    detail: `覆盖 ${classTotal.value} 个班级`,
     icon: 'User',
     tone: 'success',
   },
   {
     title: '成绩发布',
-    value: '16',
+    value: examPublishedCount.value.toLocaleString(),
     suffix: '次',
-    detail: '最近 7 天新增 5 次发布操作',
+    detail: examPublishedCount.value > 0 ? '已发布考试可在家长端查看' : '暂无已发布成绩',
     icon: 'DataAnalysis',
     tone: 'danger',
   },
@@ -59,42 +78,139 @@ const quickActions = ref([
   { title: '学校管理', desc: '管理组织、年级和班级', path: '/school/list', icon: 'School' },
 ])
 
-const recentExams = ref([
-  { id: 1, name: '高三二模联考', subject: '综合', schedule: '03-20 08:30', status: '进行中', owner: '教务处' },
-  { id: 2, name: '初二月考', subject: '数学', schedule: '03-21 14:00', status: '待发布', owner: '数学组' },
-  { id: 3, name: '高一英语阶段测', subject: '英语', schedule: '03-18 09:00', status: '已完成', owner: '英语组' },
-  { id: 4, name: '九年级期中统测', subject: '全科', schedule: '03-25 08:00', status: '待执行', owner: '年级组' },
-])
-
 const teamBoard = ref([
   { label: '组织管理', value: '学校、年级、班级、教师、学生、家长' },
   { label: '考试资产', value: '考试、知识点、答题卡模板统一管理' },
   { label: '系统配置', value: '角色授权、菜单控制、用户状态管理' },
 ])
 
-const todoList = ref([
-  { title: '完成高三二模联考主观题复核', level: '高优先级', deadline: '今天 18:00 前' },
-  { title: '校验成绩发布名单与班级映射', level: '中优先级', deadline: '明天 10:00 前' },
-  { title: '补充初二英语知识点层级', level: '常规', deadline: '本周内' },
-])
+// 动态生成待办提醒
+const todoList = computed(() => {
+  const items: { title: string; level: string; deadline: string }[] = []
+
+  // 未完成的阅卷任务
+  const unfinishedTasks = pendingTasks.value.filter((t) => t.status === 1)
+  if (unfinishedTasks.length > 0) {
+    items.push({
+      title: `${unfinishedTasks.length} 个阅卷任务进行中，注意推进完成`,
+      level: '高优先级',
+      deadline: '尽快处理',
+    })
+  }
+
+  // 进行中的考试
+  if (examInProgressCount.value > 0) {
+    items.push({
+      title: `${examInProgressCount.value} 场考试进行中，关注阅卷与出分进度`,
+      level: '中优先级',
+      deadline: '持续跟进',
+    })
+  }
+
+  // 没有阅卷码的任务
+  const noCodeTasks = pendingTasks.value.filter((t) => t.status !== 2 && !t.accessCode)
+  if (noCodeTasks.length > 0) {
+    items.push({
+      title: `${noCodeTasks.length} 个阅卷任务未生成阅卷码`,
+      level: '常规',
+      deadline: '分配前补齐',
+    })
+  }
+
+  if (items.length === 0) {
+    items.push({
+      title: '当前没有待办事项',
+      level: '正常',
+      deadline: '-',
+    })
+  }
+
+  return items
+})
+
+onMounted(() => {
+  loadDashboardData()
+})
+
+async function loadDashboardData() {
+  loading.value = true
+  try {
+    const [
+      examRes,
+      examInProgressRes,
+      examPublishedRes,
+      markingRes,
+      studentRes,
+      classRes,
+    ] = await Promise.allSettled([
+      getExamPage({ pageNum: 1, pageSize: 4 }),
+      getExamPage({ pageNum: 1, pageSize: 1, status: 2 }),
+      getExamPage({ pageNum: 1, pageSize: 1, status: 5 }),
+      pageMarkingTasks({ pageNum: 1, pageSize: 200 }),
+      getStudentPage({ pageNum: 1, pageSize: 1 }),
+      getClassPage({ pageNum: 1, pageSize: 1 }),
+    ])
+
+    if (examRes.status === 'fulfilled') {
+      examTotal.value = examRes.value.data.total
+      recentExams.value = examRes.value.data.list || []
+    }
+    if (examInProgressRes.status === 'fulfilled') {
+      examInProgressCount.value = examInProgressRes.value.data.total
+    }
+    if (examPublishedRes.status === 'fulfilled') {
+      examPublishedCount.value = examPublishedRes.value.data.total
+    }
+    if (markingRes.status === 'fulfilled') {
+      const allTasks = markingRes.value.data.list || []
+      pendingTasks.value = allTasks
+      pendingMarkingCount.value = allTasks.filter((t) => t.status !== 2).length
+      nearDeadlineMarkingCount.value = allTasks.filter((t) => t.status === 1).length
+    }
+    if (studentRes.status === 'fulfilled') {
+      studentTotal.value = studentRes.value.data.total
+    }
+    if (classRes.status === 'fulfilled') {
+      classTotal.value = classRes.value.data.total
+    }
+  } catch (error) {
+    console.error('加载工作台数据失败', error)
+  } finally {
+    loading.value = false
+  }
+}
 
 function handleNavigate(path: string) {
   router.push(path)
 }
 
-function getStatusType(status: string): 'success' | 'warning' | 'info' | 'danger' {
-  const map: Record<string, 'success' | 'warning' | 'info' | 'danger'> = {
-    已完成: 'success',
-    进行中: 'warning',
-    待发布: 'info',
-    待执行: 'danger',
+function getExamStatusText(status: number): string {
+  const map: Record<number, string> = {
+    0: '草稿',
+    1: '待考试',
+    2: '考试中',
+    3: '阅卷中',
+    4: '已完成',
+    5: '已发布',
+  }
+  return map[status] || '未知'
+}
+
+function getStatusType(status: number): 'success' | 'warning' | 'info' | 'danger' {
+  const map: Record<number, 'success' | 'warning' | 'info' | 'danger'> = {
+    0: 'info',
+    1: 'info',
+    2: 'warning',
+    3: 'warning',
+    4: 'success',
+    5: 'success',
   }
   return map[status] || 'info'
 }
 </script>
 
 <template>
-  <div class="page-container dashboard-page">
+  <div class="page-container dashboard-page" v-loading="loading">
     <section class="page-hero dashboard-hero">
       <div>
         <div class="page-hero__title">
@@ -177,17 +293,18 @@ function getStatusType(status: string): 'success' | 'warning' | 'info' | 'danger
             </div>
           </template>
 
-          <div class="exam-list">
+          <el-empty v-if="recentExams.length === 0" description="暂无考试数据" :image-size="80" />
+          <div v-else class="exam-list">
             <div v-for="item in recentExams" :key="item.id" class="exam-list__item">
               <div>
                 <div class="exam-list__title">{{ item.name }}</div>
                 <div class="exam-list__meta">
-                  <span>{{ item.subject }}</span>
-                  <span>{{ item.schedule }}</span>
-                  <span>{{ item.owner }}</span>
+                  <span>{{ item.gradeName || '-' }}</span>
+                  <span>{{ item.academicYear }} {{ item.semester === 1 ? '第一学期' : item.semester === 2 ? '第二学期' : '' }}</span>
+                  <span>{{ item.createTime?.substring(0, 10) || '-' }}</span>
                 </div>
               </div>
-              <el-tag :type="getStatusType(item.status)">{{ item.status }}</el-tag>
+              <el-tag :type="getStatusType(item.status)">{{ item.statusName || getExamStatusText(item.status) }}</el-tag>
             </div>
           </div>
         </el-card>
@@ -213,7 +330,7 @@ function getStatusType(status: string): 'success' | 'warning' | 'info' | 'danger
             <template #header>
               <div class="card-header">
                 <span>待办提醒</span>
-                <div><el-tag type="warning">3 项</el-tag></div>
+                <div><el-tag type="warning">{{ todoList.length }} 项</el-tag></div>
               </div>
             </template>
 

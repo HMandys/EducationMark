@@ -109,25 +109,28 @@
               />
             </div>
 
-            <div class="quick-score-buttons">
-              <el-button @click="scoreForm.score = 0">0 分</el-button>
-              <el-button @click="scoreForm.score = Math.floor(currentItem.fullScore / 2)">
-                {{ Math.floor(currentItem.fullScore / 2) }} 分
-              </el-button>
-              <el-button type="success" @click="scoreForm.score = currentItem.fullScore">
-                满分
-              </el-button>
+            <div class="quick-score-grid">
+              <button
+                v-for="n in quickScoreList"
+                :key="n"
+                class="quick-score-btn"
+                :class="{ 'is-active': scoreForm.score === n, 'is-zero': n === 0, 'is-full': n === currentItem.fullScore }"
+                :disabled="submitting"
+                @click="quickSubmit(n)"
+              >
+                {{ n }}
+              </button>
             </div>
 
             <div class="keyboard-hint">
               <el-icon><InfoFilled /></el-icon>
-              <span>快捷键：数字键 0-9 直接输入分数，Enter 提交</span>
+              <span>点击分数按钮自动提交并跳下一份 | 数字键 0-9 输入，Enter 提交</span>
             </div>
 
             <el-input
               v-model="scoreForm.comment"
               type="textarea"
-              :rows="3"
+              :rows="2"
               placeholder="评语（可选）"
               class="comment-input"
             />
@@ -201,6 +204,36 @@ const progressPercent = computed(() => {
   if (!taskInfo.value || taskInfo.value.totalCount === 0) return 0
   return Math.round((taskInfo.value.completedCount / taskInfo.value.totalCount) * 100)
 })
+
+// 快捷分数按钮列表：0 + 1~满分（最多到满分）
+const quickScoreList = computed(() => {
+  const full = currentItem.value?.fullScore ?? 10
+  const list: number[] = [0]
+  for (let i = 1; i <= full; i++) {
+    list.push(i)
+  }
+  return list
+})
+
+// 点击快捷分数按钮：自动提交并跳下一份
+async function quickSubmit(score: number) {
+  if (!currentItem.value || !sessionToken.value || submitting.value) return
+
+  scoreForm.score = score
+  submitting.value = true
+  try {
+    await submitAccessScore(sessionToken.value, {
+      recordId: currentItem.value.recordId,
+      score,
+      comment: scoreForm.comment || undefined,
+    })
+    await loadNextItem()
+  } catch (error: any) {
+    ElMessage.error(error.message || '提交失败')
+  } finally {
+    submitting.value = false
+  }
+}
 
 // 格式化阅卷码输入（只允许数字）
 function formatAccessCode() {

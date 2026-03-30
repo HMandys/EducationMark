@@ -96,6 +96,8 @@ export interface RegionConfig {
   bubbleMap?: BubbleMapItem[]
   detectedBubbleCount?: number
   expectedBubbleCount?: number
+  scorePerQuestion?: number
+  totalScore?: number
   // 正确答案配置 {题号: 答案}
   correctAnswers?: Record<string, string>
   // 填空题配置

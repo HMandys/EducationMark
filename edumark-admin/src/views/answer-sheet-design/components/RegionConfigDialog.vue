@@ -17,9 +17,7 @@
           <el-form-item label="区域类型" prop="regionType">
             <el-select v-model="formData.regionType" @change="handleTypeChange">
               <el-option label="选择题" :value="1" />
-              <el-option label="填空题" :value="2" />
-              <el-option label="解答题" :value="3" />
-              <el-option label="作文题" :value="4" />
+              <el-option label="主观题" :value="3" />
               <el-option label="条码区" :value="5" />
             </el-select>
           </el-form-item>
@@ -59,10 +57,10 @@
         </el-col>
       </el-row>
 
-      <el-row :gutter="20">
+      <el-row v-if="requiresQuestionRange" :gutter="20">
         <el-col :span="12">
           <el-form-item label="起始题号">
-            <el-input-number v-model="formData.questionStart" :min="1" :disabled="!requiresQuestionRange" />
+            <el-input-number v-model="formData.questionStart" :min="1" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -70,8 +68,15 @@
             <el-input-number
               v-model="formData.questionEnd"
               :min="formData.questionStart || 1"
-              :disabled="!requiresQuestionRange"
             />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-row v-else-if="requiresSingleQuestionNo" :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="题号">
+            <el-input-number v-model="formData.questionStart" :min="1" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -289,33 +294,6 @@
         </el-form-item>
       </template>
 
-      <template v-if="formData.regionType === 4">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="作文总分">
-              <el-input-number v-model="formData.config!.totalScore" :min="0" :max="200" :precision="1" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="格子类型">
-          <el-radio-group v-model="formData.config!.gridType">
-            <el-radio value="square">方格</el-radio>
-            <el-radio value="line">横线</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="格子大小(mm)">
-              <el-input-number v-model="formData.config!.gridSize" :min="6" :max="20" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="总字数">
-              <el-input-number v-model="formData.config!.wordCount" :min="100" :max="2000" :step="100" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </template>
     </el-form>
 
     <template #footer>
@@ -381,7 +359,6 @@ const quickAnswerInput = ref('')
 const regionRoleOptions: Array<{ label: string; value: RegionRole }> = [
   { label: '客观题涂卡区', value: 'choice_block' },
   { label: '主观题裁题区', value: 'subjective_crop' },
-  { label: '作文裁题区', value: 'essay_crop' },
   { label: '评分框', value: 'score_box' },
   { label: '学号识别区', value: 'student_id' },
   { label: '姓名识别区', value: 'student_name' },
@@ -391,9 +368,7 @@ const regionRoleOptions: Array<{ label: string; value: RegionRole }> = [
 
 const regionTypeNames: Record<number, string> = {
   1: '选择题',
-  2: '填空题',
-  3: '解答题',
-  4: '作文题',
+  3: '主观题',
   5: '条码区',
 }
 
@@ -405,8 +380,6 @@ const getDefaultBounds = (type: number) => {
       return { boxX: 8, boxY: 44, boxWidth: 84, boxHeight: 14 }
     case 3:
       return { boxX: 8, boxY: 60, boxWidth: 84, boxHeight: 18 }
-    case 4:
-      return { boxX: 8, boxY: 22, boxWidth: 84, boxHeight: 58 }
     case 5:
       return { boxX: 70, boxY: 5, boxWidth: 25, boxHeight: 8 } // 条码区默认在右上角
     default:
@@ -418,8 +391,6 @@ const getDefaultRole = (type: number): RegionRole => {
   switch (type) {
     case 1:
       return 'choice_block'
-    case 4:
-      return 'essay_crop'
     case 5:
       return 'barcode'
     default:
@@ -433,7 +404,7 @@ const getDefaultConfig = (type: number): RegionConfig => {
     ...bounds,
     regionRole: getDefaultRole(type),
     anchorType: 'none',
-    cropMode: type === 1 ? 'range-question' : type === 4 ? 'full-region' : 'single-question',
+    cropMode: type === 1 ? 'range-question' : 'full-region',
   }
 
   switch (type) {
@@ -447,14 +418,6 @@ const getDefaultConfig = (type: number): RegionConfig => {
         hasMultipleChoice: false,
         scorePerQuestion: 2, // 客观题默认每题2分
       }
-    case 2:
-      return {
-        ...base,
-        lineHeight: 30,
-        linesPerQuestion: 1,
-        lineStyle: 'underline',
-        totalScore: 10, // 填空题默认10分
-      }
     case 3:
       return {
         ...base,
@@ -462,14 +425,6 @@ const getDefaultConfig = (type: number): RegionConfig => {
         showBorder: true,
         scoreBoxPosition: 'top-right',
         totalScore: 10, // 主观题默认10分
-      }
-    case 4:
-      return {
-        ...base,
-        gridType: 'square',
-        gridSize: 10,
-        wordCount: 800,
-        totalScore: 60, // 作文默认60分
       }
     case 5:
       return {
@@ -507,10 +462,14 @@ const formRules: FormRules = {
 }
 
 const requiresQuestionRange = computed(() => {
-  // 条码区不需要题号范围
+  const role = formData.config?.regionRole
+  return role === 'choice_block' || (!role && formData.regionType === 1)
+})
+
+const requiresSingleQuestionNo = computed(() => {
   if (formData.regionType === 5) return false
   const role = formData.config?.regionRole
-  return role === 'choice_block' || role === 'subjective_crop' || role === 'essay_crop' || !role
+  return role === 'subjective_crop' || (!role && formData.regionType !== 1)
 })
 
 // 分数计算
@@ -631,6 +590,16 @@ const handleTypeChange = (type: number) => {
     ...getDefaultConfig(type),
     ...commonConfig,
   }
+  if (type === 1) {
+    formData.questionStart = formData.questionStart || 1
+    formData.questionEnd = Math.max(formData.questionEnd || formData.questionStart || 1, formData.questionStart || 1)
+  } else if (type !== 5) {
+    formData.questionStart = formData.questionStart || 1
+    formData.questionEnd = formData.questionStart
+  } else {
+    formData.questionStart = undefined
+    formData.questionEnd = undefined
+  }
 
   if (
     commonConfig.boxX === undefined
@@ -683,10 +652,17 @@ const validateBounds = () => {
 }
 
 const validateQuestionRange = () => {
-  if (!requiresQuestionRange.value) {
+  if (!requiresQuestionRange.value && !requiresSingleQuestionNo.value) {
     return
   }
-  if (!formData.questionStart || !formData.questionEnd) {
+  if (!formData.questionStart) {
+    throw new Error(requiresSingleQuestionNo.value ? '当前主观题区域需要填写题号' : '当前区域用途需要填写起止题号')
+  }
+  if (requiresSingleQuestionNo.value) {
+    formData.questionEnd = formData.questionStart
+    return
+  }
+  if (!formData.questionEnd) {
     throw new Error('当前区域用途需要填写起止题号')
   }
   if (formData.questionStart > formData.questionEnd) {

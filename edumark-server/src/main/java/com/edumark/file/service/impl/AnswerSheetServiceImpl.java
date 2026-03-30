@@ -335,7 +335,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
 
         ensureNoDuplicate(outcome.matchedStudent().getId(), dto.getExamSubjectId(), null);
         answerSheet.setStudentId(outcome.matchedStudent().getId());
-        answerSheet.setStudentNumber(outcome.matchedStudent().getStudentNumber());
+        answerSheet.setStudentNumber(outcome.candidateStudentNumber());
         answerSheet.setStatus(STATUS_READY_FOR_MARKING);
         answerSheet.setRemark(outcome.remark());
     }
@@ -362,7 +362,9 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
 
         ensureNoDuplicate(matchedStudent.getId(), entity.getExamSubjectId(), entity.getId());
         entity.setStudentId(matchedStudent.getId());
-        entity.setStudentNumber(matchedStudent.getStudentNumber());
+        entity.setStudentNumber(studentNumber == null || studentNumber.isBlank()
+                ? matchedStudent.getStudentNumber()
+                : studentNumber.trim());
         entity.setStatus(STATUS_READY_FOR_MARKING);
         entity.setRemark("人工确认完成，已进入待阅卷");
     }
@@ -391,7 +393,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
 
         ensureNoDuplicate(outcome.matchedStudent().getId(), answerSheet.getExamSubjectId(), answerSheet.getId());
         answerSheet.setStudentId(outcome.matchedStudent().getId());
-        answerSheet.setStudentNumber(outcome.matchedStudent().getStudentNumber());
+        answerSheet.setStudentNumber(outcome.candidateStudentNumber());
         answerSheet.setStatus(STATUS_READY_FOR_MARKING);
         answerSheet.setRemark(outcome.remark());
     }
@@ -427,7 +429,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
             if (matchedStudent == null) {
                 return new RecognitionOutcome(null, trimmedStudentNumber, "学号 " + trimmedStudentNumber + " 未匹配到学生，请检查后重试");
             }
-            return new RecognitionOutcome(matchedStudent, matchedStudent.getStudentNumber(), "人工录入学号成功，已进入待阅卷");
+            return new RecognitionOutcome(matchedStudent, trimmedStudentNumber, "人工录入学号成功，已进入待阅卷");
         }
 
         BarcodeRecognitionResult barcodeResult = barcodeRecognitionService.recognize(examSubjectId, images);
@@ -435,7 +437,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
             String candidate = barcodeResult.getText().trim();
             Student matchedStudent = studentMapper.selectBySchoolAndStudentNumber(schoolId, candidate);
             if (matchedStudent != null) {
-                return new RecognitionOutcome(matchedStudent, matchedStudent.getStudentNumber(), barcodeResult.getMessage() + "，已自动匹配学生");
+                return new RecognitionOutcome(matchedStudent, candidate, barcodeResult.getMessage() + "，已自动匹配学生");
             }
             return new RecognitionOutcome(null, candidate, barcodeResult.getMessage() + "，但未匹配到学生，请人工确认");
         }
@@ -460,7 +462,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
             String prefix = barcodeResult.getMessage();
             String message = (prefix == null || prefix.isBlank() ? "" : prefix + "，")
                     + "已回退文件名候选学号 " + candidate + " 并自动匹配学生";
-            return new RecognitionOutcome(matchedStudent, matchedStudent.getStudentNumber(), message);
+            return new RecognitionOutcome(matchedStudent, candidate, message);
         }
 
         String prefix = barcodeResult.getMessage();

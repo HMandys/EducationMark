@@ -344,8 +344,11 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             }
 
             // 评分
-            boolean isCorrect = correctAnswer != null && !correctAnswer.isBlank()
-                    && normalizeAnswer(recognizedAnswer).equals(normalizeAnswer(correctAnswer));
+            String normalizedRecognizedAnswer = normalizeAnswer(recognizedAnswer);
+            String normalizedCorrectAnswer = normalizeAnswer(correctAnswer);
+            boolean isCorrect = normalizedRecognizedAnswer != null
+                    && normalizedCorrectAnswer != null
+                    && normalizedRecognizedAnswer.equals(normalizedCorrectAnswer);
             int score = isCorrect ? (detail.getFullScore() != null ? detail.getFullScore() : scorePerQuestion) : 0;
 
             // 更新明细
@@ -488,6 +491,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         AnswerSheetQuestionDetailVO vo = new AnswerSheetQuestionDetailVO();
         vo.setId(detail.getId());
         vo.setAnswerSheetId(detail.getAnswerSheetId());
+        vo.setQuestionId(resolveDetailQuestionId(detail));
         vo.setQuestionNo(detail.getQuestionNo() != null ? String.valueOf(detail.getQuestionNo()) : null);
         vo.setFullScore(detail.getFullScore() != null ? detail.getFullScore() : 0);
         vo.setCorrectAnswer(detail.getCorrectAnswer());
@@ -514,7 +518,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             }
         }
 
-        vo.setPreviewAvailable(vo.getRegionRole() != null && !"choice_block".equals(vo.getRegionRole()));
+        vo.setPreviewAvailable(vo.getRegionRole() != null && supportsPreview(vo.getRegionRole()));
         return vo;
     }
 
@@ -620,6 +624,30 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
     @Override
     public AnswerSheetQuestionDetailVO updateObjectiveAnswer(Long answerSheetId, Long questionId, String studentAnswer) {
         AnswerSheetContext context = loadContext(answerSheetId, true);
+        Integer templateQuestionNo = resolveTemplateQuestionNo(questionId);
+        if (templateQuestionNo != null) {
+            AnswerSheetDetail detail = getDetailByQuestionNo(context.detailMap(), templateQuestionNo);
+            if (detail == null) {
+                throw new BusinessException("题目不存在");
+            }
+            if (detail.getIsObjective() == null || detail.getIsObjective() != 1) {
+                throw new BusinessException("当前题目不是客观题");
+            }
+
+            String normalizedAnswer = normalizeAnswer(studentAnswer);
+            detail.setStudentAnswer(normalizedAnswer);
+            detail.setScore(scoreObjectiveDetail(detail, normalizedAnswer));
+            detail.setStatus(normalizedAnswer != null ? DETAIL_STATUS_COMPLETED : DETAIL_STATUS_PENDING);
+            answerSheetDetailMapper.updateById(detail);
+
+            recalculateAnswerSheetScores(answerSheetId);
+            tryAdvanceAnswerSheetStatus(answerSheetId, context);
+
+            AnswerSheetContext refreshedContext = loadContext(answerSheetId, false);
+            AnswerSheetDetail refreshedDetail = getDetailByQuestionNo(refreshedContext.detailMap(), templateQuestionNo);
+            return buildQuestionDetailVOFromDetail(refreshedContext, refreshedDetail);
+        }
+
         PaperQuestion question = context.questionMap().get(questionId);
         if (question == null) {
             throw new BusinessException("题目不存在");
@@ -645,6 +673,28 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         }
 
         AnswerSheetContext context = loadContext(answerSheetId, true);
+        Integer templateQuestionNo = resolveTemplateQuestionNo(questionId);
+        if (templateQuestionNo != null) {
+            AnswerSheetDetail detail = getDetailByQuestionNo(context.detailMap(), templateQuestionNo);
+            if (detail == null) {
+                throw new BusinessException("题目不存在");
+            }
+            if (detail.getIsObjective() != null && detail.getIsObjective() == 1) {
+                throw new BusinessException("当前题目不是主观题");
+            }
+
+            detail.setStatus(status);
+            answerSheetDetailMapper.updateById(detail);
+
+            if (status == DETAIL_STATUS_SUBJECTIVE_VERIFIED) {
+                tryAdvanceAnswerSheetStatus(answerSheetId, context);
+            }
+
+            AnswerSheetContext refreshedContext = loadContext(answerSheetId, false);
+            AnswerSheetDetail refreshedDetail = getDetailByQuestionNo(refreshedContext.detailMap(), templateQuestionNo);
+            return buildQuestionDetailVOFromDetail(refreshedContext, refreshedDetail);
+        }
+
         PaperQuestion question = context.questionMap().get(questionId);
         if (question == null) {
             throw new BusinessException("题目不存在");
@@ -680,6 +730,28 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
     public List<AnswerSheetQuestionDetailVO> rerunSubjectiveReview(Long answerSheetId) {
         AnswerSheetContext context = loadContext(answerSheetId, true);
         Map<Long, AnswerSheetDetail> detailMap = context.detailMap();
+
+        if (context.questions().isEmpty()) {
+            for (AnswerSheetDetail detail : detailMap.values()) {
+                if (detail.getQuestionNo() == null || (detail.getIsObjective() != null && detail.getIsObjective() == 1)) {
+                    continue;
+                }
+
+                if (detail.getStatus() != null
+                        && (detail.getStatus() == DETAIL_STATUS_SUBJECTIVE_VERIFIED
+                        || detail.getStatus() == DETAIL_STATUS_SUBJECTIVE_ANOMALY)) {
+                    detail.setStatus(DETAIL_STATUS_PENDING);
+                    answerSheetDetailMapper.updateById(detail);
+                }
+
+                try {
+                    getQuestionPreviewUrl(answerSheetId, resolveDetailQuestionId(detail));
+                } catch (BusinessException ignored) {
+                    // 模板模式下批量重跑只负责刷新题图生成与状态。
+                }
+            }
+            return listQuestionDetails(answerSheetId);
+        }
 
         for (PaperQuestion question : context.questions()) {
             if (isObjectiveQuestion(question)) {
@@ -1221,6 +1293,16 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         return PREVIEW_REGION_ROLES.contains(regionRole);
     }
 
+    private Long resolveDetailQuestionId(AnswerSheetDetail detail) {
+        if (detail == null) {
+            return null;
+        }
+        if (detail.getQuestionId() != null) {
+            return detail.getQuestionId();
+        }
+        return toTemplateQuestionId(detail.getQuestionNo());
+    }
+
     private Integer resolveTemplateQuestionNo(Long questionId) {
         if (questionId == null || questionId >= 0) {
             return null;
@@ -1230,6 +1312,17 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
     private Long toTemplateQuestionId(Integer questionNo) {
         return questionNo == null ? null : -questionNo.longValue();
+    }
+
+    private int scoreObjectiveDetail(AnswerSheetDetail detail, String studentAnswer) {
+        if (detail == null || detail.getFullScore() == null || detail.getCorrectAnswer() == null) {
+            return 0;
+        }
+        String normalizedCorrectAnswer = normalizeAnswer(detail.getCorrectAnswer());
+        if (studentAnswer == null || normalizedCorrectAnswer == null) {
+            return 0;
+        }
+        return normalizedCorrectAnswer.equals(studentAnswer) ? detail.getFullScore() : 0;
     }
 
     private QuestionRegionBinding findQuestionBinding(AnswerSheetTemplateVO template, List<PaperQuestion> allQuestions, PaperQuestion question) {

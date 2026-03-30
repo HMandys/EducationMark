@@ -72,8 +72,8 @@
             <div v-if="region.regionType === 1" class="region choice-region">
               <div class="region-title">
                 {{ region.regionName }}
-                <span v-if="region.questionStart && region.questionEnd">
-                  （第{{ region.questionStart }}-{{ region.questionEnd }}题）
+                <span v-if="formatQuestionTitle(region)">
+                  （{{ formatQuestionTitle(region) }}）
                 </span>
               </div>
               <div class="choice-grid" :style="{ gridTemplateColumns: `repeat(${region.config?.questionsPerRow || 5}, 1fr)` }">
@@ -98,8 +98,8 @@
             <div v-else-if="region.regionType === 2" class="region fillblank-region">
               <div class="region-title">
                 {{ region.regionName }}
-                <span v-if="region.questionStart && region.questionEnd">
-                  （第{{ region.questionStart }}-{{ region.questionEnd }}题）
+                <span v-if="formatQuestionTitle(region)">
+                  （{{ formatQuestionTitle(region) }}）
                 </span>
               </div>
               <div class="fillblank-list">
@@ -124,8 +124,8 @@
             <div v-else-if="region.regionType === 3" class="region answer-region">
               <div class="region-title">
                 {{ region.regionName }}
-                <span v-if="region.questionStart && region.questionEnd">
-                  （第{{ region.questionStart }}-{{ region.questionEnd }}题）
+                <span v-if="formatQuestionTitle(region)">
+                  （{{ formatQuestionTitle(region) }}）
                 </span>
               </div>
               <div
@@ -147,31 +147,6 @@
               </div>
             </div>
 
-            <div v-else-if="region.regionType === 4" class="region essay-region">
-              <div class="region-title">
-                {{ region.regionName }}
-                <span v-if="region.questionStart && region.questionEnd">
-                  （第{{ region.questionStart }}-{{ region.questionEnd }}题）
-                </span>
-              </div>
-              <div
-                class="essay-grid"
-                :style="{
-                  gridTemplateColumns: `repeat(${getEssayColCount(region)}, 1fr)`,
-                  gridAutoRows: `${(region.config?.gridSize || 10) / 2}px`
-                }"
-              >
-                <div
-                  v-for="i in (region.config?.wordCount || 800)"
-                  :key="i"
-                  class="essay-cell"
-                  :class="{ 'show-count': i % 100 === 0 }"
-                >
-                  <span v-if="i % 100 === 0" class="cell-count">{{ i }}</span>
-                </div>
-              </div>
-              <div class="essay-footer">（本题共{{ region.config?.wordCount || 800 }}格）</div>
-            </div>
           </template>
 
           <div v-if="!template.regions || template.regions.length === 0" class="empty-tip">
@@ -222,7 +197,7 @@
             <div class="overlay-footer">
               <span>第 {{ region.pageNo || 1 }} 页</span>
               <span v-if="region.questionStart && region.questionEnd">
-                {{ region.questionStart }}-{{ region.questionEnd }} 题
+                {{ formatRegionSummary(region) }}
               </span>
             </div>
             <button
@@ -390,13 +365,22 @@ const getQuestionCount = (region: AnswerSheetRegion): number => {
   return end - start + 1
 }
 
-const getEssayColCount = (region: AnswerSheetRegion): number => {
-  const pageWidth = pageSizes[props.template.pageSize || 'A4'].width
-  const isLandscape = props.template.orientation === 2
-  const width = isLandscape ? pageSizes[props.template.pageSize || 'A4'].height : pageWidth
-  const margins = (props.template.marginLeft || 15) + (props.template.marginRight || 15)
-  const gridSize = region.config?.gridSize || 10
-  return Math.floor((width - margins) / gridSize)
+const formatQuestionTitle = (region: AnswerSheetRegion) => {
+  const start = region.questionStart
+  const end = region.questionEnd
+  if (!start || !end) {
+    return ''
+  }
+  return start === end ? `第${start}题` : `第${start}-${end}题`
+}
+
+const formatRegionSummary = (region: AnswerSheetRegion) => {
+  const start = region.questionStart
+  const end = region.questionEnd
+  if (!start || !end) {
+    return ''
+  }
+  return start === end ? `第 ${start} 题` : `${start}-${end} 题`
 }
 
 const hasBounds = (region: AnswerSheetRegion) => {

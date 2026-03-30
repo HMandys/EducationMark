@@ -222,6 +222,7 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
                 AnswerSheetRegionDTO regionDTO = regionDTOs.get(i);
                 AnswerSheetRegion region = new AnswerSheetRegion();
                 BeanUtils.copyProperties(regionDTO, region);
+                normalizeRegionQuestionScope(region);
                 region.setId(null); // 确保是新增
                 region.setTemplateId(templateId);
                 region.setSortOrder(i);
@@ -454,45 +455,57 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
             PaperQuestion firstQuestion = sectionQuestions.get(0);
             int regionType = determineRegionType(firstQuestion.getQuestionType());
 
-            AnswerSheetRegion region = new AnswerSheetRegion();
-            region.setTemplateId(templateId);
-            region.setRegionType(regionType);
-            region.setRegionName(firstQuestion.getSectionName() != null ?
-                    firstQuestion.getSectionName() : REGION_TYPE_NAMES.get(regionType));
-            region.setPageNo(1);
-            region.setSortOrder(sortOrder++);
+            if (regionType != 1) {
+                for (PaperQuestion question : sectionQuestions) {
+                    createGeneratedRegion(templateId, List.of(question), determineRegionType(question.getQuestionType()), sortOrder++);
+                }
+                continue;
+            }
 
-            // 设置题号范围
-            int minNo = sectionQuestions.stream()
-                    .mapToInt(q -> Integer.parseInt(q.getQuestionNo().replaceAll("[^0-9]", "")))
-                    .min().orElse(1);
-            int maxNo = sectionQuestions.stream()
-                    .mapToInt(q -> Integer.parseInt(q.getQuestionNo().replaceAll("[^0-9]", "")))
-                    .max().orElse(1);
-            region.setQuestionStart(minNo);
-            region.setQuestionEnd(maxNo);
-
-            // 设置关联题目ID
-            List<Long> questionIds = sectionQuestions.stream()
-                    .map(PaperQuestion::getId)
-                    .collect(Collectors.toList());
-            region.setQuestionIds(questionIds);
-
-            // 设置区域配置
-            Map<String, Object> config = generateRegionConfig(regionType, sectionQuestions);
-            region.setConfig(config);
-
-            regionMapper.insert(region);
+            createGeneratedRegion(templateId, sectionQuestions, regionType, sortOrder++);
         }
+    }
+
+    private void createGeneratedRegion(Long templateId, List<PaperQuestion> questions, int regionType, int sortOrder) {
+        if (questions == null || questions.isEmpty()) {
+            return;
+        }
+
+        PaperQuestion firstQuestion = questions.get(0);
+        AnswerSheetRegion region = new AnswerSheetRegion();
+        region.setTemplateId(templateId);
+        region.setRegionType(regionType);
+        region.setRegionName(buildGeneratedRegionName(firstQuestion, regionType, questions.size() == 1));
+        region.setPageNo(1);
+        region.setSortOrder(sortOrder);
+
+        int minNo = questions.stream()
+                .mapToInt(q -> Integer.parseInt(q.getQuestionNo().replaceAll("[^0-9]", "")))
+                .min().orElse(1);
+        int maxNo = questions.stream()
+                .mapToInt(q -> Integer.parseInt(q.getQuestionNo().replaceAll("[^0-9]", "")))
+                .max().orElse(1);
+        region.setQuestionStart(minNo);
+        region.setQuestionEnd(maxNo);
+        region.setQuestionIds(questions.stream().map(PaperQuestion::getId).collect(Collectors.toList()));
+        region.setConfig(generateRegionConfig(regionType, questions));
+        normalizeRegionQuestionScope(region);
+        regionMapper.insert(region);
+    }
+
+    private String buildGeneratedRegionName(PaperQuestion question, int regionType, boolean singleQuestion) {
+        if (singleQuestion) {
+            return "第" + question.getQuestionNo() + "题";
+        }
+        return question.getSectionName() != null ? question.getSectionName() : REGION_TYPE_NAMES.get(regionType);
     }
 
     private int determineRegionType(Integer questionType) {
         if (questionType == null) return 3; // 默认解答题
         return switch (questionType) {
             case 1, 2, 3 -> 1; // 单选、多选、判断 -> 选择题
-            case 4 -> 2; // 填空题
-            case 7 -> 4; // 作文题
-            default -> 3; // 其他 -> 解答题
+            case 4, 7 -> 3; // 填空题、作文题都按主观题处理
+            default -> 3; // 其他 -> 主观题
         };
     }
 
@@ -529,18 +542,6 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
                 config.put("regionRole", "subjective_crop");
                 config.put("anchorType", "none");
                 config.put("cropMode", "single-question");
-            }
-            case 4 -> { // 作文题
-                int totalScore = questions.stream()
-                        .mapToInt(q -> q.getScore() != null ? q.getScore() : 0)
-                        .sum();
-                int wordCount = totalScore >= 50 ? 800 : (totalScore >= 30 ? 600 : 400);
-                config.put("gridType", "square"); // 格子类型: square, line
-                config.put("gridSize", 10); // 格子大小(mm)
-                config.put("wordCount", wordCount); // 总字数
-                config.put("regionRole", "essay_crop");
-                config.put("anchorType", "none");
-                config.put("cropMode", "full-region");
             }
         }
 
@@ -711,16 +712,31 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
 
     private boolean requiresQuestionRange(String regionRole, Integer regionType) {
         if (regionRole != null && !regionRole.isBlank()) {
-            return Set.of("choice_block", "subjective_crop", "essay_crop").contains(regionRole);
+            return Set.of("choice_block", "subjective_crop").contains(regionRole);
         }
         return regionType != null && regionType >= 1 && regionType <= 4;
+    }
+
+    private void normalizeRegionQuestionScope(AnswerSheetRegion region) {
+        if (region == null) {
+            return;
+        }
+        String regionRole = getConfigString(region.getConfig(), "regionRole");
+        if ("subjective_crop".equals(regionRole)) {
+            if (region.getQuestionStart() != null) {
+                region.setQuestionEnd(region.getQuestionStart());
+            }
+            if (region.getQuestionIds() != null && region.getQuestionIds().size() > 1) {
+                region.setQuestionIds(List.of(region.getQuestionIds().get(0)));
+            }
+        }
     }
 
     private boolean requiresCropMode(String regionRole) {
         if (regionRole == null || regionRole.isBlank()) {
             return false;
         }
-        return Set.of("choice_block", "subjective_crop", "essay_crop").contains(regionRole);
+        return Set.of("choice_block", "subjective_crop").contains(regionRole);
     }
 
     private String buildRegionLabel(AnswerSheetRegionVO region) {

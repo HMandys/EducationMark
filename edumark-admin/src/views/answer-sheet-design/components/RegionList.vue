@@ -48,7 +48,7 @@
               <div class="region-item-info">
                 <span>页码 {{ element.pageNo || 1 }}</span>
                 <span v-if="element.questionStart && element.questionEnd">
-                  {{ element.questionStart }}-{{ element.questionEnd }} 题
+                  {{ formatQuestionLabel(element) }}
                 </span>
                 <span>{{ getRegionRoleName(element.config?.regionRole) }}</span>
               </div>
@@ -110,8 +110,7 @@ const handleDragChange = () => {
 const regionTypeMap: Record<number, string> = {
   1: '选择题',
   2: '填空题',
-  3: '解答题',
-  4: '作文题',
+  3: '主观题',
 }
 
 const regionTypeTagMap: Record<number, 'primary' | 'success' | 'warning' | 'info'> = {
@@ -124,7 +123,7 @@ const regionTypeTagMap: Record<number, 'primary' | 'success' | 'warning' | 'info
 const regionRoleMap: Record<RegionRole, string> = {
   choice_block: '客观题涂卡区',
   subjective_crop: '主观题裁题区',
-  essay_crop: '作文裁题区',
+  essay_crop: '主观题裁题区',
   score_box: '评分框',
   student_id: '学号识别区',
   student_name: '姓名识别区',
@@ -135,6 +134,14 @@ const regionRoleMap: Record<RegionRole, string> = {
 const getRegionTypeName = (type: number) => regionTypeMap[type] || '未知'
 const getRegionTypeTag = (type: number) => regionTypeTagMap[type] || 'info'
 const getRegionRoleName = (role?: RegionRole) => role ? regionRoleMap[role] : '未设置用途'
+const formatQuestionLabel = (region: AnswerSheetRegion) => {
+  const start = region.questionStart
+  const end = region.questionEnd
+  if (!start || !end) {
+    return ''
+  }
+  return start === end ? `第 ${start} 题` : `${start}-${end} 题`
+}
 
 const isAnnotated = (region: AnswerSheetRegion) => {
   const config = region.config

@@ -27,6 +27,7 @@
         <result column="arbitration_teacher_name" property="arbitrationTeacherName"/>
         <result column="question_no" property="questionNo"/>
         <result column="answer_image_url" property="answerImageUrl"/>
+        <result column="original_image_url" property="originalImageUrl"/>
     </resultMap>
 
     <select id="selectPageVO" resultMap="MarkingArbitrationVOMap">
@@ -36,8 +37,12 @@
             u1.real_name AS first_teacher_name,
             u2.real_name AS second_teacher_name,
             u3.real_name AS arbitration_teacher_name,
-            pq.question_no,
-            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS answer_image_url
+            CASE
+                WHEN ma.question_id &lt; 0 THEN CAST(-ma.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS answer_image_url,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS original_image_url
         FROM marking_arbitration ma
         LEFT JOIN student st ON ma.student_id = st.id
         LEFT JOIN sys_user u1 ON ma.first_teacher_id = u1.id
@@ -58,8 +63,12 @@
             u1.real_name AS first_teacher_name,
             u2.real_name AS second_teacher_name,
             u3.real_name AS arbitration_teacher_name,
-            pq.question_no,
-            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS answer_image_url
+            CASE
+                WHEN ma.question_id &lt; 0 THEN CAST(-ma.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS answer_image_url,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS original_image_url
         FROM marking_arbitration ma
         LEFT JOIN student st ON ma.student_id = st.id
         LEFT JOIN sys_user u1 ON ma.first_teacher_id = u1.id
@@ -75,8 +84,12 @@
             st.student_name AS student_name,
             u1.real_name AS first_teacher_name,
             u2.real_name AS second_teacher_name,
-            pq.question_no,
-            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS answer_image_url
+            CASE
+                WHEN ma.question_id &lt; 0 THEN CAST(-ma.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS answer_image_url,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = ma.answer_sheet_id LIMIT 1) AS original_image_url
         FROM marking_arbitration ma
         LEFT JOIN student st ON ma.student_id = st.id
         LEFT JOIN sys_user u1 ON ma.first_teacher_id = u1.id

@@ -395,6 +395,9 @@ async function handleAssign(row: MarkingTaskVO) {
   assignForm.secondTeachers = []
   assignForm.arbitrationTeachers = []
 
+  // 重新加载教师列表
+  await loadTeachers()
+
   // 加载任务详情获取已分配的教师
   const res = await getMarkingTaskDetail(row.id)
   currentTask.value = res.data

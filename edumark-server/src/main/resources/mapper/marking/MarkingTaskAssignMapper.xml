@@ -36,7 +36,10 @@
             mt.name AS task_name,
             e.name AS exam_name,
             es.subject_name AS subject_name,
-            pq.question_no,
+            CASE
+                WHEN mt.question_id &lt; 0 THEN CAST(-mt.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no,
             mt.status AS task_status
         FROM marking_task_assign mta
         LEFT JOIN sys_user u ON mta.teacher_id = u.id

@@ -5,6 +5,8 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
+const apiTarget = process.env.EDUMARK_API_TARGET || 'http://127.0.0.1:8080'
+
 export default defineConfig({
   plugins: [
     vue(),
@@ -29,7 +31,7 @@ export default defineConfig({
     open: false,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: apiTarget,
         changeOrigin: true,
       },
     },

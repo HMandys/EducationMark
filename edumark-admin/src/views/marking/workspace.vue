@@ -52,21 +52,42 @@
           <template #header>
             <div class="section-header">
               <span>仲裁题图</span>
-              <div v-if="currentArbitration">
+              <div v-if="currentArbitration" class="image-header-actions">
                 <el-tag size="small">学生：{{ currentArbitration.studentName }}</el-tag>
                 <el-tag size="small" type="warning">分差：{{ currentArbitration.scoreDiff }}</el-tag>
+                <el-button-group v-if="arbitrationHasImageSwitch">
+                  <el-button
+                    size="small"
+                    :type="arbitrationImageMode === 'crop' ? 'primary' : 'default'"
+                    @click="arbitrationImageMode = 'crop'"
+                  >
+                    裁题图
+                  </el-button>
+                  <el-button
+                    size="small"
+                    :type="arbitrationImageMode === 'original' ? 'primary' : 'default'"
+                    @click="arbitrationImageMode = 'original'"
+                  >
+                    原卷
+                  </el-button>
+                </el-button-group>
               </div>
             </div>
           </template>
 
-          <div class="answer-image" v-if="currentArbitration?.answerImageUrl">
-            <el-image
-              :src="currentArbitration.answerImageUrl"
-              fit="contain"
-              style="width: 100%; max-height: 600px"
-              :preview-src-list="[currentArbitration.answerImageUrl]"
-            />
-          </div>
+          <template v-if="currentArbitrationDisplayImage">
+            <div class="answer-image">
+              <el-image
+                :src="currentArbitrationDisplayImage"
+                fit="contain"
+                style="width: 100%; max-height: 600px"
+                :preview-src-list="buildPreviewList(currentArbitration?.answerImageUrl, currentArbitration?.originalImageUrl)"
+              />
+            </div>
+            <div v-if="currentArbitration && !arbitrationHasImageSwitch" class="image-hint">
+              当前未匹配到主观题裁题图，已回退显示原始整卷图。
+            </div>
+          </template>
           <el-empty v-else description="暂无仲裁题图">
             <el-button type="primary" @click="loadNextArbitrationRecord">刷新</el-button>
           </el-empty>
@@ -137,20 +158,41 @@
           <template #header>
             <div class="section-header">
               <span>答题卡</span>
-              <div v-if="currentRecord">
+              <div v-if="currentRecord" class="image-header-actions">
                 <el-tag size="small">学生：{{ currentRecord.studentName }}</el-tag>
                 <el-tag size="small" type="info">学号：{{ currentRecord.studentNumber }}</el-tag>
+                <el-button-group v-if="recordHasImageSwitch">
+                  <el-button
+                    size="small"
+                    :type="recordImageMode === 'crop' ? 'primary' : 'default'"
+                    @click="recordImageMode = 'crop'"
+                  >
+                    裁题图
+                  </el-button>
+                  <el-button
+                    size="small"
+                    :type="recordImageMode === 'original' ? 'primary' : 'default'"
+                    @click="recordImageMode = 'original'"
+                  >
+                    原卷
+                  </el-button>
+                </el-button-group>
               </div>
             </div>
           </template>
-          <div class="answer-image" v-if="currentRecord?.answerImageUrl">
-            <el-image
-              :src="currentRecord.answerImageUrl"
-              fit="contain"
-              style="width: 100%; max-height: 600px"
-              :preview-src-list="[currentRecord.answerImageUrl]"
-            />
-          </div>
+          <template v-if="currentRecordDisplayImage">
+            <div class="answer-image">
+              <el-image
+                :src="currentRecordDisplayImage"
+                fit="contain"
+                style="width: 100%; max-height: 600px"
+                :preview-src-list="buildPreviewList(currentRecord?.answerImageUrl, currentRecord?.originalImageUrl)"
+              />
+            </div>
+            <div v-if="currentRecord && !recordHasImageSwitch" class="image-hint">
+              当前未匹配到主观题裁题图，已回退显示原始整卷图。
+            </div>
+          </template>
           <el-empty v-else description="暂无答题卡图片">
             <el-button type="primary" @click="loadNextRecord">刷新</el-button>
           </el-empty>
@@ -228,6 +270,8 @@ const selectedTask = ref<MarkingTaskAssignVO | null>(null)
 const currentRecord = ref<MarkingRecordVO | null>(null)
 const currentArbitration = ref<MarkingArbitrationVO | null>(null)
 const submitting = ref(false)
+const recordImageMode = ref<'crop' | 'original'>('crop')
+const arbitrationImageMode = ref<'crop' | 'original'>('crop')
 
 const scoreForm = reactive({
   score: 0,
@@ -251,6 +295,42 @@ const middleScore = computed(() => {
     return 0
   }
   return Math.round(((currentArbitration.value.firstScore || 0) + (currentArbitration.value.secondScore || 0)) / 2)
+})
+
+const recordHasImageSwitch = computed(() => {
+  return Boolean(
+    currentRecord.value?.answerImageUrl
+    && currentRecord.value?.originalImageUrl
+    && currentRecord.value.answerImageUrl !== currentRecord.value.originalImageUrl
+  )
+})
+
+const currentRecordDisplayImage = computed(() => {
+  if (!currentRecord.value) {
+    return ''
+  }
+  if (recordImageMode.value === 'original') {
+    return currentRecord.value.originalImageUrl || currentRecord.value.answerImageUrl || ''
+  }
+  return currentRecord.value.answerImageUrl || currentRecord.value.originalImageUrl || ''
+})
+
+const arbitrationHasImageSwitch = computed(() => {
+  return Boolean(
+    currentArbitration.value?.answerImageUrl
+    && currentArbitration.value?.originalImageUrl
+    && currentArbitration.value.answerImageUrl !== currentArbitration.value.originalImageUrl
+  )
+})
+
+const currentArbitrationDisplayImage = computed(() => {
+  if (!currentArbitration.value) {
+    return ''
+  }
+  if (arbitrationImageMode.value === 'original') {
+    return currentArbitration.value.originalImageUrl || currentArbitration.value.answerImageUrl || ''
+  }
+  return currentArbitration.value.answerImageUrl || currentArbitration.value.originalImageUrl || ''
 })
 
 onMounted(() => {
@@ -293,6 +373,7 @@ async function loadNextRecord() {
     const res = await getNextPendingRecord(selectedTask.value.taskId)
     currentRecord.value = res.data
     if (currentRecord.value) {
+      recordImageMode.value = 'crop'
       scoreForm.score = 0
       scoreForm.comment = ''
     }
@@ -310,6 +391,7 @@ async function loadNextArbitrationRecord() {
     const res = await getNextArbitration(selectedTask.value.taskId)
     currentArbitration.value = res.data
     if (currentArbitration.value) {
+      arbitrationImageMode.value = 'crop'
       arbitrationForm.score = middleScore.value
       arbitrationForm.comment = ''
     }
@@ -388,6 +470,10 @@ function getRoleName(role: number) {
       return '未知'
   }
 }
+
+function buildPreviewList(...urls: Array<string | undefined>) {
+  return urls.filter((url, index, list): url is string => Boolean(url) && list.indexOf(url) === index)
+}
 </script>
 
 <style scoped>
@@ -465,6 +551,13 @@ function getRoleName(role: number) {
   flex-wrap: wrap;
 }
 
+.image-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .workspace-content {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(340px, 420px);
@@ -482,6 +575,15 @@ function getRoleName(role: number) {
   justify-content: center;
   background: #f7f9fb;
   border-radius: 12px;
+}
+
+.image-hint {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff8e8;
+  color: #8a5a00;
+  font-size: 13px;
 }
 
 .scoring-form {

@@ -33,7 +33,10 @@
             mt.*,
             e.name AS exam_name,
             es.subject_name AS subject_name,
-            pq.question_no
+            CASE
+                WHEN mt.question_id &lt; 0 THEN CAST(-mt.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no
         FROM marking_task mt
         LEFT JOIN exam e ON mt.exam_id = e.id
         LEFT JOIN exam_subject es ON mt.exam_subject_id = es.id
@@ -56,7 +59,10 @@
             mt.*,
             e.name AS exam_name,
             es.subject_name AS subject_name,
-            pq.question_no
+            CASE
+                WHEN mt.question_id &lt; 0 THEN CAST(-mt.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no
         FROM marking_task mt
         LEFT JOIN exam e ON mt.exam_id = e.id
         LEFT JOIN exam_subject es ON mt.exam_subject_id = es.id
@@ -70,13 +76,20 @@
             mt.*,
             e.name AS exam_name,
             es.subject_name AS subject_name,
-            pq.question_no
+            CASE
+                WHEN mt.question_id &lt; 0 THEN CAST(-mt.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no
         FROM marking_task mt
         LEFT JOIN exam e ON mt.exam_id = e.id
         LEFT JOIN exam_subject es ON mt.exam_subject_id = es.id
         LEFT JOIN paper_question pq ON mt.question_id = pq.id
         WHERE mt.exam_subject_id = #{examSubjectId}
         AND mt.deleted = 0
-        ORDER BY pq.sort
+        ORDER BY
+            CASE
+                WHEN mt.question_id &lt; 0 THEN -mt.question_id
+                ELSE COALESCE(pq.sort, 999999)
+            END
     </select>
 </mapper>

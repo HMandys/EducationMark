@@ -68,7 +68,7 @@ public interface MarkingAccessService {
      * @param comment      评语
      * @return 是否成功
      */
-    boolean submitScore(String sessionToken, Long recordId, Integer score, String comment);
+    boolean submitScore(String sessionToken, Long recordId, Integer score, String comment, String annotations);
 
     /**
      * 刷新阅卷码过期时间

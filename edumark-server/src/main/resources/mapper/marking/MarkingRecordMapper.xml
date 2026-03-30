@@ -20,7 +20,9 @@
         <result column="student_name" property="studentName"/>
         <result column="student_number" property="studentNumber"/>
         <result column="question_no" property="questionNo"/>
+        <result column="annotations" property="annotations"/>
         <result column="answer_image_url" property="answerImageUrl"/>
+        <result column="original_image_url" property="originalImageUrl"/>
     </resultMap>
 
     <select id="selectPageVO" resultMap="MarkingRecordVOMap">
@@ -29,8 +31,12 @@
             u.real_name AS teacher_name,
             st.student_name AS student_name,
             st.student_code AS student_number,
-            pq.question_no,
-            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
+            CASE
+                WHEN mr.question_id &lt; 0 THEN CAST(-mr.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS original_image_url
         FROM marking_record mr
         LEFT JOIN sys_user u ON mr.teacher_id = u.id
         LEFT JOIN student st ON mr.student_id = st.id
@@ -51,8 +57,12 @@
             u.real_name AS teacher_name,
             st.student_name AS student_name,
             st.student_code AS student_number,
-            pq.question_no,
-            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
+            CASE
+                WHEN mr.question_id &lt; 0 THEN CAST(-mr.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS original_image_url
         FROM marking_record mr
         LEFT JOIN sys_user u ON mr.teacher_id = u.id
         LEFT JOIN student st ON mr.student_id = st.id
@@ -66,8 +76,12 @@
             u.real_name AS teacher_name,
             st.student_name AS student_name,
             st.student_code AS student_number,
-            pq.question_no,
-            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
+            CASE
+                WHEN mr.question_id &lt; 0 THEN CAST(-mr.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS original_image_url
         FROM marking_record mr
         LEFT JOIN sys_user u ON mr.teacher_id = u.id
         LEFT JOIN student st ON mr.student_id = st.id
@@ -92,8 +106,13 @@
             u.real_name AS teacher_name,
             st.student_name AS student_name,
             st.student_code AS student_number,
-            pq.question_no,
-            pq.score AS full_score
+            CASE
+                WHEN mr.question_id &lt; 0 THEN CAST(-mr.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no,
+            COALESCE(mr.full_score, pq.score) AS full_score,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS original_image_url
         FROM marking_record mr
         LEFT JOIN sys_user u ON mr.teacher_id = u.id
         LEFT JOIN student st ON mr.student_id = st.id
@@ -120,8 +139,12 @@
             u.real_name AS teacher_name,
             st.student_name AS student_name,
             st.student_code AS student_number,
-            pq.question_no,
-            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url
+            CASE
+                WHEN mr.question_id &lt; 0 THEN CAST(-mr.question_id AS CHAR)
+                ELSE pq.question_no
+            END AS question_no,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS answer_image_url,
+            (SELECT image_url FROM answer_sheet_image WHERE answer_sheet_id = mr.answer_sheet_id LIMIT 1) AS original_image_url
         FROM marking_record mr
         LEFT JOIN sys_user u ON mr.teacher_id = u.id
         LEFT JOIN student st ON mr.student_id = st.id

@@ -87,6 +87,9 @@ public class MarkingArbitrationVO {
     @Schema(description = "答题卡图片URL")
     private String answerImageUrl;
 
+    @Schema(description = "原始答题卡图片URL")
+    private String originalImageUrl;
+
     @Schema(description = "一评记录ID")
     private Long firstMarkingId;
 
@@ -169,6 +172,9 @@ public class MarkingArbitrationVO {
 
     public String getAnswerImageUrl() { return answerImageUrl; }
     public void setAnswerImageUrl(String answerImageUrl) { this.answerImageUrl = answerImageUrl; }
+
+    public String getOriginalImageUrl() { return originalImageUrl; }
+    public void setOriginalImageUrl(String originalImageUrl) { this.originalImageUrl = originalImageUrl; }
 
     public Long getFirstMarkingId() { return firstMarkingId; }
     public void setFirstMarkingId(Long firstMarkingId) { this.firstMarkingId = firstMarkingId; }

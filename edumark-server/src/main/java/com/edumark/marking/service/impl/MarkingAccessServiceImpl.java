@@ -185,14 +185,16 @@ public class MarkingAccessServiceImpl implements MarkingAccessService {
         item.setFullScore(recordVO.getFullScore());
         item.setQuestionNo(recordVO.getQuestionNo());
 
+        String questionImageUrl = recordVO.getAnswerImageUrl();
         try {
             String previewUrl = answerSheetDetailService.getQuestionPreviewUrl(recordVO.getAnswerSheetId(), recordVO.getQuestionId());
             if (previewUrl != null && !previewUrl.isBlank()) {
-                item.setQuestionImage(previewUrl);
+                questionImageUrl = previewUrl;
             }
         } catch (BusinessException ignored) {
-            // 题图预览不存在
+            // 题图预览不存在时退回整卷图
         }
+        item.setQuestionImage(questionImageUrl);
 
         Long totalCount = countRoleRecords(taskId, markingRole, null);
         Long pendingIndex = markingRecordMapper.selectPendingIndexByRole(taskId, markingRole, recordVO.getId());
@@ -205,7 +207,7 @@ public class MarkingAccessServiceImpl implements MarkingAccessService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public boolean submitScore(String sessionToken, Long recordId, Integer score, String comment) {
+    public boolean submitScore(String sessionToken, Long recordId, Integer score, String comment, String annotations) {
         MarkingSession session = getValidSession(sessionToken);
         Long taskId = session.getTaskId();
         Integer markingRole = session.getMarkingRole();
@@ -232,6 +234,7 @@ public class MarkingAccessServiceImpl implements MarkingAccessService {
 
         record.setScore(score);
         record.setComment(comment);
+        record.setAnnotations(annotations);
         record.setMarkingTime(LocalDateTime.now());
         record.setStatus(1);
         markingRecordMapper.updateById(record);
@@ -388,13 +391,33 @@ public class MarkingAccessServiceImpl implements MarkingAccessService {
             }
         }
 
-        PaperQuestion question = paperQuestionMapper.selectById(task.getQuestionId());
-        if (question != null) {
-            vo.setQuestionNo(question.getQuestionNo());
-            vo.setFullScore(question.getScore());
+        Integer templateQuestionNo = resolveTemplateQuestionNo(task.getQuestionId());
+        if (templateQuestionNo != null) {
+            vo.setQuestionNo(String.valueOf(templateQuestionNo));
+            MarkingRecord record = markingRecordMapper.selectOne(
+                    new LambdaQueryWrapper<MarkingRecord>()
+                            .eq(MarkingRecord::getTaskId, task.getId())
+                            .last("LIMIT 1")
+            );
+            if (record != null) {
+                vo.setFullScore(record.getFullScore());
+            }
+        } else {
+            PaperQuestion question = paperQuestionMapper.selectById(task.getQuestionId());
+            if (question != null) {
+                vo.setQuestionNo(question.getQuestionNo());
+                vo.setFullScore(question.getScore());
+            }
         }
 
         return vo;
+    }
+
+    private Integer resolveTemplateQuestionNo(Long questionId) {
+        if (questionId == null || questionId >= 0) {
+            return null;
+        }
+        return Math.toIntExact(-questionId);
     }
 
     private Long countRoleRecords(Long taskId, Integer markingRole, Integer status) {

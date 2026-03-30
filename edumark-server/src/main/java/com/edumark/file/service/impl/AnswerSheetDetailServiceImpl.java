@@ -110,11 +110,14 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             return;
         }
 
-        // 尝试传统模式：从 PaperQuestion 创建明细
+        // 优先尝试传统模式：只有试卷里确实存在题目时才走这里
         Paper paper = paperMapper.selectByExamSubjectId(answerSheet.getExamSubjectId());
         if (paper != null) {
-            initializeFromPaper(answerSheetId, paper.getId());
-            return;
+            List<PaperQuestion> paperQuestions = loadPaperQuestions(paper.getId());
+            if (!paperQuestions.isEmpty()) {
+                initializeFromPaper(answerSheetId, paperQuestions);
+                return;
+            }
         }
 
         // 独立模式：从模板区域创建明细
@@ -127,8 +130,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
     /**
      * 传统模式：从试卷题目创建明细
      */
-    private void initializeFromPaper(Long answerSheetId, Long paperId) {
-        List<PaperQuestion> questions = loadPaperQuestions(paperId);
+    private void initializeFromPaper(Long answerSheetId, List<PaperQuestion> questions) {
         if (questions.isEmpty()) {
             return;
         }
@@ -190,6 +192,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
                 AnswerSheetDetail detail = new AnswerSheetDetail();
                 detail.setAnswerSheetId(answerSheetId);
+                detail.setQuestionId(toTemplateQuestionId(questionNo));
                 detail.setRegionId(region.getId());
                 detail.setQuestionNo(questionNo);
                 detail.setFullScore(perQuestionScore);
@@ -443,7 +446,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         }
 
         // 只有客观题，检查是否都已评分
-        boolean allCompleted = context.detailMap().values().stream()
+        boolean allCompleted = !context.detailMap().isEmpty() && context.detailMap().values().stream()
                 .allMatch(detail -> detail.getStatus() != null && detail.getStatus() == DETAIL_STATUS_COMPLETED);
 
         if (allCompleted) {
@@ -544,6 +547,15 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
     @Override
     public String getQuestionPreviewUrl(Long answerSheetId, Long questionId) {
         AnswerSheetContext context = loadContext(answerSheetId, false);
+        Integer templateQuestionNo = resolveTemplateQuestionNo(questionId);
+        if (templateQuestionNo != null) {
+            AnswerSheetDetail detail = getDetailByQuestionNo(context.detailMap(), templateQuestionNo);
+            if (detail == null) {
+                throw new BusinessException("题目不存在");
+            }
+            return buildTemplateQuestionPreview(context, detail, templateQuestionNo, questionId);
+        }
+
         PaperQuestion question = context.questionMap().get(questionId);
         if (question == null) {
             throw new BusinessException("题目不存在");
@@ -569,7 +581,38 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
         BufferedImage previewImage = cropQuestionPreview(pageImage, binding.region(), binding.orderedQuestions(), question.getId(), binding.cropMode());
         byte[] bytes = toPngBytes(previewImage);
-        String objectName = "answer-sheet-preview/" + answerSheetId + "/" + questionId + ".png";
+        String objectName = "answer-sheet-preview/" + context.answerSheet().getId() + "/" + questionId + ".png";
+        fileService.uploadBytes(bytes, objectName, "image/png");
+        return fileService.getUrl(objectName);
+    }
+
+    private String buildTemplateQuestionPreview(AnswerSheetContext context,
+                                                AnswerSheetDetail detail,
+                                                Integer questionNo,
+                                                Long questionId) {
+        AnswerSheetRegionVO region = findTemplatePreviewRegion(context, detail, questionNo);
+        if (region == null) {
+            throw new BusinessException("当前题目未配置裁题区域");
+        }
+
+        String regionRole = getConfigString(region.getConfig(), "regionRole");
+        if (!supportsPreview(regionRole)) {
+            throw new BusinessException("当前题型暂不支持裁题预览");
+        }
+
+        AnswerSheetImageVO image = pickImageForRegion(context.images(), region.getPageNo());
+        if (image == null || image.getImagePath() == null || image.getImagePath().isBlank()) {
+            throw new BusinessException("未找到题目对应页的扫描图片");
+        }
+
+        BufferedImage pageImage = readImage(image.getImagePath(), new HashMap<>());
+        if (pageImage == null) {
+            throw new BusinessException("扫描图片读取失败");
+        }
+
+        BufferedImage previewImage = cropTemplateQuestionPreview(pageImage, region, questionNo, getConfigString(region.getConfig(), "cropMode"));
+        byte[] bytes = toPngBytes(previewImage);
+        String objectName = "answer-sheet-preview/" + context.answerSheet().getId() + "/" + questionId + ".png";
         fileService.uploadBytes(bytes, objectName, "image/png");
         return fileService.getUrl(objectName);
     }
@@ -668,17 +711,26 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             return;
         }
 
-        AnswerSheetDetail detail = answerSheetDetailMapper.selectOne(
-                new LambdaQueryWrapper<AnswerSheetDetail>()
-                        .eq(AnswerSheetDetail::getAnswerSheetId, answerSheetId)
-                        .eq(AnswerSheetDetail::getQuestionId, questionId)
-                        .last("LIMIT 1")
-        );
+        Integer templateQuestionNo = resolveTemplateQuestionNo(questionId);
+        LambdaQueryWrapper<AnswerSheetDetail> detailQuery = new LambdaQueryWrapper<AnswerSheetDetail>()
+                .eq(AnswerSheetDetail::getAnswerSheetId, answerSheetId)
+                .last("LIMIT 1");
+        if (templateQuestionNo != null) {
+            detailQuery.eq(AnswerSheetDetail::getQuestionNo, templateQuestionNo);
+        } else {
+            detailQuery.eq(AnswerSheetDetail::getQuestionId, questionId);
+        }
+
+        AnswerSheetDetail detail = answerSheetDetailMapper.selectOne(detailQuery);
 
         if (detail == null) {
             detail = new AnswerSheetDetail();
             detail.setAnswerSheetId(answerSheetId);
-            detail.setQuestionId(questionId);
+            if (templateQuestionNo != null) {
+                detail.setQuestionNo(templateQuestionNo);
+            } else {
+                detail.setQuestionId(questionId);
+            }
             detail.setScore(score != null ? score : 0);
             detail.setStatus(completed ? DETAIL_STATUS_COMPLETED : DETAIL_STATUS_PENDING);
             answerSheetDetailMapper.insert(detail);
@@ -689,6 +741,67 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         }
 
         recalculateAnswerSheetScores(answerSheetId);
+    }
+
+    private AnswerSheetRegionVO findTemplatePreviewRegion(AnswerSheetContext context, AnswerSheetDetail detail, Integer questionNo) {
+        if (context.template() == null || context.template().getRegions() == null) {
+            return null;
+        }
+
+        if (detail.getRegionId() != null) {
+            for (AnswerSheetRegionVO region : context.template().getRegions()) {
+                if (detail.getRegionId().equals(region.getId())) {
+                    return region;
+                }
+            }
+        }
+
+        for (AnswerSheetRegionVO region : context.template().getRegions()) {
+            String regionRole = getConfigString(region.getConfig(), "regionRole");
+            if (!supportsPreview(regionRole)) {
+                continue;
+            }
+            if (containsQuestionNo(region, questionNo)) {
+                return region;
+            }
+        }
+        return null;
+    }
+
+    private boolean containsQuestionNo(AnswerSheetRegionVO region, Integer questionNo) {
+        if (region == null || questionNo == null) {
+            return false;
+        }
+        Integer questionStart = region.getQuestionStart();
+        Integer questionEnd = region.getQuestionEnd();
+        return questionStart != null && questionEnd != null && questionNo >= questionStart && questionNo <= questionEnd;
+    }
+
+    private BufferedImage cropTemplateQuestionPreview(BufferedImage pageImage,
+                                                      AnswerSheetRegionVO region,
+                                                      Integer questionNo,
+                                                      String cropMode) {
+        BufferedImage regionImage = cropRegion(pageImage, region);
+        if (regionImage == null) {
+            throw new BusinessException("裁题区域无效");
+        }
+
+        if ("single-question".equals(cropMode)) {
+            Integer questionStart = region.getQuestionStart();
+            Integer questionEnd = region.getQuestionEnd();
+            if (questionStart != null && questionEnd != null && questionEnd > questionStart && questionNo != null) {
+                int questionCount = questionEnd - questionStart + 1;
+                int index = Math.max(0, Math.min(questionNo - questionStart, questionCount - 1));
+                int perHeight = Math.max(1, regionImage.getHeight() / questionCount);
+                int top = Math.min(index * perHeight, regionImage.getHeight() - 1);
+                int height = index == questionCount - 1
+                        ? regionImage.getHeight() - top
+                        : Math.min(perHeight, regionImage.getHeight() - top);
+                return safeSubImage(regionImage, 0, top, regionImage.getWidth(), height);
+            }
+        }
+
+        return regionImage;
     }
 
     @Override
@@ -1106,6 +1219,17 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
     private boolean supportsPreview(String regionRole) {
         return PREVIEW_REGION_ROLES.contains(regionRole);
+    }
+
+    private Integer resolveTemplateQuestionNo(Long questionId) {
+        if (questionId == null || questionId >= 0) {
+            return null;
+        }
+        return Math.toIntExact(-questionId);
+    }
+
+    private Long toTemplateQuestionId(Integer questionNo) {
+        return questionNo == null ? null : -questionNo.longValue();
     }
 
     private QuestionRegionBinding findQuestionBinding(AnswerSheetTemplateVO template, List<PaperQuestion> allQuestions, PaperQuestion question) {

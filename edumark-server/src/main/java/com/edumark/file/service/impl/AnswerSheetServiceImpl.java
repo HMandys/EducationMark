@@ -19,6 +19,7 @@ import com.edumark.file.recognition.BarcodeRecognitionResult;
 import com.edumark.file.recognition.BarcodeRecognitionService;
 import com.edumark.file.recognition.RecognitionImageInput;
 import com.edumark.file.service.AnswerSheetDetailService;
+import com.edumark.file.service.AnswerSheetRecognitionAsyncService;
 import com.edumark.file.service.AnswerSheetService;
 import com.edumark.file.service.FileService;
 import com.edumark.file.vo.AnswerSheetImageVO;
@@ -31,6 +32,8 @@ import org.springframework.beans.BeanWrapperImpl;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
@@ -74,6 +77,9 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
     @Resource
     private AnswerSheetDetailService answerSheetDetailService;
 
+    @Resource
+    private AnswerSheetRecognitionAsyncService recognitionAsyncService;
+
     @Override
     public PageResult<AnswerSheetVO> pageQuery(AnswerSheetQueryDTO query) {
         Page<AnswerSheetVO> page = new Page<>(query.getPageNum(), query.getPageSize());
@@ -114,6 +120,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         BeanUtils.copyProperties(dto, entity, getNullPropertyNames(dto));
         applyStudentResolution(entity, dto.getStudentId(), dto.getStudentNumber());
         updateById(entity);
+        syncNullableRecognitionFields(entity);
         initializeQuestionDetailsIfReady(entity);
     }
 
@@ -175,10 +182,22 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         // 更新图片数量
         answerSheet.setImageCount(pageNum - 1);
         if (answerSheet.getStudentId() == null || STATUS_RECOGNITION_EXCEPTION == answerSheet.getStatus()) {
-            refreshRecognition(answerSheet, null);
+            // 设置为识别中状态
+            answerSheet.setStatus(STATUS_RECOGNIZING);
+            answerSheet.setRemark("正在识别...");
+            updateById(answerSheet);
+
+            // 事务提交后再异步执行识别，确保图片数据已持久化
+            final Long sheetId = answerSheet.getId();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    recognitionAsyncService.recognizeAsync(sheetId);
+                }
+            });
+        } else {
+            updateById(answerSheet);
         }
-        updateById(answerSheet);
-        initializeQuestionDetailsIfReady(answerSheet);
 
         return getDetail(answerSheetId);
     }
@@ -197,7 +216,12 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         answerSheet.setSeatNumber(dto.getSeatNumber());
         answerSheet.setImageCount(dto.getImageObjectNames() != null ? dto.getImageObjectNames().size() : 0);
         answerSheet.setStatus(STATUS_RECOGNIZING);
-        applyRecognitionResult(answerSheet, dto, exam);
+        answerSheet.setRemark("正在识别...");
+
+        // 如果指定了学生ID或学号，先尝试同步识别
+        if (dto.getStudentId() != null || (dto.getStudentNumber() != null && !dto.getStudentNumber().isBlank())) {
+            applyRecognitionResult(answerSheet, dto, exam);
+        }
         save(answerSheet);
 
         if (dto.getImageObjectNames() != null && !dto.getImageObjectNames().isEmpty()) {
@@ -217,7 +241,19 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
             }
         }
 
-        initializeQuestionDetailsIfReady(answerSheet);
+        // 如果还没有识别成功，事务提交后异步触发识别
+        if (answerSheet.getStatus() == STATUS_RECOGNIZING) {
+            final Long sheetId = answerSheet.getId();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    recognitionAsyncService.recognizeAsync(sheetId);
+                }
+            });
+        } else {
+            // 已经识别成功，初始化题目明细
+            initializeQuestionDetailsIfReady(answerSheet);
+        }
 
         return answerSheet.getId();
     }
@@ -277,6 +313,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         }
         refreshRecognition(entity, null);
         updateById(entity);
+        syncNullableRecognitionFields(entity);
         initializeQuestionDetailsIfReady(entity);
     }
 
@@ -529,6 +566,19 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         }
         answerSheetDetailService.initializeQuestionDetails(answerSheet.getId());
         answerSheetDetailService.recognizeObjectiveAnswers(answerSheet.getId());
+    }
+
+    private void syncNullableRecognitionFields(AnswerSheet answerSheet) {
+        if (answerSheet == null || answerSheet.getId() == null) {
+            return;
+        }
+        lambdaUpdate()
+                .eq(AnswerSheet::getId, answerSheet.getId())
+                .set(AnswerSheet::getStudentId, answerSheet.getStudentId())
+                .set(AnswerSheet::getStudentNumber, answerSheet.getStudentNumber())
+                .set(AnswerSheet::getStatus, answerSheet.getStatus())
+                .set(AnswerSheet::getRemark, answerSheet.getRemark())
+                .update();
     }
 
     private record RecognitionOutcome(Student matchedStudent, String candidateStudentNumber, String remark) {

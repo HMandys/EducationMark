@@ -58,6 +58,9 @@ public class MarkingRecord extends BaseEntity {
     @Schema(description = "跳过次数")
     private Integer skipCount;
 
+    @Schema(description = "标注数据(JSON)")
+    private String annotations;
+
     @TableField(exist = false)
     @Schema(description = "教师姓名")
     private String teacherName;
@@ -128,4 +131,7 @@ public class MarkingRecord extends BaseEntity {
 
     public Integer getSkipCount() { return skipCount; }
     public void setSkipCount(Integer skipCount) { this.skipCount = skipCount; }
+
+    public String getAnnotations() { return annotations; }
+    public void setAnnotations(String annotations) { this.annotations = annotations; }
 }

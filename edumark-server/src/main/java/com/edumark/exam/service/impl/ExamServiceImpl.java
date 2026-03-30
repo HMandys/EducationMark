@@ -207,8 +207,30 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
         if (exam == null) {
             throw new BusinessException("考试不存在");
         }
+        if (status == null || status < 0 || status > 5) {
+            throw new BusinessException("无效的考试状态");
+        }
+        int current = exam.getStatus() != null ? exam.getStatus() : 0;
+        // 合法状态转换：只允许向前推进或从已发布撤回到已完成
+        boolean valid = (status == current + 1)
+                || (current == 5 && status == 4); // 撤回发布
+        if (!valid) {
+            throw new BusinessException("不允许从「" + getStatusName(current) + "」变更为「" + getStatusName(status) + "」");
+        }
         exam.setStatus(status);
         updateById(exam);
+    }
+
+    private String getStatusName(int status) {
+        return switch (status) {
+            case 0 -> "草稿";
+            case 1 -> "待考试";
+            case 2 -> "考试中";
+            case 3 -> "阅卷中";
+            case 4 -> "已完成";
+            case 5 -> "已发布";
+            default -> "未知";
+        };
     }
 
     @Override
@@ -261,43 +283,73 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
 
         for (ExamSubject subject : subjects) {
             Paper paper = paperMapper.selectByExamSubjectId(subject.getId());
-            if (paper == null) {
-                missingItems.add(subject.getSubjectName() + "未创建试卷");
-                continue;
-            }
 
-            if (Objects.equals(paper.getStatus(), 1)) {
-                completedPaperCount++;
-            } else {
-                missingItems.add(subject.getSubjectName() + "试卷未完成");
+            // 先检查答题卡模板（支持通过paperId或examId+subjectName查找）
+            AnswerSheetTemplate template = null;
+            if (paper != null) {
+                template = answerSheetTemplateMapper.selectOne(
+                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AnswerSheetTemplate>()
+                                .eq(AnswerSheetTemplate::getPaperId, paper.getId())
+                                .eq(AnswerSheetTemplate::getDeleted, 0)
+                                .last("LIMIT 1")
+                );
             }
-
-            Long questionCount = paperQuestionMapper.selectCount(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PaperQuestion>()
-                            .eq(PaperQuestion::getPaperId, paper.getId())
-                            .eq(PaperQuestion::getDeleted, 0)
-            );
-            if (questionCount != null && questionCount > 0) {
-                subjectWithQuestionCount++;
-            } else {
-                missingItems.add(subject.getSubjectName() + "试卷未配置题目");
-            }
-
-            AnswerSheetTemplate template = answerSheetTemplateMapper.selectOne(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AnswerSheetTemplate>()
-                            .eq(AnswerSheetTemplate::getPaperId, paper.getId())
-                            .eq(AnswerSheetTemplate::getDeleted, 0)
-                            .last("LIMIT 1")
-            );
+            // 如果通过paperId找不到，尝试通过examId + subjectName查找
             if (template == null) {
-                missingItems.add(subject.getSubjectName() + "未生成答题卡模板");
-                continue;
+                template = answerSheetTemplateMapper.selectOne(
+                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AnswerSheetTemplate>()
+                                .eq(AnswerSheetTemplate::getExamId, id)
+                                .eq(AnswerSheetTemplate::getSubjectName, subject.getSubjectName())
+                                .eq(AnswerSheetTemplate::getDeleted, 0)
+                                .last("LIMIT 1")
+                );
             }
 
-            if (Objects.equals(template.getStatus(), 1)) {
+            if (template != null && Objects.equals(template.getStatus(), 1)) {
                 publishedTemplateCount++;
+                // 有已发布的答题卡模板，试卷状态和题目不做强制检查
+                if (paper != null && Objects.equals(paper.getStatus(), 1)) {
+                    completedPaperCount++;
+                }
+                if (paper != null) {
+                    Long questionCount = paperQuestionMapper.selectCount(
+                            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PaperQuestion>()
+                                    .eq(PaperQuestion::getPaperId, paper.getId())
+                                    .eq(PaperQuestion::getDeleted, 0)
+                    );
+                    if (questionCount != null && questionCount > 0) {
+                        subjectWithQuestionCount++;
+                    }
+                }
             } else {
-                missingItems.add(subject.getSubjectName() + "答题卡模板未发布");
+                // 没有已发布的答题卡模板，检查完整的配置链路
+                if (template != null) {
+                    missingItems.add(subject.getSubjectName() + "答题卡模板未发布");
+                } else {
+                    missingItems.add(subject.getSubjectName() + "未生成答题卡模板");
+                }
+
+                if (paper == null) {
+                    missingItems.add(subject.getSubjectName() + "未创建试卷");
+                    continue;
+                }
+
+                if (Objects.equals(paper.getStatus(), 1)) {
+                    completedPaperCount++;
+                } else {
+                    missingItems.add(subject.getSubjectName() + "试卷未完成");
+                }
+
+                Long questionCount = paperQuestionMapper.selectCount(
+                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PaperQuestion>()
+                                .eq(PaperQuestion::getPaperId, paper.getId())
+                                .eq(PaperQuestion::getDeleted, 0)
+                );
+                if (questionCount != null && questionCount > 0) {
+                    subjectWithQuestionCount++;
+                } else {
+                    missingItems.add(subject.getSubjectName() + "试卷未配置题目");
+                }
             }
         }
 

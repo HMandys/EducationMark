@@ -24,9 +24,11 @@ public class Student extends BaseEntity {
     private Long userId;
 
     @Schema(description = "学号")
+    @TableField("student_code")
     private String studentNumber;
 
     @Schema(description = "姓名")
+    @TableField("student_name")
     private String name;
 
     @Schema(description = "性别: 0-未知 1-男 2-女")

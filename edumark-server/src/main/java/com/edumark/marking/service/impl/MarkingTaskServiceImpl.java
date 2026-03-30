@@ -5,9 +5,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.edumark.common.exception.BusinessException;
 import com.edumark.common.result.PageResult;
+import com.edumark.exam.entity.Exam;
 import com.edumark.exam.entity.ExamSubject;
 import com.edumark.exam.entity.Paper;
 import com.edumark.exam.entity.PaperQuestion;
+import com.edumark.exam.mapper.ExamMapper;
 import com.edumark.exam.mapper.ExamSubjectMapper;
 import com.edumark.exam.mapper.PaperMapper;
 import com.edumark.exam.mapper.PaperQuestionMapper;
@@ -32,6 +34,8 @@ import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +60,9 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
 
     @Resource
     private MarkingArbitrationMapper markingArbitrationMapper;
+
+    @Resource
+    private ExamMapper examMapper;
 
     @Resource
     private ExamSubjectMapper examSubjectMapper;
@@ -110,25 +117,15 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
             throw new BusinessException("该科目已生成过阅卷任务");
         }
 
-        // 查询该科目的试卷
+        // 查询该科目的试卷（可选，没有试卷也可以创建综合阅卷任务）
         Paper paper = paperMapper.selectOne(
                 new LambdaQueryWrapper<Paper>()
                         .eq(Paper::getExamSubjectId, examSubjectId)
                         .eq(Paper::getStatus, 1)
                         .last("LIMIT 1")
         );
-        if (paper == null) {
-            throw new BusinessException("该科目暂无已完成的试卷");
-        }
 
-        // 查询试卷的主观题
-        List<PaperQuestion> questions = paperQuestionMapper.selectList(
-                new LambdaQueryWrapper<PaperQuestion>()
-                        .eq(PaperQuestion::getPaperId, paper.getId())
-                        .eq(PaperQuestion::getIsObjective, 0) // 主观题
-        );
-
-        // 确保已识别成功的答题卡都初始化了题目明细
+        // 查询待阅卷的答题卡
         List<AnswerSheet> readyAnswerSheets = answerSheetMapper.selectList(
                 new LambdaQueryWrapper<AnswerSheet>()
                         .eq(AnswerSheet::getExamSubjectId, examSubjectId)
@@ -136,8 +133,30 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
                         .eq(AnswerSheet::getStatus, 2)
                         .isNotNull(AnswerSheet::getStudentId)
         );
+
+        if (readyAnswerSheets.isEmpty()) {
+            throw new BusinessException("该科目暂无待阅卷的答题卡，请先上传并识别答题卡");
+        }
+
+        // 确保已识别成功的答题卡都初始化了题目明细
         for (AnswerSheet answerSheet : readyAnswerSheets) {
             answerSheetDetailService.initializeQuestionDetails(answerSheet.getId());
+        }
+
+        // 查询试卷的主观题
+        List<PaperQuestion> questions = new ArrayList<>();
+        if (paper != null) {
+            questions = paperQuestionMapper.selectList(
+                    new LambdaQueryWrapper<PaperQuestion>()
+                            .eq(PaperQuestion::getPaperId, paper.getId())
+                            .eq(PaperQuestion::getIsObjective, 0) // 主观题
+            );
+        }
+
+        // 没有试卷主观题时，改为按答题卡模板里的主观题题号拆分单题任务
+        if (questions.isEmpty()) {
+            createTemplateQuestionTasks(examSubject, readyAnswerSheets);
+            return;
         }
 
         // 为每道主观题创建阅卷任务
@@ -163,6 +182,64 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
             task.setEnableDoubleMarking(question.getEnableDoubleMarking() != null ? question.getEnableDoubleMarking() : 0);
             task.setDoubleMarkingThreshold(question.getDoubleMarkingThreshold());
             task.setStatus(0); // 未开始
+            save(task);
+        }
+    }
+
+    private void createTemplateQuestionTasks(ExamSubject examSubject, List<AnswerSheet> readyAnswerSheets) {
+        if (readyAnswerSheets == null || readyAnswerSheets.isEmpty()) {
+            throw new BusinessException("该科目暂无待阅卷的答题卡，请先上传并识别答题卡");
+        }
+
+        List<Long> answerSheetIds = readyAnswerSheets.stream()
+                .map(AnswerSheet::getId)
+                .toList();
+
+        List<AnswerSheetDetail> subjectiveDetails = answerSheetDetailMapper.selectList(
+                new LambdaQueryWrapper<AnswerSheetDetail>()
+                        .in(AnswerSheetDetail::getAnswerSheetId, answerSheetIds)
+                        .eq(AnswerSheetDetail::getDeleted, 0)
+                        .isNotNull(AnswerSheetDetail::getQuestionNo)
+                        .and(wrapper -> wrapper
+                                .ne(AnswerSheetDetail::getIsObjective, 1)
+                                .or()
+                                .isNull(AnswerSheetDetail::getIsObjective))
+                        .orderByAsc(AnswerSheetDetail::getQuestionNo)
+                        .orderByAsc(AnswerSheetDetail::getId)
+        );
+
+        Map<Integer, List<AnswerSheetDetail>> detailMapByQuestionNo = subjectiveDetails.stream()
+                .filter(detail -> detail.getQuestionNo() != null)
+                .collect(Collectors.groupingBy(
+                        AnswerSheetDetail::getQuestionNo,
+                        java.util.TreeMap::new,
+                        Collectors.toList()
+                ));
+
+        if (detailMapByQuestionNo.isEmpty()) {
+            throw new BusinessException("当前科目未识别到可拆分的主观题，不再生成综合阅卷任务");
+        }
+
+        for (Map.Entry<Integer, List<AnswerSheetDetail>> entry : detailMapByQuestionNo.entrySet()) {
+            Integer questionNo = entry.getKey();
+            List<AnswerSheetDetail> details = entry.getValue();
+            int totalCount = details.size();
+            if (questionNo == null || totalCount <= 0) {
+                continue;
+            }
+
+            MarkingTask task = new MarkingTask();
+            task.setExamId(examSubject.getExamId());
+            task.setExamSubjectId(examSubject.getId());
+            task.setQuestionId(toTemplateQuestionId(questionNo));
+            task.setName("第" + questionNo + "题阅卷任务");
+            task.setTaskType(2);
+            task.setTotalCount(totalCount);
+            task.setCompletedCount(0);
+            task.setPendingCount(totalCount);
+            task.setEnableDoubleMarking(0);
+            task.setDoubleMarkingThreshold(null);
+            task.setStatus(0);
             save(task);
         }
     }
@@ -241,9 +318,16 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         }
 
         // 生成阅卷记录，并同步可进入阅卷的有效数量
-        int eligibleCount = generateMarkingRecords(task);
+        int eligibleCount;
+        if (task.getQuestionId() == null) {
+            // 综合阅卷：按答题卡生成阅卷记录
+            eligibleCount = generateMarkingRecordsForComprehensive(task);
+        } else {
+            // 按题目生成阅卷记录
+            eligibleCount = generateMarkingRecords(task);
+        }
         if (eligibleCount <= 0) {
-            throw new BusinessException("当前没有可进入阅卷的主观题明细，请先处理异常项");
+            throw new BusinessException("当前没有可阅卷的答题卡，请先上传并识别答题卡");
         }
 
         // 将该科目的"待阅卷"答题卡状态更新为"阅卷中"
@@ -276,14 +360,25 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
      * 生成阅卷记录
      */
     private int generateMarkingRecords(MarkingTask task) {
-        List<AnswerSheetDetail> details = answerSheetDetailMapper.selectList(
-                new LambdaQueryWrapper<AnswerSheetDetail>()
-                        .eq(AnswerSheetDetail::getQuestionId, task.getQuestionId())
-                        .eq(AnswerSheetDetail::getDeleted, 0)
-                        .ne(AnswerSheetDetail::getStatus, DETAIL_STATUS_SUBJECTIVE_ANOMALY) // 只排除异常项
-                        .orderByAsc(AnswerSheetDetail::getAnswerSheetId)
-                        .orderByAsc(AnswerSheetDetail::getId)
-        );
+        LambdaQueryWrapper<AnswerSheetDetail> detailQuery = new LambdaQueryWrapper<AnswerSheetDetail>()
+                .eq(AnswerSheetDetail::getDeleted, 0)
+                .ne(AnswerSheetDetail::getStatus, DETAIL_STATUS_SUBJECTIVE_ANOMALY)
+                .orderByAsc(AnswerSheetDetail::getAnswerSheetId)
+                .orderByAsc(AnswerSheetDetail::getId);
+
+        Integer templateQuestionNo = resolveTemplateQuestionNo(task.getQuestionId());
+        boolean templateDrivenTask = templateQuestionNo != null;
+        if (templateDrivenTask) {
+            detailQuery.eq(AnswerSheetDetail::getQuestionNo, templateQuestionNo)
+                    .and(wrapper -> wrapper
+                            .ne(AnswerSheetDetail::getIsObjective, 1)
+                            .or()
+                            .isNull(AnswerSheetDetail::getIsObjective));
+        } else {
+            detailQuery.eq(AnswerSheetDetail::getQuestionId, task.getQuestionId());
+        }
+
+        List<AnswerSheetDetail> details = answerSheetDetailMapper.selectList(detailQuery);
 
         // 查询分配的教师列表（按角色分组）
         List<MarkingTaskAssign> firstMarkers = markingTaskAssignMapper.selectList(
@@ -308,9 +403,11 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
             throw new BusinessException("双评任务未分配二评教师");
         }
 
-        // 获取题目满分
-        PaperQuestion question = paperQuestionMapper.selectById(task.getQuestionId());
-        Integer fullScore = question != null ? question.getScore() : 0;
+        Integer fullScore = 0;
+        if (!templateDrivenTask) {
+            PaperQuestion question = paperQuestionMapper.selectById(task.getQuestionId());
+            fullScore = question != null ? question.getScore() : 0;
+        }
 
         int firstIndex = 0;
         int secondIndex = 0;
@@ -325,7 +422,11 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
 
             // 一评
             MarkingTaskAssign firstAssign = firstMarkers.get(firstIndex % firstMarkers.size());
-            createMarkingRecord(task, answerSheet, firstAssign.getTeacherId(), 1, fullScore);
+            Integer recordFullScore = templateDrivenTask
+                    ? (detail.getFullScore() != null ? detail.getFullScore() : 0)
+                    : fullScore;
+
+            createMarkingRecord(task, answerSheet, firstAssign.getTeacherId(), 1, recordFullScore);
             firstAssign.setAssignCount(firstAssign.getAssignCount() + 1);
             markingTaskAssignMapper.updateById(firstAssign);
             firstIndex++;
@@ -333,11 +434,49 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
             // 双评模式下创建二评记录
             if (task.getEnableDoubleMarking() == 1 && secondMarkers != null && !secondMarkers.isEmpty()) {
                 MarkingTaskAssign secondAssign = secondMarkers.get(secondIndex % secondMarkers.size());
-                createMarkingRecord(task, answerSheet, secondAssign.getTeacherId(), 2, fullScore);
+                createMarkingRecord(task, answerSheet, secondAssign.getTeacherId(), 2, recordFullScore);
                 secondAssign.setAssignCount(secondAssign.getAssignCount() + 1);
                 markingTaskAssignMapper.updateById(secondAssign);
                 secondIndex++;
             }
+        }
+        return eligibleCount;
+    }
+
+    /**
+     * 综合阅卷：按答题卡生成阅卷记录（不依赖题目明细）
+     */
+    private int generateMarkingRecordsForComprehensive(MarkingTask task) {
+        // 查询待阅卷的答题卡
+        List<AnswerSheet> answerSheets = answerSheetMapper.selectList(
+                new LambdaQueryWrapper<AnswerSheet>()
+                        .eq(AnswerSheet::getExamSubjectId, task.getExamSubjectId())
+                        .eq(AnswerSheet::getDeleted, 0)
+                        .in(AnswerSheet::getStatus, 2, 3) // 待阅卷或阅卷中
+                        .isNotNull(AnswerSheet::getStudentId)
+                        .orderByAsc(AnswerSheet::getId)
+        );
+
+        // 查询分配的教师
+        List<MarkingTaskAssign> firstMarkers = markingTaskAssignMapper.selectList(
+                new LambdaQueryWrapper<MarkingTaskAssign>()
+                        .eq(MarkingTaskAssign::getTaskId, task.getId())
+                        .eq(MarkingTaskAssign::getMarkingRole, 1)
+        );
+        if (firstMarkers.isEmpty()) {
+            throw new BusinessException("任务未分配评阅教师");
+        }
+
+        int firstIndex = 0;
+        int eligibleCount = 0;
+
+        for (AnswerSheet answerSheet : answerSheets) {
+            eligibleCount++;
+            MarkingTaskAssign firstAssign = firstMarkers.get(firstIndex % firstMarkers.size());
+            createMarkingRecord(task, answerSheet, firstAssign.getTeacherId(), 1, 0);
+            firstAssign.setAssignCount(firstAssign.getAssignCount() + 1);
+            markingTaskAssignMapper.updateById(firstAssign);
+            firstIndex++;
         }
         return eligibleCount;
     }
@@ -356,6 +495,17 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         record.setFullScore(fullScore);
         record.setStatus(0); // 待评
         markingRecordMapper.insert(record);
+    }
+
+    private Long toTemplateQuestionId(Integer questionNo) {
+        return questionNo == null ? null : -questionNo.longValue();
+    }
+
+    private Integer resolveTemplateQuestionNo(Long questionId) {
+        if (questionId == null || questionId >= 0) {
+            return null;
+        }
+        return Math.toIntExact(-questionId);
     }
 
     @Override
@@ -394,6 +544,9 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
 
         // 任务完成后，检查并更新关联答题卡的状态
         updateAnswerSheetsStatusAfterTaskComplete(task);
+
+        // 检查并更新考试状态
+        updateExamStatusIfAllTasksCompleted(task);
     }
 
     /**
@@ -427,6 +580,35 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         for (AnswerSheet answerSheet : markingAnswerSheets) {
             answerSheet.setStatus(4);
             answerSheetMapper.updateById(answerSheet);
+        }
+    }
+
+    /**
+     * 检查考试的所有阅卷任务是否都已完成，如果是则更新考试状态为"已完成"
+     */
+    private void updateExamStatusIfAllTasksCompleted(MarkingTask completedTask) {
+        // 1. 查询该考试的所有阅卷任务
+        List<MarkingTask> allExamTasks = baseMapper.selectList(
+                new LambdaQueryWrapper<MarkingTask>()
+                        .eq(MarkingTask::getExamId, completedTask.getExamId())
+                        .eq(MarkingTask::getDeleted, 0)
+        );
+
+        // 2. 检查是否所有任务都已完成（status=2）
+        boolean allTasksCompleted = allExamTasks.stream()
+                .allMatch(t -> t.getStatus() != null && t.getStatus() == 2);
+
+        if (!allTasksCompleted) {
+            return;  // 还有未完成的任务
+        }
+
+        // 3. 所有任务都完成，更新考试状态
+        Exam exam = examMapper.selectById(completedTask.getExamId());
+        if (exam != null && exam.getStatus() != null && exam.getStatus() == 3) {
+            // 只有在"阅卷中"状态才更新为"已完成"
+            exam.setStatus(4);
+            exam.setUpdateTime(LocalDateTime.now());
+            examMapper.updateById(exam);
         }
     }
 

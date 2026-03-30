@@ -2,6 +2,8 @@ package com.edumark.marking.vo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDateTime;
+
 /**
  * 阅卷任务分配VO
  *
@@ -58,6 +60,9 @@ public class MarkingTaskAssignVO {
     @Schema(description = "任务状态")
     private Integer taskStatus;
 
+    @Schema(description = "创建时间")
+    private LocalDateTime createTime;
+
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -106,4 +111,7 @@ public class MarkingTaskAssignVO {
 
     public Integer getTaskStatus() { return taskStatus; }
     public void setTaskStatus(Integer taskStatus) { this.taskStatus = taskStatus; }
+
+    public LocalDateTime getCreateTime() { return createTime; }
+    public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
 }

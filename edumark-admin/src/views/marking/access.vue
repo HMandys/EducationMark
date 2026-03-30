@@ -66,13 +66,74 @@
 
       <main class="workspace-main">
         <div class="image-panel">
-          <div v-if="currentItem?.questionImage" class="image-container">
-            <el-image
-              :src="currentItem.questionImage"
-              fit="contain"
-              :preview-src-list="[currentItem.questionImage]"
-              :z-index="9999"
-            />
+          <div v-if="currentItem?.questionImage" class="annotation-area">
+            <div class="annotation-toolbar">
+              <div class="tool-group">
+                <button
+                  class="tool-btn"
+                  :class="{ 'is-active': annotationTool === 'none' }"
+                  title="选择（不标注）"
+                  @click="annotationTool = 'none'"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
+                </button>
+                <button
+                  class="tool-btn"
+                  :class="{ 'is-active': annotationTool === 'draw' }"
+                  title="涂鸦"
+                  @click="annotationTool = 'draw'"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+                </button>
+                <button
+                  class="tool-btn tool-btn--correct"
+                  :class="{ 'is-active': annotationTool === 'check' }"
+                  title="对号 ✓"
+                  @click="annotationTool = 'check'"
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg>
+                </button>
+                <button
+                  class="tool-btn tool-btn--wrong"
+                  :class="{ 'is-active': annotationTool === 'cross' }"
+                  title="错号 ✗"
+                  @click="annotationTool = 'cross'"
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+                </button>
+              </div>
+              <div class="tool-group">
+                <button class="tool-btn" title="撤销" :disabled="annotationHistory.length === 0" @click="undoAnnotation">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                </button>
+                <button class="tool-btn" title="清除全部标注" @click="clearAnnotations">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
+            </div>
+            <div
+              ref="canvasWrapRef"
+              class="canvas-wrap"
+              :class="{ 'cursor-draw': annotationTool === 'draw', 'cursor-stamp': annotationTool === 'check' || annotationTool === 'cross' }"
+            >
+              <div class="image-canvas-stack" ref="stackRef">
+                <img
+                  ref="baseImageRef"
+                  :src="currentItem.questionImage"
+                  class="base-image"
+                  crossorigin="anonymous"
+                  @load="onImageLoad"
+                />
+                <canvas
+                  ref="annotationCanvasRef"
+                  class="annotation-canvas"
+                  @pointerdown="onCanvasPointerDown"
+                  @pointermove="onCanvasPointerMove"
+                  @pointerup="onCanvasPointerUp"
+                  @pointerleave="onCanvasPointerUp"
+                />
+              </div>
+            </div>
           </div>
           <el-empty v-else-if="!loadingItem" description="暂无待阅记录">
             <el-button type="primary" @click="loadNextItem">刷新</el-button>
@@ -158,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Key, Loading, InfoFilled } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
@@ -226,6 +287,7 @@ async function quickSubmit(score: number) {
       recordId: currentItem.value.recordId,
       score,
       comment: scoreForm.comment || undefined,
+      annotations: serializeAnnotations(),
     })
     await loadNextItem()
   } catch (error: any) {
@@ -234,6 +296,202 @@ async function quickSubmit(score: number) {
     submitting.value = false
   }
 }
+
+// ==================== 标注功能 ====================
+type AnnotationToolType = 'none' | 'draw' | 'check' | 'cross'
+
+interface AnnotationStroke {
+  type: 'draw'
+  points: { x: number; y: number }[]
+}
+
+interface AnnotationStamp {
+  type: 'check' | 'cross'
+  x: number
+  y: number
+}
+
+type AnnotationItem = AnnotationStroke | AnnotationStamp
+
+const annotationTool = ref<AnnotationToolType>('none')
+const canvasWrapRef = ref<HTMLDivElement>()
+const stackRef = ref<HTMLDivElement>()
+const baseImageRef = ref<HTMLImageElement>()
+const annotationCanvasRef = ref<HTMLCanvasElement>()
+const annotationHistory = ref<AnnotationItem[]>([])
+const isDrawing = ref(false)
+const currentStroke = ref<{ x: number; y: number }[]>([])
+
+function getCanvasPoint(e: PointerEvent): { x: number; y: number } | null {
+  const canvas = annotationCanvasRef.value
+  if (!canvas) return null
+  const rect = canvas.getBoundingClientRect()
+  return {
+    x: (e.clientX - rect.left) * (canvas.width / rect.width),
+    y: (e.clientY - rect.top) * (canvas.height / rect.height),
+  }
+}
+
+function onImageLoad() {
+  nextTick(() => resizeCanvas())
+}
+
+function resizeCanvas() {
+  const img = baseImageRef.value
+  const canvas = annotationCanvasRef.value
+  if (!img || !canvas) return
+  canvas.width = img.naturalWidth
+  canvas.height = img.naturalHeight
+  redrawAnnotations()
+}
+
+function onCanvasPointerDown(e: PointerEvent) {
+  if (annotationTool.value === 'none') return
+  const pt = getCanvasPoint(e)
+  if (!pt) return
+
+  if (annotationTool.value === 'draw') {
+    isDrawing.value = true
+    currentStroke.value = [pt]
+    const canvas = annotationCanvasRef.value
+    if (canvas) {
+      canvas.setPointerCapture(e.pointerId)
+    }
+  } else if (annotationTool.value === 'check' || annotationTool.value === 'cross') {
+    annotationHistory.value.push({ type: annotationTool.value, x: pt.x, y: pt.y })
+    redrawAnnotations()
+  }
+}
+
+function onCanvasPointerMove(e: PointerEvent) {
+  if (!isDrawing.value || annotationTool.value !== 'draw') return
+  const pt = getCanvasPoint(e)
+  if (!pt) return
+  currentStroke.value.push(pt)
+  // 实时绘制当前笔画
+  redrawAnnotations()
+  const ctx = annotationCanvasRef.value?.getContext('2d')
+  if (ctx && currentStroke.value.length > 1) {
+    drawStroke(ctx, currentStroke.value)
+  }
+}
+
+function onCanvasPointerUp(_e: PointerEvent) {
+  if (!isDrawing.value) return
+  isDrawing.value = false
+  if (currentStroke.value.length > 1) {
+    annotationHistory.value.push({ type: 'draw', points: [...currentStroke.value] })
+  }
+  currentStroke.value = []
+  redrawAnnotations()
+}
+
+function redrawAnnotations() {
+  const canvas = annotationCanvasRef.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  for (const item of annotationHistory.value) {
+    if (item.type === 'draw') {
+      drawStroke(ctx, item.points)
+    } else if (item.type === 'check') {
+      drawCheck(ctx, item.x, item.y, canvas.width)
+    } else if (item.type === 'cross') {
+      drawCross(ctx, item.x, item.y, canvas.width)
+    }
+  }
+}
+
+function drawStroke(ctx: CanvasRenderingContext2D, points: { x: number; y: number }[]) {
+  if (points.length < 2) return
+  ctx.save()
+  ctx.strokeStyle = '#f56c6c'
+  ctx.lineWidth = Math.max(3, ctx.canvas.width * 0.003)
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.beginPath()
+  ctx.moveTo(points[0].x, points[0].y)
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i].x, points[i].y)
+  }
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawCheck(ctx: CanvasRenderingContext2D, cx: number, cy: number, canvasWidth: number) {
+  const size = Math.max(24, canvasWidth * 0.03)
+  ctx.save()
+  ctx.strokeStyle = '#f56c6c'
+  ctx.lineWidth = Math.max(3, size * 0.18)
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.beginPath()
+  ctx.moveTo(cx - size * 0.45, cy)
+  ctx.lineTo(cx - size * 0.1, cy + size * 0.35)
+  ctx.lineTo(cx + size * 0.45, cy - size * 0.35)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawCross(ctx: CanvasRenderingContext2D, cx: number, cy: number, canvasWidth: number) {
+  const size = Math.max(24, canvasWidth * 0.03)
+  const half = size * 0.35
+  ctx.save()
+  ctx.strokeStyle = '#f56c6c'
+  ctx.lineWidth = Math.max(3, size * 0.18)
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(cx - half, cy - half)
+  ctx.lineTo(cx + half, cy + half)
+  ctx.moveTo(cx + half, cy - half)
+  ctx.lineTo(cx - half, cy + half)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function undoAnnotation() {
+  if (annotationHistory.value.length === 0) return
+  annotationHistory.value.pop()
+  redrawAnnotations()
+}
+
+function clearAnnotations() {
+  annotationHistory.value = []
+  redrawAnnotations()
+}
+
+// 序列化标注数据为 JSON 字符串
+function serializeAnnotations(): string | undefined {
+  if (annotationHistory.value.length === 0) return undefined
+  return JSON.stringify(annotationHistory.value)
+}
+
+// 从 JSON 字符串还原标注数据
+function restoreAnnotations(json?: string | null) {
+  annotationHistory.value = []
+  if (!json) return
+  try {
+    const data = JSON.parse(json)
+    if (Array.isArray(data)) {
+      annotationHistory.value = data
+    }
+  } catch {
+    // 忽略解析错误
+  }
+  nextTick(() => redrawAnnotations())
+}
+
+// 切换题目时清空标注并尝试还原
+watch(currentItem, (item) => {
+  annotationTool.value = 'none'
+  nextTick(() => {
+    resizeCanvas()
+    restoreAnnotations(item?.annotations)
+  })
+})
 
 // 格式化阅卷码输入（只允许数字）
 function formatAccessCode() {
@@ -305,6 +563,7 @@ async function submitScore() {
       recordId: currentItem.value.recordId,
       score: scoreForm.score,
       comment: scoreForm.comment,
+      annotations: serializeAnnotations(),
     })
     ElMessage.success('提交成功')
     await loadNextItem()
@@ -499,21 +758,127 @@ onUnmounted(() => {
 }
 
 .image-panel {
+  background: #f5f7fa;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.annotation-area {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.annotation-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
   background: #fff;
+  border-bottom: 1px solid #e4e7ed;
+  flex-shrink: 0;
+}
+
+.tool-group {
+  display: flex;
+  gap: 4px;
+}
+
+.tool-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: auto;
-  padding: 20px;
+  width: 38px;
+  height: 38px;
+  border: 1.5px solid #dcdfe6;
+  border-radius: 10px;
+  background: #fff;
+  color: #606266;
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-.image-container {
+.tool-btn:hover:not(:disabled) {
+  border-color: #409eff;
+  color: #409eff;
+  background: #ecf5ff;
+}
+
+.tool-btn.is-active {
+  border-color: #409eff;
+  background: #409eff;
+  color: #fff;
+}
+
+.tool-btn--correct.is-active {
+  border-color: #f56c6c;
+  background: #f56c6c;
+  color: #fff;
+}
+
+.tool-btn--wrong.is-active {
+  border-color: #f56c6c;
+  background: #f56c6c;
+  color: #fff;
+}
+
+.tool-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.canvas-wrap {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e8eaed;
+  padding: 12px;
+}
+
+.canvas-wrap.cursor-draw {
+  cursor: crosshair;
+}
+
+.canvas-wrap.cursor-stamp {
+  cursor: pointer;
+}
+
+.image-canvas-stack {
+  position: relative;
+  display: inline-block;
   max-width: 100%;
   max-height: 100%;
 }
 
-.image-container :deep(.el-image) {
-  max-height: calc(100vh - 120px);
+.base-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 180px);
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.annotation-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 当有工具选中时，canvas 接收事件 */
+.canvas-wrap.cursor-draw .annotation-canvas,
+.canvas-wrap.cursor-stamp .annotation-canvas {
+  pointer-events: auto;
 }
 
 .loading-placeholder {
@@ -591,13 +956,67 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.quick-score-buttons {
-  display: flex;
+.quick-score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
   gap: 8px;
 }
 
-.quick-score-buttons .el-button {
-  flex: 1;
+.quick-score-btn {
+  height: 48px;
+  border: 2px solid #e4e7ed;
+  border-radius: 12px;
+  background: #fff;
+  color: #303133;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quick-score-btn:hover:not(:disabled) {
+  border-color: #409eff;
+  color: #409eff;
+  background: #ecf5ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.2);
+}
+
+.quick-score-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.quick-score-btn.is-active {
+  border-color: #409eff;
+  background: #409eff;
+  color: #fff;
+}
+
+.quick-score-btn.is-zero {
+  border-color: #f56c6c;
+  color: #f56c6c;
+}
+
+.quick-score-btn.is-zero:hover:not(:disabled) {
+  background: #fef0f0;
+  border-color: #f56c6c;
+  color: #f56c6c;
+}
+
+.quick-score-btn.is-full {
+  border-color: #67c23a;
+  color: #67c23a;
+}
+
+.quick-score-btn.is-full:hover:not(:disabled) {
+  background: #f0f9eb;
+  border-color: #67c23a;
+  color: #67c23a;
+}
+
+.quick-score-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .keyboard-hint {
@@ -658,12 +1077,8 @@ onUnmounted(() => {
     gap: 4px;
   }
 
-  .quick-score-buttons {
-    flex-wrap: wrap;
-  }
-
-  .quick-score-buttons .el-button {
-    flex: 1 1 30%;
+  .quick-score-grid {
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
   }
 }
 </style>

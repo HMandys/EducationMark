@@ -88,6 +88,7 @@ export interface MarkingRecordVO {
   statusName: string
   answerImages: string[]
   answerImageUrl: string
+  originalImageUrl?: string
   createTime: string
 }
 
@@ -122,6 +123,7 @@ export interface MarkingArbitrationVO {
   statusName: string
   answerImages: string[]
   answerImageUrl: string
+  originalImageUrl?: string
   createTime: string
 }
 
@@ -231,12 +233,14 @@ export interface MarkingItemVO {
   questionNo: string
   currentIndex: number
   totalCount: number
+  annotations?: string
 }
 
 export interface ScoreSubmitDTO {
   recordId: number
   score: number
   comment?: string
+  annotations?: string
 }
 
 // 阅卷码登录（免登录）

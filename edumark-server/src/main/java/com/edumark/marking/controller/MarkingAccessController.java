@@ -57,7 +57,8 @@ public class MarkingAccessController {
                 sessionToken,
                 request.getRecordId(),
                 request.getScore(),
-                request.getComment()
+                request.getComment(),
+                request.getAnnotations()
         );
         return Result.success(success);
     }
@@ -110,6 +111,7 @@ public class MarkingAccessController {
         private Long recordId;
         private Integer score;
         private String comment;
+        private String annotations;
 
         public Long getRecordId() { return recordId; }
         public void setRecordId(Long recordId) { this.recordId = recordId; }
@@ -119,6 +121,9 @@ public class MarkingAccessController {
 
         public String getComment() { return comment; }
         public void setComment(String comment) { this.comment = comment; }
+
+        public String getAnnotations() { return annotations; }
+        public void setAnnotations(String annotations) { this.annotations = annotations; }
     }
 
     /**

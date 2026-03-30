@@ -75,6 +75,12 @@ public class MarkingRecordVO {
     @Schema(description = "答题卡图片URL")
     private String answerImageUrl;
 
+    @Schema(description = "原始答题卡图片URL")
+    private String originalImageUrl;
+
+    @Schema(description = "标注数据(JSON)")
+    private String annotations;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
@@ -139,6 +145,12 @@ public class MarkingRecordVO {
 
     public String getAnswerImageUrl() { return answerImageUrl; }
     public void setAnswerImageUrl(String answerImageUrl) { this.answerImageUrl = answerImageUrl; }
+
+    public String getOriginalImageUrl() { return originalImageUrl; }
+    public void setOriginalImageUrl(String originalImageUrl) { this.originalImageUrl = originalImageUrl; }
+
+    public String getAnnotations() { return annotations; }
+    public void setAnnotations(String annotations) { this.annotations = annotations; }
 
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }

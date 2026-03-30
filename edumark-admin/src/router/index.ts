@@ -168,6 +168,12 @@ export const authRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/marking/workspace.vue'),
         meta: { title: '阅卷工作台', icon: 'Edit', permission: 'marking:work:view' },
       },
+      {
+        path: 'arbitration',
+        name: 'MarkingArbitration',
+        component: () => import('@/views/marking/arbitration.vue'),
+        meta: { title: '仲裁管理', icon: 'Scale', permission: 'marking:arbitration:list' },
+      },
     ],
   },
   {

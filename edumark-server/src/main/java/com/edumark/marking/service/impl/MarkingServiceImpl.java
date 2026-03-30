@@ -125,6 +125,7 @@ public class MarkingServiceImpl implements MarkingService {
         // 更新阅卷记录
         record.setScore(dto.getScore());
         record.setComment(dto.getComment());
+        record.setAnnotations(dto.getAnnotations());
         record.setMarkingTime(LocalDateTime.now());
         record.setStatus(1);
         markingRecordMapper.updateById(record);
@@ -233,12 +234,16 @@ public class MarkingServiceImpl implements MarkingService {
 
     @Override
     public MarkingArbitrationVO getNextArbitration(Long taskId, Long teacherId) {
-        return markingArbitrationMapper.selectNextPending(taskId, teacherId);
+        MarkingArbitrationVO vo = markingArbitrationMapper.selectNextPending(taskId, teacherId);
+        fillArbitrationPreview(vo);
+        return vo;
     }
 
     @Override
     public MarkingArbitrationVO getArbitrationDetail(Long arbitrationId) {
-        return markingArbitrationMapper.selectVOById(arbitrationId);
+        MarkingArbitrationVO vo = markingArbitrationMapper.selectVOById(arbitrationId);
+        fillArbitrationPreview(vo);
+        return vo;
     }
 
     @Override
@@ -307,6 +312,20 @@ public class MarkingServiceImpl implements MarkingService {
     }
 
     private void fillQuestionPreview(MarkingRecordVO vo) {
+        if (vo == null || vo.getAnswerSheetId() == null || vo.getQuestionId() == null) {
+            return;
+        }
+        try {
+            String previewUrl = answerSheetDetailService.getQuestionPreviewUrl(vo.getAnswerSheetId(), vo.getQuestionId());
+            if (previewUrl != null && !previewUrl.isBlank()) {
+                vo.setAnswerImageUrl(previewUrl);
+            }
+        } catch (BusinessException ignored) {
+            // 题图预览不存在时退回原始整卷图
+        }
+    }
+
+    private void fillArbitrationPreview(MarkingArbitrationVO vo) {
         if (vo == null || vo.getAnswerSheetId() == null || vo.getQuestionId() == null) {
             return;
         }

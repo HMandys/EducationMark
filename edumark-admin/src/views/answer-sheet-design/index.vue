@@ -370,7 +370,7 @@ const handleCreateSubmit = async () => {
       // 获取科目名称
       const subject = subjectList.value.find((s) => s.id === createForm.subjectId)
       router.push({
-        path: '/answer-sheet-design/new',
+        path: '/answer-sheet-design/edit',
         query: {
           ...(createForm.paperId ? { paperId: String(createForm.paperId) } : {}),
           ...(createForm.examId ? { examId: String(createForm.examId) } : {}),

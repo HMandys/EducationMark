@@ -19,6 +19,9 @@ public class MarkingSubmitDTO {
     @Schema(description = "评语")
     private String comment;
 
+    @Schema(description = "标注数据(JSON)")
+    private String annotations;
+
     // Getters and Setters
     public Long getRecordId() { return recordId; }
     public void setRecordId(Long recordId) { this.recordId = recordId; }
@@ -28,4 +31,7 @@ public class MarkingSubmitDTO {
 
     public String getComment() { return comment; }
     public void setComment(String comment) { this.comment = comment; }
+
+    public String getAnnotations() { return annotations; }
+    public void setAnnotations(String annotations) { this.annotations = annotations; }
 }

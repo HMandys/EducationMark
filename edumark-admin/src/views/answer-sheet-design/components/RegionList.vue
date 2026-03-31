@@ -109,13 +109,13 @@ const handleDragChange = () => {
 
 const regionTypeMap: Record<number, string> = {
   1: '选择题',
-  2: '填空题',
+  2: '主观题',
   3: '主观题',
 }
 
 const regionTypeTagMap: Record<number, 'primary' | 'success' | 'warning' | 'info'> = {
   1: 'primary',
-  2: 'success',
+  2: 'warning',
   3: 'warning',
   4: 'info',
 }

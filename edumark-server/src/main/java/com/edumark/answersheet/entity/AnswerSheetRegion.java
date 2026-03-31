@@ -21,7 +21,7 @@ public class AnswerSheetRegion extends BaseEntity {
     @Schema(description = "模板ID")
     private Long templateId;
 
-    @Schema(description = "区域类型: 1-选择题 2-填空题 3-解答题 4-作文题")
+    @Schema(description = "区域类型: 1-选择题 3-主观题 5-条码区")
     private Integer regionType;
 
     @Schema(description = "区域名称")

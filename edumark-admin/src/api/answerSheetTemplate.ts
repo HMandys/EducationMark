@@ -100,15 +100,14 @@ export interface RegionConfig {
   totalScore?: number
   // 正确答案配置 {题号: 答案}
   correctAnswers?: Record<string, string>
-  // 填空题配置
-  lineHeight?: number
-  linesPerQuestion?: number
-  lineStyle?: 'underline' | 'box'
-  // 解答题配置
+  // 主观题配置
   height?: number
   showBorder?: boolean
   scoreBoxPosition?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
-  // 作文题配置
+  // 兼容旧作文/填空题模板的遗留字段
+  lineHeight?: number
+  linesPerQuestion?: number
+  lineStyle?: 'underline' | 'box'
   gridType?: 'square' | 'line'
   gridSize?: number
   wordCount?: number

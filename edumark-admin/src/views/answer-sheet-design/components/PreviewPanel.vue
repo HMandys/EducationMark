@@ -95,33 +95,7 @@
               </div>
             </div>
 
-            <div v-else-if="region.regionType === 2" class="region fillblank-region">
-              <div class="region-title">
-                {{ region.regionName }}
-                <span v-if="formatQuestionTitle(region)">
-                  （{{ formatQuestionTitle(region) }}）
-                </span>
-              </div>
-              <div class="fillblank-list">
-                <div
-                  v-for="q in getQuestionRange(region)"
-                  :key="q"
-                  class="fillblank-item"
-                >
-                  <span class="question-no">{{ q }}.</span>
-                  <div class="answer-lines">
-                    <div
-                      v-for="line in (region.config?.linesPerQuestion || 1)"
-                      :key="line"
-                      class="answer-line"
-                      :style="{ height: `${(region.config?.lineHeight || 30) / 3}px` }"
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div v-else-if="region.regionType === 3" class="region answer-region">
+            <div v-else-if="region.regionType === 2 || region.regionType === 3 || region.regionType === 4" class="region answer-region">
               <div class="region-title">
                 {{ region.regionName }}
                 <span v-if="formatQuestionTitle(region)">

@@ -22,7 +22,7 @@ public class AnswerSheetRegionDTO {
     private Long templateId;
 
     @NotNull(message = "区域类型不能为空")
-    @Schema(description = "区域类型: 1-选择题 2-填空题 3-解答题 4-作文题")
+    @Schema(description = "区域类型: 1-选择题 3-主观题 5-条码区")
     private Integer regionType;
 
     @NotBlank(message = "区域名称不能为空")

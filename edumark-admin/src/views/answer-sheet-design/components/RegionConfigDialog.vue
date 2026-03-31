@@ -247,27 +247,6 @@
         </div>
       </template>
 
-      <template v-if="formData.regionType === 2">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="行高(mm)">
-              <el-input-number v-model="formData.config!.lineHeight" :min="20" :max="100" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="每题行数">
-              <el-input-number v-model="formData.config!.linesPerQuestion" :min="1" :max="5" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="线条样式">
-          <el-radio-group v-model="formData.config!.lineStyle">
-            <el-radio value="underline">下划线</el-radio>
-            <el-radio value="box">方框</el-radio>
-          </el-radio-group>
-        </el-form-item>
-      </template>
-
       <template v-if="formData.regionType === 3">
         <el-row :gutter="20">
           <el-col :span="12">

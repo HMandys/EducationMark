@@ -60,9 +60,9 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
 
     private static final Map<Integer, String> REGION_TYPE_NAMES = Map.of(
             1, "选择题",
-            2, "填空题",
-            3, "解答题",
-            4, "作文题"
+            2, "主观题",
+            3, "主观题",
+            4, "主观题"
     );
 
     @Override

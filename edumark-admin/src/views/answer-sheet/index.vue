@@ -63,7 +63,7 @@
           <div class="header-main">
             <div>
               <div class="header-title">扫描结果列表</div>
-              <div class="header-desc">系统会先自动识别条码和学号，再把异常样本推入异常池人工处理。</div>
+              <div class="header-desc">每张扫描图片会单独创建一条答题卡记录，系统自动识别条码和学号，再把异常样本推入异常池人工处理。</div>
             </div>
             <div class="header-filters">
               <el-button :type="queryParams.status === undefined ? 'primary' : 'default'" plain @click="applyStatusFilter()">
@@ -187,7 +187,7 @@
           </el-select>
         </el-form-item>
         <el-alert
-          title="导入后系统会自动识别条码、学号填涂区、模板区域、客观题区域和主观题裁题区。"
+          title="批量导入时，每张图片都会单独创建一条答题卡记录，并自动识别条码、学号、客观题和主观题裁题区。"
           type="info"
           :closable="false"
           show-icon
@@ -626,23 +626,41 @@ const handleUploadSubmit = async () => {
       await uploadAnswerSheetImages(appendTargetId.value, formData)
       ElMessage.success('补传成功')
     } else {
-      const imageObjectNames: string[] = []
-      const imageOriginalNames: string[] = []
+      const rawFiles: File[] = []
       for (const file of fileList.value) {
         if (file.raw) {
-          const res = await uploadFile(file.raw, 'answer-sheet')
-          imageObjectNames.push(res.data.objectName)
-          imageOriginalNames.push(res.data.originalName)
+          rawFiles.push(file.raw)
         }
       }
 
-      await uploadAnswerSheet({
-        examId: uploadForm.examId!,
-        examSubjectId: uploadForm.examSubjectId!,
-        imageObjectNames,
-        imageOriginalNames,
-      })
-      ElMessage.success('导入成功，系统已自动开始识别')
+      let successCount = 0
+      const failedFiles: string[] = []
+
+      for (const rawFile of rawFiles) {
+        try {
+          const uploadRes = await uploadFile(rawFile, 'answer-sheet')
+          await uploadAnswerSheet({
+            examId: uploadForm.examId!,
+            examSubjectId: uploadForm.examSubjectId!,
+            imageObjectNames: [uploadRes.data.objectName],
+            imageOriginalNames: [uploadRes.data.originalName],
+          })
+          successCount += 1
+        } catch (_error) {
+          failedFiles.push(rawFile.name)
+        }
+      }
+
+      if (successCount === 0) {
+        ElMessage.error('导入失败，未创建任何答题卡记录')
+        return
+      }
+
+      if (failedFiles.length > 0) {
+        ElMessage.warning(`已创建 ${successCount} 条答题卡，失败 ${failedFiles.length} 张：${failedFiles.join('、')}`)
+      } else {
+        ElMessage.success(`导入成功，已创建 ${successCount} 条答题卡记录`)
+      }
     }
 
     uploadDialogVisible.value = false

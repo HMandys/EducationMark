@@ -13,6 +13,7 @@ import com.edumark.file.dto.AnswerSheetUploadDTO;
 import com.edumark.file.dto.FileUploadResult;
 import com.edumark.file.entity.AnswerSheet;
 import com.edumark.file.entity.AnswerSheetImage;
+import com.edumark.file.mapper.AnswerSheetDetailMapper;
 import com.edumark.file.mapper.AnswerSheetImageMapper;
 import com.edumark.file.mapper.AnswerSheetMapper;
 import com.edumark.file.recognition.BarcodeRecognitionResult;
@@ -79,6 +80,9 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
 
     @Resource
     private AnswerSheetRecognitionAsyncService recognitionAsyncService;
+
+    @Resource
+    private AnswerSheetDetailMapper answerSheetDetailMapper;
 
     @Override
     public PageResult<AnswerSheetVO> pageQuery(AnswerSheetQueryDTO query) {
@@ -566,8 +570,14 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         if (answerSheet.getStudentId() == null || answerSheet.getExamSubjectId() == null) {
             return;
         }
+        boolean hasExistingDetails = answerSheetDetailMapper.selectCount(
+                new LambdaQueryWrapper<com.edumark.file.entity.AnswerSheetDetail>()
+                        .eq(com.edumark.file.entity.AnswerSheetDetail::getAnswerSheetId, answerSheet.getId())
+        ) > 0;
         answerSheetDetailService.initializeQuestionDetails(answerSheet.getId());
-        answerSheetDetailService.recognizeObjectiveAnswers(answerSheet.getId());
+        if (!hasExistingDetails) {
+            answerSheetDetailService.recognizeObjectiveAnswers(answerSheet.getId());
+        }
     }
 
     private void syncNullableRecognitionFields(AnswerSheet answerSheet) {

@@ -229,6 +229,17 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         return defaultValue;
     }
 
+    private boolean getConfigBoolean(Map<String, Object> config, String key, boolean defaultValue) {
+        if (config == null) {
+            return defaultValue;
+        }
+        Object value = config.get(key);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        return defaultValue;
+    }
+
     @Override
     public List<AnswerSheetQuestionDetailVO> recognizeObjectiveAnswers(Long answerSheetId) {
         AnswerSheetContext context = loadContext(answerSheetId, true);
@@ -331,11 +342,17 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
                 continue;
             }
 
-            // 识别学生答案
-            String recognizedAnswer = recognizeAnswerFromBubbles(pageImage, questionBubbles);
-
             // 获取正确答案
             String correctAnswer = correctAnswers.get(String.valueOf(questionNo));
+            boolean allowMultipleChoice = getConfigBoolean(region.getConfig(), "hasMultipleChoice", false);
+
+            // 使用按深浅评分的算法识别，兼容轻涂、偏灰和不均匀填涂
+            String recognizedAnswer = resolveRecognizedAnswerIndependent(
+                    pageImage,
+                    questionBubbles,
+                    correctAnswer,
+                    allowMultipleChoice
+            );
 
             // 获取或创建明细
             AnswerSheetDetail detail = getDetailByQuestionNo(detailMap, questionNo);
@@ -354,60 +371,52 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             // 更新明细
             detail.setStudentAnswer(recognizedAnswer);
             detail.setScore(score);
-            detail.setStatus(DETAIL_STATUS_COMPLETED);
+            // 独立模板模式下，自动识别只产出候选结果，仍需要人工复核确认
+            detail.setStatus(DETAIL_STATUS_PENDING);
             answerSheetDetailMapper.updateById(detail);
         }
     }
 
-    /**
-     * 从气泡图识别答案
-     */
-    private String recognizeAnswerFromBubbles(BufferedImage pageImage, List<BubbleDefinition> bubbles) {
-        StringBuilder answer = new StringBuilder();
-        for (BubbleDefinition bubble : bubbles) {
-            if (isBubbleFilled(pageImage, bubble)) {
-                answer.append(bubble.option());
-            }
-        }
-        return answer.toString();
-    }
-
-    /**
-     * 检测气泡是否被填涂
-     */
-    private boolean isBubbleFilled(BufferedImage image, BubbleDefinition bubble) {
-        int x = (int) (bubble.x() * image.getWidth() / 100.0);
-        int y = (int) (bubble.y() * image.getHeight() / 100.0);
-        int w = (int) (bubble.width() * image.getWidth() / 100.0);
-        int h = (int) (bubble.height() * image.getHeight() / 100.0);
-
-        // 边界检查
-        x = Math.max(0, Math.min(x, image.getWidth() - 1));
-        y = Math.max(0, Math.min(y, image.getHeight() - 1));
-        w = Math.min(w, image.getWidth() - x);
-        h = Math.min(h, image.getHeight() - y);
-
-        if (w <= 0 || h <= 0) {
-            return false;
+    private String resolveRecognizedAnswerIndependent(BufferedImage pageImage,
+                                                      List<BubbleDefinition> questionBubbles,
+                                                      String correctAnswer,
+                                                      boolean allowMultipleChoice) {
+        List<BubbleMetric> metrics = questionBubbles.stream()
+                .map(bubble -> analyzeBubble(pageImage, bubble))
+                .sorted(Comparator.comparing(BubbleMetric::score).reversed())
+                .toList();
+        if (metrics.isEmpty()) {
+            return null;
         }
 
-        // 统计黑色像素比例
-        int blackPixels = 0;
-        int totalPixels = w * h;
-
-        for (int py = y; py < y + h; py++) {
-            for (int px = x; px < x + w; px++) {
-                int rgb = image.getRGB(px, py);
-                int gray = ((rgb >> 16) & 0xFF) * 30 + ((rgb >> 8) & 0xFF) * 59 + (rgb & 0xFF) * 11;
-                gray /= 100;
-                if (gray < 128) {
-                    blackPixels++;
-                }
-            }
+        BubbleMetric topMetric = metrics.get(0);
+        BubbleMetric secondMetric = metrics.size() > 1 ? metrics.get(1) : null;
+        if (topMetric.score() < MIN_FILLED_SCORE) {
+            return null;
         }
 
-        double fillRate = (double) blackPixels / totalPixels;
-        return fillRate > 0.3; // 填涂率超过30%认为被选中
+        String normalizedCorrectAnswer = normalizeAnswer(correctAnswer);
+        boolean multipleChoiceQuestion = allowMultipleChoice
+                || (normalizedCorrectAnswer != null && normalizedCorrectAnswer.length() > 1);
+
+        if (multipleChoiceQuestion) {
+            double averageScore = metrics.stream().mapToDouble(BubbleMetric::score).average().orElse(0D);
+            double threshold = Math.max(MIN_FILLED_SCORE, Math.max(topMetric.score() * 0.72D, averageScore + 0.04D));
+            String answer = normalizeAnswer(metrics.stream()
+                    .filter(metric -> metric.score() >= threshold)
+                    .map(BubbleMetric::option)
+                    .collect(Collectors.joining()));
+            return answer != null ? answer : topMetric.option();
+        }
+
+        if (secondMetric != null
+                && secondMetric.score() >= MIN_FILLED_SCORE
+                && Math.abs(topMetric.score() - secondMetric.score()) <= 0.025D
+                && secondMetric.score() >= topMetric.score() * 0.9D) {
+            return normalizeAnswer(topMetric.option() + secondMetric.option());
+        }
+
+        return normalizeAnswer(topMetric.option());
     }
 
     private Integer parseQuestionNo(String questionNo) {

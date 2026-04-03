@@ -368,11 +368,10 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
                     && normalizedRecognizedAnswer.equals(normalizedCorrectAnswer);
             int score = isCorrect ? (detail.getFullScore() != null ? detail.getFullScore() : scorePerQuestion) : 0;
 
-            // 更新明细
+            // 更新明细，状态语义与传统模式保持一致，避免卡住答题卡状态流转
             detail.setStudentAnswer(recognizedAnswer);
             detail.setScore(score);
-            // 独立模板模式下，自动识别只产出候选结果，仍需要人工复核确认
-            detail.setStatus(DETAIL_STATUS_PENDING);
+            detail.setStatus(normalizedRecognizedAnswer != null ? DETAIL_STATUS_COMPLETED : DETAIL_STATUS_PENDING);
             answerSheetDetailMapper.updateById(detail);
         }
     }
@@ -900,7 +899,10 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
                 continue;
             }
             PaperQuestion question = context.questionMap().get(detail.getQuestionId());
-            if (question != null && isObjectiveQuestion(question)) {
+            boolean objectiveDetail = question != null
+                    ? isObjectiveQuestion(question)
+                    : detail.getIsObjective() != null && detail.getIsObjective() == 1;
+            if (objectiveDetail) {
                 objectiveScore += detail.getScore();
             } else {
                 subjectiveScore += detail.getScore();

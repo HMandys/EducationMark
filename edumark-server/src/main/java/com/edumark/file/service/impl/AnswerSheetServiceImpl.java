@@ -125,7 +125,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         applyStudentResolution(entity, dto.getStudentId(), dto.getStudentNumber());
         updateById(entity);
         syncNullableRecognitionFields(entity);
-        initializeQuestionDetailsIfReady(entity);
+        initializeQuestionDetailsIfReady(entity, false);
     }
 
     @Override
@@ -256,7 +256,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
             });
         } else {
             // 已经识别成功，初始化题目明细
-            initializeQuestionDetailsIfReady(answerSheet);
+            initializeQuestionDetailsIfReady(answerSheet, false);
         }
 
         return answerSheet.getId();
@@ -318,7 +318,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         refreshRecognition(entity, null);
         updateById(entity);
         syncNullableRecognitionFields(entity);
-        initializeQuestionDetailsIfReady(entity);
+        initializeQuestionDetailsIfReady(entity, true);
     }
 
     private void applyRecognitionResult(AnswerSheet answerSheet, AnswerSheetUploadDTO dto, Exam exam) {
@@ -560,7 +560,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
                 .toArray(String[]::new);
     }
 
-    private void initializeQuestionDetailsIfReady(AnswerSheet answerSheet) {
+    private void initializeQuestionDetailsIfReady(AnswerSheet answerSheet, boolean forceRecognize) {
         if (answerSheet == null || answerSheet.getId() == null) {
             return;
         }
@@ -575,7 +575,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
                         .eq(com.edumark.file.entity.AnswerSheetDetail::getAnswerSheetId, answerSheet.getId())
         ) > 0;
         answerSheetDetailService.initializeQuestionDetails(answerSheet.getId());
-        if (!hasExistingDetails) {
+        if (forceRecognize || !hasExistingDetails) {
             answerSheetDetailService.recognizeObjectiveAnswers(answerSheet.getId());
         }
     }

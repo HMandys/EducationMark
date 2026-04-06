@@ -3,10 +3,8 @@ import { ref, computed } from 'vue'
 import {
   getToken,
   setToken,
-  removeToken,
   getUserInfo,
   setUserInfo,
-  removeUserInfo,
   getCurrentStudent,
   setCurrentStudent,
   removeCurrentStudent,
@@ -32,18 +30,15 @@ export interface Student {
 }
 
 export const useUserStore = defineStore('user', () => {
-  // 状态
   const token = ref<string>('')
   const userInfo = ref<UserInfo | null>(null)
   const students = ref<Student[]>([])
   const currentStudent = ref<Student | null>(null)
 
-  // 计算属性
   const isLoggedIn = computed(() => !!token.value)
   const isParent = computed(() => userInfo.value?.role === 'parent')
   const isStudent = computed(() => userInfo.value?.role === 'student')
 
-  // 检查登录状态
   function checkLogin() {
     const storedToken = getToken()
     if (storedToken) {
@@ -53,34 +48,47 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  // 设置Token
   function setTokenValue(newToken: string) {
     token.value = newToken
     setToken(newToken)
   }
 
-  // 设置用户信息
   function setUserInfoValue(info: UserInfo) {
     userInfo.value = info
     setUserInfo(info)
   }
 
-  // 设置学生列表
   function setStudents(list: Student[]) {
     students.value = list
-    // 如果只有一个学生，自动选中
-    if (list.length === 1) {
-      setCurrentStudentValue(list[0])
+
+    if (list.length === 0) {
+      setCurrentStudentValue(null)
+      return
     }
+
+    const matchedStudent = currentStudent.value
+      ? list.find(student => student.id === currentStudent.value?.id) || null
+      : null
+
+    if (matchedStudent) {
+      setCurrentStudentValue(matchedStudent)
+      return
+    }
+
+    setCurrentStudentValue(list[0])
   }
 
-  // 设置当前选中的学生
-  function setCurrentStudentValue(student: Student) {
+  function setCurrentStudentValue(student: Student | null) {
     currentStudent.value = student
-    setCurrentStudent(student)
+
+    if (student) {
+      setCurrentStudent(student)
+      return
+    }
+
+    removeCurrentStudent()
   }
 
-  // 登出
   function logout() {
     token.value = ''
     userInfo.value = null

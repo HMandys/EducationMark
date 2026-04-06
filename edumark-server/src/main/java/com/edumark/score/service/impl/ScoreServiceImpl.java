@@ -88,6 +88,7 @@ public class ScoreServiceImpl implements ScoreService {
         if (exam == null) {
             throw new BusinessException("考试不存在");
         }
+        ensureExamReadyForScoreProcessing(exam);
 
         // 清除旧数据
         examScoreMapper.deleteByExamId(examId);
@@ -193,6 +194,12 @@ public class ScoreServiceImpl implements ScoreService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void calculateRanking(Long examId) {
+        Exam exam = examMapper.selectById(examId);
+        if (exam == null) {
+            throw new BusinessException("考试不存在");
+        }
+        ensureExamReadyForScoreProcessing(exam);
+
         // 计算年级排名(总分)
         List<ExamScore> examScores = examScoreMapper.selectListByExamId(examId);
         examScores.sort((a, b) -> b.getTotalScore().compareTo(a.getTotalScore()));
@@ -282,10 +289,15 @@ public class ScoreServiceImpl implements ScoreService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void calculateStatistics(Long examId) {
+        Exam exam = examMapper.selectById(examId);
+        if (exam == null) {
+            throw new BusinessException("考试不存在");
+        }
+        ensureExamReadyForScoreProcessing(exam);
+
         // 清除旧统计数据
         statisticsMapper.deleteByExamId(examId);
 
-        Exam exam = examMapper.selectById(examId);
         List<ExamSubject> subjects = examSubjectMapper.selectList(
                 new LambdaQueryWrapper<ExamSubject>().eq(ExamSubject::getExamId, examId)
         );
@@ -518,6 +530,12 @@ public class ScoreServiceImpl implements ScoreService {
         vo.setExcellentRate(stat.getExcellentRate());
         vo.setScoreSegments(stat.getScoreSegments());
         return vo;
+    }
+
+    private void ensureExamReadyForScoreProcessing(Exam exam) {
+        if (exam.getStatus() == null || exam.getStatus() < 4) {
+            throw new BusinessException("考试尚未完成，不能生成正式成绩数据");
+        }
     }
 
     @Override

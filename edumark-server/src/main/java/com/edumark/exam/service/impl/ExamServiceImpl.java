@@ -6,6 +6,7 @@ import com.edumark.answersheet.entity.AnswerSheetTemplate;
 import com.edumark.answersheet.mapper.AnswerSheetTemplateMapper;
 import com.edumark.common.exception.BusinessException;
 import com.edumark.common.result.PageResult;
+import com.edumark.common.utils.SecurityUtils;
 import com.edumark.exam.dto.ExamDTO;
 import com.edumark.exam.dto.ExamQueryDTO;
 import com.edumark.exam.entity.Exam;
@@ -21,6 +22,7 @@ import com.edumark.exam.mapper.PaperQuestionMapper;
 import com.edumark.exam.service.ExamService;
 import com.edumark.exam.vo.ExamPublishCheckVO;
 import com.edumark.exam.vo.ExamVO;
+import com.edumark.score.service.ScoreService;
 import com.edumark.school.mapper.ClassInfoMapper;
 import com.edumark.school.mapper.GradeMapper;
 import com.edumark.school.vo.ClassInfoVO;
@@ -66,6 +68,9 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
 
     @Resource
     private AnswerSheetTemplateMapper answerSheetTemplateMapper;
+
+    @Resource
+    private ScoreService scoreService;
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -211,9 +216,20 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
             throw new BusinessException("无效的考试状态");
         }
         int current = exam.getStatus() != null ? exam.getStatus() : 0;
-        // 合法状态转换：只允许向前推进或从已发布撤回到已完成
-        boolean valid = (status == current + 1)
-                || (current == 5 && status == 4); // 撤回发布
+        if (status == 5) {
+            if (current != 4) {
+                throw new BusinessException("只有已完成的考试才能发布成绩");
+            }
+            scoreService.publish(id, SecurityUtils.getCurrentUserId());
+            return;
+        }
+        if (current == 5 && status == 4) {
+            scoreService.unpublish(id, SecurityUtils.getCurrentUserId());
+            return;
+        }
+
+        // 非发布状态仅允许顺序推进
+        boolean valid = status == current + 1;
         if (!valid) {
             throw new BusinessException("不允许从「" + getStatusName(current) + "」变更为「" + getStatusName(status) + "」");
         }
@@ -236,19 +252,7 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void publish(Long id) {
-        Exam exam = getById(id);
-        if (exam == null) {
-            throw new BusinessException("考试不存在");
-        }
-        ExamPublishCheckVO checkVO = publishCheck(id);
-        if (!Boolean.TRUE.equals(checkVO.getCanPublish())) {
-            throw new BusinessException("考试配置未完成: " + String.join("；", checkVO.getMissingItems()));
-        }
-        if (exam.getStatus() != 4) {
-            throw new BusinessException("只有已完成的考试才能发布");
-        }
-        exam.setStatus(5);
-        updateById(exam);
+        scoreService.publish(id, SecurityUtils.getCurrentUserId());
     }
 
     @Override
@@ -368,15 +372,7 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void unpublish(Long id) {
-        Exam exam = getById(id);
-        if (exam == null) {
-            throw new BusinessException("考试不存在");
-        }
-        if (exam.getStatus() != 5) {
-            throw new BusinessException("只有已发布的考试才能撤回");
-        }
-        exam.setStatus(4);
-        updateById(exam);
+        scoreService.unpublish(id, SecurityUtils.getCurrentUserId());
     }
 
     private void validateExamDTO(ExamDTO dto) {

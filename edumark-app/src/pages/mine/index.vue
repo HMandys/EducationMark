@@ -94,7 +94,9 @@
 </template>
 
 <script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
 import { useUserStore, type Student } from '@/stores/user'
+import { loadStudentContext } from '@/services/session'
 
 const userStore = useUserStore()
 
@@ -143,6 +145,17 @@ const handleLogout = () => {
     },
   })
 }
+
+onShow(() => {
+  if (!userStore.isLoggedIn) {
+    uni.reLaunch({ url: '/pages/login/index' })
+    return
+  }
+
+  loadStudentContext().catch((error) => {
+    console.error('刷新用户上下文失败', error)
+  })
+})
 </script>
 
 <style lang="scss" scoped>

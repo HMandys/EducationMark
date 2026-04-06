@@ -17,6 +17,7 @@
           <el-form-item label="区域类型" prop="regionType">
             <el-select v-model="formData.regionType" @change="handleTypeChange">
               <el-option label="选择题" :value="1" />
+              <el-option label="填空题" :value="2" />
               <el-option label="主观题" :value="3" />
               <el-option label="条码区" :value="5" />
             </el-select>
@@ -26,7 +27,7 @@
           <el-form-item label="区域用途">
             <el-select v-model="formData.config!.regionRole" placeholder="请选择区域用途">
               <el-option
-                v-for="item in regionRoleOptions"
+                v-for="item in availableRegionRoleOptions"
                 :key="item.value"
                 :label="item.label"
                 :value="item.value"
@@ -48,11 +49,20 @@
         </el-col>
         <el-col :span="12">
           <el-form-item label="裁题模式">
-            <el-select v-model="formData.config!.cropMode" placeholder="请选择裁题模式" clearable>
-              <el-option label="单题裁切" value="single-question" />
-              <el-option label="题段裁切" value="range-question" />
-              <el-option label="整块裁切" value="full-region" />
+            <el-select
+              v-model="formData.config!.cropMode"
+              placeholder="请选择裁题模式"
+              clearable
+              :disabled="isFillBlankRegion"
+            >
+              <el-option
+                v-for="item in cropModeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
+            <div v-if="isFillBlankRegion" class="field-tip">填空题固定按单空单框保存，裁题模式锁定为单题裁切。</div>
           </el-form-item>
         </el-col>
       </el-row>
@@ -247,7 +257,25 @@
         </div>
       </template>
 
-      <template v-if="formData.regionType === 3">
+      <template v-if="formData.regionType === 2">
+        <div class="config-tip-card">
+          填空题按一个空一个区域配置，只保留题号、分值和坐标，不再使用旧的多行下划线配置。
+        </div>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="本空分值">
+              <el-input-number v-model="formData.config!.totalScore" :min="0" :max="100" :precision="1" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="区域高度(mm)">
+              <el-input-number v-model="formData.config!.height" :min="10" :max="120" :step="2" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </template>
+
+      <template v-else-if="formData.regionType === 3">
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="区域总分">
@@ -347,6 +375,7 @@ const regionRoleOptions: Array<{ label: string; value: RegionRole }> = [
 
 const regionTypeNames: Record<number, string> = {
   1: '选择题',
+  2: '填空题',
   3: '主观题',
   5: '条码区',
 }
@@ -356,7 +385,7 @@ const getDefaultBounds = (type: number) => {
     case 1:
       return { boxX: 8, boxY: 22, boxWidth: 84, boxHeight: 20 }
     case 2:
-      return { boxX: 8, boxY: 44, boxWidth: 84, boxHeight: 14 }
+      return { boxX: 12, boxY: 38, boxWidth: 28, boxHeight: 8 }
     case 3:
       return { boxX: 8, boxY: 60, boxWidth: 84, boxHeight: 18 }
     case 5:
@@ -397,6 +426,14 @@ const getDefaultConfig = (type: number): RegionConfig => {
         hasMultipleChoice: false,
         scorePerQuestion: 2, // 客观题默认每题2分
       }
+    case 2:
+      return {
+        ...base,
+        cropMode: 'single-question',
+        height: 24,
+        showBorder: true,
+        totalScore: 2,
+      }
     case 3:
       return {
         ...base,
@@ -435,6 +472,28 @@ const formData = reactive<AnswerSheetRegion>({
   config: getDefaultConfig(1),
 })
 
+const isFillBlankRegion = computed(() => formData.regionType === 2)
+
+const availableRegionRoleOptions = computed(() => {
+  const subjectiveLabel = isFillBlankRegion.value ? '填空题裁题区' : '主观题裁题区'
+  return regionRoleOptions.map(item => (
+    item.value === 'subjective_crop'
+      ? { ...item, label: subjectiveLabel }
+      : item
+  ))
+})
+
+const cropModeOptions = computed(() => {
+  if (isFillBlankRegion.value) {
+    return [{ label: '单题裁切', value: 'single-question' }]
+  }
+  return [
+    { label: '单题裁切', value: 'single-question' },
+    { label: '题段裁切', value: 'range-question' },
+    { label: '整块裁切', value: 'full-region' },
+  ]
+})
+
 const formRules: FormRules = {
   regionType: [{ required: true, message: '请选择区域类型', trigger: 'change' }],
   regionName: [{ required: true, message: '请输入区域名称', trigger: 'blur' }],
@@ -449,6 +508,16 @@ const requiresSingleQuestionNo = computed(() => {
   if (formData.regionType === 5) return false
   const role = formData.config?.regionRole
   return role === 'subjective_crop' || (!role && formData.regionType !== 1)
+})
+
+const singleQuestionTypeLabel = computed(() => {
+  if (formData.regionType === 2) {
+    return '填空题区域'
+  }
+  if (formData.regionType === 3) {
+    return '主观题区域'
+  }
+  return '当前区域'
 })
 
 // 分数计算
@@ -547,11 +616,38 @@ watch(
         }
 
     Object.assign(formData, nextRegion)
+    normalizeSingleQuestionRegion()
   },
 )
 
 const fillDefaultBounds = () => {
   Object.assign(formData.config!, getDefaultBounds(formData.regionType))
+}
+
+const normalizeSingleQuestionRegion = () => {
+  if (!formData.config) {
+    formData.config = getDefaultConfig(formData.regionType)
+  }
+
+  if (formData.regionType === 2) {
+    formData.config.regionRole = 'subjective_crop'
+    formData.config.cropMode = 'single-question'
+    formData.config.height = formData.config.height ?? 24
+    formData.config.showBorder = formData.config.showBorder ?? true
+    formData.config.totalScore = formData.config.totalScore ?? 2
+    if (formData.questionStart) {
+      formData.questionEnd = formData.questionStart
+    }
+    return
+  }
+
+  if (formData.regionType === 3) {
+    formData.config.regionRole = formData.config.regionRole || 'subjective_crop'
+    formData.config.cropMode = formData.config.cropMode || 'single-question'
+    if (formData.questionStart) {
+      formData.questionEnd = formData.questionStart
+    }
+  }
 }
 
 const handleTypeChange = (type: number) => {
@@ -579,6 +675,8 @@ const handleTypeChange = (type: number) => {
     formData.questionStart = undefined
     formData.questionEnd = undefined
   }
+
+  normalizeSingleQuestionRegion()
 
   if (
     commonConfig.boxX === undefined
@@ -635,7 +733,7 @@ const validateQuestionRange = () => {
     return
   }
   if (!formData.questionStart) {
-    throw new Error(requiresSingleQuestionNo.value ? '当前主观题区域需要填写题号' : '当前区域用途需要填写起止题号')
+    throw new Error(requiresSingleQuestionNo.value ? `${singleQuestionTypeLabel.value}需要填写题号` : '当前区域用途需要填写起止题号')
   }
   if (requiresSingleQuestionNo.value) {
     formData.questionEnd = formData.questionStart
@@ -669,6 +767,7 @@ const handleDetectBubbles = () => {
 const handleConfirm = async () => {
   try {
     await formRef.value?.validate()
+    normalizeSingleQuestionRegion()
     validateQuestionRange()
     validateBounds()
     emit('confirm', cloneRegion(formData))
@@ -818,5 +917,23 @@ const handleConfirm = async () => {
 
 .quick-input-row .el-input {
   flex: 1;
+}
+
+.field-tip {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.config-tip-card {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
 }
 </style>

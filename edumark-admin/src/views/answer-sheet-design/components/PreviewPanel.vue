@@ -95,7 +95,35 @@
               </div>
             </div>
 
-            <div v-else-if="region.regionType === 2 || region.regionType === 3 || region.regionType === 4" class="region answer-region">
+            <div v-else-if="region.regionType === 2" class="region fillblank-region">
+              <div class="region-title">
+                {{ region.regionName }}
+                <span v-if="formatQuestionTitle(region)">
+                  （{{ formatQuestionTitle(region) }}）
+                </span>
+              </div>
+              <div class="fillblank-list">
+                <div
+                  v-for="q in getQuestionRange(region)"
+                  :key="q"
+                  class="fillblank-item"
+                >
+                  <span class="question-no">{{ q }}.</span>
+                  <div
+                    class="fillblank-box"
+                    :style="{
+                      height: `${Math.max((region.config?.height || 24), 18)}px`,
+                      border: region.config?.showBorder === false ? '1px dashed #cbd5e1' : '1px solid #cbd5e1'
+                    }"
+                  >
+                    <span class="fillblank-placeholder">填空作答区</span>
+                  </div>
+                  <span class="fillblank-score">{{ getRegionQuestionScore(region) }} 分</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="region.regionType === 3 || region.regionType === 4" class="region answer-region">
               <div class="region-title">
                 {{ region.regionName }}
                 <span v-if="formatQuestionTitle(region)">
@@ -339,6 +367,15 @@ const getQuestionCount = (region: AnswerSheetRegion): number => {
   return end - start + 1
 }
 
+const getRegionQuestionScore = (region: AnswerSheetRegion) => {
+  const questionCount = Math.max(getQuestionCount(region), 1)
+  const totalScore = Number(region.config?.totalScore || 0)
+  if (questionCount <= 1) {
+    return totalScore
+  }
+  return Number((totalScore / questionCount).toFixed(1))
+}
+
 const formatQuestionTitle = (region: AnswerSheetRegion) => {
   const start = region.questionStart
   const end = region.questionEnd
@@ -403,6 +440,9 @@ const cloneRegion = (region: AnswerSheetRegion): AnswerSheetRegion => ({
 
 const getRoleLabel = (region: AnswerSheetRegion) => {
   const role = region.config?.regionRole
+  if (role === 'subjective_crop' && region.regionType === 2) {
+    return '填空题裁题区'
+  }
   return role ? roleLabelMap[role] : '未设置用途'
 }
 
@@ -905,6 +945,32 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.fillblank-box {
+  display: flex;
+  align-items: center;
+  min-width: 180px;
+  padding: 0 14px;
+  background: rgba(248, 250, 252, 0.85);
+  border-radius: 8px;
+}
+
+.fillblank-placeholder {
+  font-size: 12px;
+  color: #94a3b8;
+  letter-spacing: 1px;
+}
+
+.fillblank-score {
+  min-width: 48px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 999px;
 }
 
 .answer-lines {

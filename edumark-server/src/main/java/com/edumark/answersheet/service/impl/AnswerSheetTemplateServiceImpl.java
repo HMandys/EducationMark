@@ -60,7 +60,7 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
 
     private static final Map<Integer, String> REGION_TYPE_NAMES = Map.of(
             1, "选择题",
-            2, "主观题",
+            2, "填空题",
             3, "主观题",
             4, "主观题"
     );
@@ -504,7 +504,8 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
         if (questionType == null) return 3; // 默认解答题
         return switch (questionType) {
             case 1, 2, 3 -> 1; // 单选、多选、判断 -> 选择题
-            case 4, 7 -> 3; // 填空题、作文题都按主观题处理
+            case 4 -> 2; // 填空题
+            case 7 -> 3; // 作文题暂按主观题处理
             default -> 3; // 其他 -> 主观题
         };
     }
@@ -525,9 +526,12 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
                 config.put("hasMultipleChoice", hasMultiple);
             }
             case 2 -> { // 填空题
-                config.put("lineHeight", 30); // 行高(mm)
-                config.put("linesPerQuestion", 1); // 每题行数
-                config.put("lineStyle", "underline"); // 下划线样式
+                int totalScore = questions.stream()
+                        .mapToInt(q -> q.getScore() != null ? q.getScore() : 0)
+                        .sum();
+                config.put("height", 24); // 填空题区域高度
+                config.put("showBorder", true); // 使用单框样式
+                config.put("totalScore", Math.max(totalScore, 1)); // 单空分值
                 config.put("regionRole", "subjective_crop");
                 config.put("anchorType", "none");
                 config.put("cropMode", "single-question");

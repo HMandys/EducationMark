@@ -164,7 +164,7 @@ const formatCoord = (value?: number) => {
   return value !== undefined ? value.toFixed(1) : '-'
 }
 
-const startDrag = (event: MouseEvent, corner: CornerKey) => {
+const startDrag = (_event: MouseEvent, corner: CornerKey) => {
   draggingCorner.value = corner
   window.addEventListener('mousemove', handleDrag)
   window.addEventListener('mouseup', stopDrag)

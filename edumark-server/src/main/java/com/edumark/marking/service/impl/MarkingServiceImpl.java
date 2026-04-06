@@ -10,9 +10,12 @@ import com.edumark.exam.mapper.PaperMapper;
 import com.edumark.exam.mapper.PaperQuestionMapper;
 import com.edumark.file.entity.AnswerSheet;
 import com.edumark.file.entity.AnswerSheetDetail;
+import com.edumark.file.mapper.AnswerSheetImageMapper;
 import com.edumark.file.mapper.AnswerSheetDetailMapper;
 import com.edumark.file.mapper.AnswerSheetMapper;
 import com.edumark.file.service.AnswerSheetDetailService;
+import com.edumark.file.service.FileService;
+import com.edumark.file.vo.AnswerSheetImageVO;
 import com.edumark.marking.dto.ArbitrationSubmitDTO;
 import com.edumark.marking.dto.MarkingSubmitDTO;
 import com.edumark.marking.entity.MarkingArbitration;
@@ -73,6 +76,12 @@ public class MarkingServiceImpl implements MarkingService {
 
     @Resource
     private AnswerSheetDetailService answerSheetDetailService;
+
+    @Resource
+    private AnswerSheetImageMapper answerSheetImageMapper;
+
+    @Resource
+    private FileService fileService;
 
     @Override
     public List<MarkingTaskAssignVO> getMyAssigns(Long teacherId) {
@@ -315,6 +324,7 @@ public class MarkingServiceImpl implements MarkingService {
         if (vo == null || vo.getAnswerSheetId() == null || vo.getQuestionId() == null) {
             return;
         }
+        fillOriginalImageUrls(vo);
         try {
             String previewUrl = answerSheetDetailService.getQuestionPreviewUrl(vo.getAnswerSheetId(), vo.getQuestionId());
             if (previewUrl != null && !previewUrl.isBlank()) {
@@ -329,6 +339,7 @@ public class MarkingServiceImpl implements MarkingService {
         if (vo == null || vo.getAnswerSheetId() == null || vo.getQuestionId() == null) {
             return;
         }
+        fillOriginalImageUrls(vo);
         try {
             String previewUrl = answerSheetDetailService.getQuestionPreviewUrl(vo.getAnswerSheetId(), vo.getQuestionId());
             if (previewUrl != null && !previewUrl.isBlank()) {
@@ -337,6 +348,45 @@ public class MarkingServiceImpl implements MarkingService {
         } catch (BusinessException ignored) {
             // 题图预览不存在时退回原始整卷图
         }
+    }
+
+    private void fillOriginalImageUrls(MarkingRecordVO vo) {
+        String originalUrl = resolveOriginalImageUrl(vo.getAnswerSheetId(), vo.getOriginalImageUrl());
+        if ((vo.getOriginalImageUrl() == null || vo.getOriginalImageUrl().isBlank()) && originalUrl != null) {
+            vo.setOriginalImageUrl(originalUrl);
+        }
+        if (vo.getAnswerImageUrl() == null || vo.getAnswerImageUrl().isBlank()) {
+            vo.setAnswerImageUrl(originalUrl);
+        }
+    }
+
+    private void fillOriginalImageUrls(MarkingArbitrationVO vo) {
+        String originalUrl = resolveOriginalImageUrl(vo.getAnswerSheetId(), vo.getOriginalImageUrl());
+        if ((vo.getOriginalImageUrl() == null || vo.getOriginalImageUrl().isBlank()) && originalUrl != null) {
+            vo.setOriginalImageUrl(originalUrl);
+        }
+        if (vo.getAnswerImageUrl() == null || vo.getAnswerImageUrl().isBlank()) {
+            vo.setAnswerImageUrl(originalUrl);
+        }
+    }
+
+    private String resolveOriginalImageUrl(Long answerSheetId, String currentUrl) {
+        if (currentUrl != null && !currentUrl.isBlank()) {
+            return currentUrl;
+        }
+        if (answerSheetId == null) {
+            return null;
+        }
+        List<AnswerSheetImageVO> images = answerSheetImageMapper.selectListByAnswerSheetId(answerSheetId);
+        for (AnswerSheetImageVO image : images) {
+            if (image.getImageUrl() != null && !image.getImageUrl().isBlank()) {
+                return image.getImageUrl();
+            }
+            if (image.getImagePath() != null && !image.getImagePath().isBlank()) {
+                return fileService.getUrl(image.getImagePath());
+            }
+        }
+        return null;
     }
 
     @Override

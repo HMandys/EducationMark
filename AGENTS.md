@@ -27,3 +27,5 @@ Backend tests belong in `edumark-server/src/test/java` and should mirror the pro
 
 ## Commit & Pull Request Guidelines
 Recent history uses short Chinese summaries such as `优化`, `答题卡优化`, and `仲裁`. Follow that style, but make the scope clearer when possible, for example `考试模块优化` or `阅卷任务修复`. Pull requests should include: changed modules, business impact, database/config updates, verification commands, and screenshots for admin/app UI changes. Link related issues and call out any SQL scripts reviewers must apply.
+
+#

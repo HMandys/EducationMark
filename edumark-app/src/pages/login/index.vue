@@ -91,7 +91,7 @@
 import { ref, computed } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { login } from '@/api/auth'
-import { getBindStudents } from '@/api/student'
+import { loadStudentContext } from '@/services/session'
 
 const userStore = useUserStore()
 
@@ -136,16 +136,11 @@ const handleLogin = async () => {
     userStore.setTokenValue(res.data.token)
     userStore.setUserInfoValue(res.data.userInfo)
 
-    // 家长需要获取绑定的学生列表
-    if (userType.value === 'parent') {
-      const studentRes = await getBindStudents()
-      userStore.setStudents(studentRes.data)
+    await loadStudentContext()
 
-      // 没有绑定学生，跳转到绑定页面
-      if (studentRes.data.length === 0) {
-        uni.reLaunch({ url: '/pages/bind/index' })
-        return
-      }
+    if (userType.value === 'parent' && userStore.students.length === 0) {
+      uni.reLaunch({ url: '/pages/bind/index?first=1' })
+      return
     }
 
     uni.showToast({ title: '登录成功', icon: 'success' })

@@ -515,7 +515,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
                 if (region.getId().equals(detail.getRegionId())) {
                     String role = getConfigString(region.getConfig(), "regionRole");
                     vo.setRegionRole(role);
-                    vo.setRegionRoleName(getRegionRoleName(role));
+                    vo.setRegionRoleName(getRegionRoleName(role, region.getRegionType()));
                     vo.setCropMode(getConfigString(region.getConfig(), "cropMode"));
                     vo.setPageNo(region.getPageNo());
                     if ("choice_block".equals(role)) {
@@ -541,8 +541,11 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         };
     }
 
-    private String getRegionRoleName(String role) {
+    private String getRegionRoleName(String role, Integer regionType) {
         if (role == null) return "未知";
+        if ("subjective_crop".equals(role) && regionType != null && regionType == 2) {
+            return "填空题裁题区";
+        }
         return switch (role) {
             case "choice_block" -> "客观题涂卡区";
             case "subjective_crop" -> "主观题裁题区";
@@ -939,7 +942,9 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         vo.setStatus(detail != null ? detail.getStatus() : 0);
         vo.setStatusName(resolveDetailStatusName(detail, question));
         vo.setRegionRole(binding.regionRole());
-        vo.setRegionRoleName(REGION_ROLE_NAME_MAP.getOrDefault(binding.regionRole(), "未配置区域"));
+        vo.setRegionRoleName(binding.region() != null
+                ? getRegionRoleName(binding.regionRole(), binding.region().getRegionType())
+                : REGION_ROLE_NAME_MAP.getOrDefault(binding.regionRole(), "未配置区域"));
         vo.setCropMode(binding.cropMode());
         vo.setPageNo(binding.region() != null ? binding.region().getPageNo() : null);
         vo.setOptionCount(binding.region() != null ? getConfigInteger(binding.region().getConfig(), "optionCount") : null);

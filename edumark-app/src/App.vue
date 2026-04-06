@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app'
-import { useUserStore } from './stores/user'
+import { initializeSession } from './services/session'
 
 onLaunch(() => {
   console.log('App Launch')
-  // 检查登录状态
-  const userStore = useUserStore()
-  userStore.checkLogin()
+  initializeSession().catch((error) => {
+    console.error('初始化会话失败', error)
+  })
 })
 
 onShow(() => {

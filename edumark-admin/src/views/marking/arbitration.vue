@@ -203,7 +203,7 @@ const currentDetail = ref<MarkingArbitrationVO | null>(null)
 async function loadTaskOptions() {
   try {
     const res = await pageMarkingTasks({ pageNum: 1, pageSize: 1000 })
-    taskOptions.value = res.data.records
+    taskOptions.value = res.data.list
   } catch (error: any) {
     ElMessage.error(error.message || '加载任务列表失败')
   }
@@ -215,11 +215,15 @@ async function loadList() {
     ElMessage.warning('请先选择阅卷任务')
     return
   }
+  const taskId = queryForm.taskId
 
   loading.value = true
   try {
-    const res = await pageArbitrations(queryForm)
-    list.value = res.data.records
+    const res = await pageArbitrations({
+      ...queryForm,
+      taskId,
+    })
+    list.value = res.data.list
     total.value = res.data.total
 
     // 计算统计数据

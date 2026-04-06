@@ -9,6 +9,9 @@ import com.edumark.exam.mapper.ExamMapper;
 import com.edumark.exam.mapper.ExamSubjectMapper;
 import com.edumark.exam.mapper.PaperQuestionMapper;
 import com.edumark.file.service.AnswerSheetDetailService;
+import com.edumark.file.service.FileService;
+import com.edumark.file.mapper.AnswerSheetImageMapper;
+import com.edumark.file.vo.AnswerSheetImageVO;
 import com.edumark.marking.entity.MarkingArbitration;
 import com.edumark.marking.entity.MarkingRecord;
 import com.edumark.marking.entity.MarkingSession;
@@ -75,6 +78,12 @@ public class MarkingAccessServiceImpl implements MarkingAccessService {
 
     @Resource
     private MarkingTaskService markingTaskService;
+
+    @Resource
+    private AnswerSheetImageMapper answerSheetImageMapper;
+
+    @Resource
+    private FileService fileService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -186,6 +195,9 @@ public class MarkingAccessServiceImpl implements MarkingAccessService {
         item.setQuestionNo(recordVO.getQuestionNo());
 
         String questionImageUrl = recordVO.getAnswerImageUrl();
+        if (questionImageUrl == null || questionImageUrl.isBlank()) {
+            questionImageUrl = resolveOriginalImageUrl(recordVO.getAnswerSheetId());
+        }
         try {
             String previewUrl = answerSheetDetailService.getQuestionPreviewUrl(recordVO.getAnswerSheetId(), recordVO.getQuestionId());
             if (previewUrl != null && !previewUrl.isBlank()) {
@@ -507,5 +519,21 @@ public class MarkingAccessServiceImpl implements MarkingAccessService {
             return "仲裁";
         }
         return "未知";
+    }
+
+    private String resolveOriginalImageUrl(Long answerSheetId) {
+        if (answerSheetId == null) {
+            return null;
+        }
+        List<AnswerSheetImageVO> images = answerSheetImageMapper.selectListByAnswerSheetId(answerSheetId);
+        for (AnswerSheetImageVO image : images) {
+            if (image.getImageUrl() != null && !image.getImageUrl().isBlank()) {
+                return image.getImageUrl();
+            }
+            if (image.getImagePath() != null && !image.getImagePath().isBlank()) {
+                return fileService.getUrl(image.getImagePath());
+            }
+        }
+        return null;
     }
 }

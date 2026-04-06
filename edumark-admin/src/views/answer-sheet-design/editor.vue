@@ -327,6 +327,80 @@ const cloneRegion = (region: AnswerSheetRegion): AnswerSheetRegion => ({
   },
 })
 
+const regionTypeNameMap: Record<number, string> = {
+  1: '选择题',
+  2: '填空题',
+  3: '主观题',
+  5: '条码区',
+}
+
+const resolveRegionPreset = () => {
+  if (selectedRegionIndex.value >= 0 && templateForm.regions?.[selectedRegionIndex.value]) {
+    return cloneRegion(templateForm.regions[selectedRegionIndex.value])
+  }
+  if (templateForm.regions?.length) {
+    return cloneRegion(templateForm.regions[templateForm.regions.length - 1])
+  }
+  return null
+}
+
+const buildNextQuestionScope = (regionType: number, preset: AnswerSheetRegion | null) => {
+  if (regionType === 5) {
+    return {
+      questionStart: undefined,
+      questionEnd: undefined,
+    }
+  }
+
+  const presetStart = preset?.questionStart
+  const presetEnd = preset?.questionEnd || presetStart
+  if (!presetStart || !presetEnd) {
+    return regionType === 1
+      ? { questionStart: 1, questionEnd: 10 }
+      : { questionStart: 1, questionEnd: 1 }
+  }
+
+  const nextStart = presetEnd + 1
+  if (regionType === 1) {
+    const span = Math.max(presetEnd - presetStart + 1, 10)
+    return {
+      questionStart: nextStart,
+      questionEnd: nextStart + span - 1,
+    }
+  }
+
+  return {
+    questionStart: nextStart,
+    questionEnd: nextStart,
+  }
+}
+
+const buildRegionDraft = (bounds?: { boxX: number; boxY: number; boxWidth: number; boxHeight: number }) => {
+  const preset = resolveRegionPreset()
+  const regionType = preset?.regionType && preset.regionType !== 5 ? preset.regionType : 1
+  const defaultRole = regionType === 1 ? 'choice_block' : regionType === 5 ? 'barcode' : 'subjective_crop'
+  const questionScope = buildNextQuestionScope(regionType, preset)
+
+  return {
+    regionType,
+    regionName: `${regionTypeNameMap[regionType] || '题目'}区域`,
+    pageNo: preset?.pageNo || 1,
+    sortOrder: templateForm.regions?.length || 0,
+    questionStart: questionScope.questionStart,
+    questionEnd: questionScope.questionEnd,
+    config: {
+      ...(bounds || {}),
+      regionRole: regionType === 2 ? 'subjective_crop' : (preset?.config?.regionRole || defaultRole),
+      anchorType: preset?.config?.anchorType || 'none',
+      cropMode: regionType === 1 ? 'range-question' : regionType === 5 ? 'full-region' : 'single-question',
+      optionCount: regionType === 1 ? (preset?.config?.optionCount || 4) : undefined,
+      questionsPerRow: regionType === 1 ? (preset?.config?.questionsPerRow || 5) : undefined,
+      bubbleStyle: regionType === 1 ? (preset?.config?.bubbleStyle || 'square') : undefined,
+      totalScore: regionType === 2 || regionType === 3 ? (preset?.config?.totalScore || (regionType === 2 ? 2 : 10)) : undefined,
+    },
+  } satisfies AnswerSheetRegion
+}
+
 const validationSummaryText = computed(() => {
   if (!validationResult.value) {
     return '还没有执行模板校验，保存后建议先校验一次再发布。'
@@ -509,25 +583,7 @@ const handlePublish = async () => {
 
 // 添加区域
 const handleAddRegion = () => {
-  currentRegion.value = {
-    regionType: 1,
-    regionName: '选择题',
-    pageNo: 1,
-    sortOrder: templateForm.regions?.length || 0,
-    questionStart: 1,
-    questionEnd: 10,
-    config: {
-      boxX: 8,
-      boxY: 22,
-      boxWidth: 84,
-      boxHeight: 20,
-      regionRole: 'choice_block',
-      anchorType: 'none',
-      cropMode: 'range-question',
-      optionCount: 4,
-      questionsPerRow: 5,
-    },
-  }
+  currentRegion.value = buildRegionDraft()
   editingRegionIndex.value = -1
   regionDialogVisible.value = true
 }
@@ -583,24 +639,7 @@ const handlePreviewRegionUpdate = ({ index, region }: { index: number; region: A
 
 // 处理拉框创建区域
 const handleCreateRegion = (bounds: { boxX: number; boxY: number; boxWidth: number; boxHeight: number }) => {
-  // 创建新区域，让用户填写题号范围
-  currentRegion.value = {
-    regionType: 1,
-    regionName: `选择题区域`,
-    pageNo: 1,
-    sortOrder: templateForm.regions?.length || 0,
-    questionStart: undefined,
-    questionEnd: undefined,
-    config: {
-      ...bounds,
-      regionRole: 'choice_block',
-      anchorType: 'none',
-      cropMode: 'range-question',
-      optionCount: 4,
-      questionsPerRow: 5,
-      bubbleStyle: 'square',
-    },
-  }
+  currentRegion.value = buildRegionDraft(bounds)
 
   editingRegionIndex.value = -1
   regionDialogVisible.value = true
@@ -661,7 +700,11 @@ const handleDetectBubblesFromDialog = async (
   callback: (result: { bubbleMap: BubbleMapItem[]; detectedCount: number; expectedCount: number } | null) => void
 ) => {
   const result = await handleAutoDetectBubbles(region)
-  callback(result)
+  callback(result && result.bubbleMap ? {
+    bubbleMap: result.bubbleMap,
+    detectedCount: result.detectedCount || 0,
+    expectedCount: result.expectedCount || 0,
+  } : null)
 }
 
 // 暴露给子组件

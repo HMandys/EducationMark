@@ -333,6 +333,9 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         // 将该科目的"待阅卷"答题卡状态更新为"阅卷中"
         updateAnswerSheetsStatusToMarking(task.getExamSubjectId());
 
+        // 任务真正开始时，同步将考试推进到"阅卷中"
+        updateExamStatusToMarking(task.getExamId());
+
         // 更新状态为进行中
         task.setTotalCount(eligibleCount);
         task.setCompletedCount(0);
@@ -354,6 +357,21 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
             sheet.setStatus(3);
             answerSheetMapper.updateById(sheet);
         });
+    }
+
+    private void updateExamStatusToMarking(Long examId) {
+        if (examId == null) {
+            return;
+        }
+        Exam exam = examMapper.selectById(examId);
+        if (exam == null || exam.getStatus() == null) {
+            return;
+        }
+        if (exam.getStatus() < 3) {
+            exam.setStatus(3);
+            exam.setUpdateTime(LocalDateTime.now());
+            examMapper.updateById(exam);
+        }
     }
 
     /**
@@ -604,8 +622,8 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
 
         // 3. 所有任务都完成，更新考试状态
         Exam exam = examMapper.selectById(completedTask.getExamId());
-        if (exam != null && exam.getStatus() != null && exam.getStatus() == 3) {
-            // 只有在"阅卷中"状态才更新为"已完成"
+        if (exam != null && exam.getStatus() != null && exam.getStatus() < 4) {
+            // 只要还没到"已完成/已发布"，就按任务完成结果自动收口到"已完成"
             exam.setStatus(4);
             exam.setUpdateTime(LocalDateTime.now());
             examMapper.updateById(exam);
@@ -668,5 +686,41 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
                 .set(MarkingTask::getCompletedCount, completedSampleCount)
                 .set(MarkingTask::getPendingCount, pendingCount)
                 .update();
+
+        autoCompleteTaskIfFinished(task, pendingCount);
+    }
+
+    private void autoCompleteTaskIfFinished(MarkingTask task, int pendingCount) {
+        if (task == null || task.getId() == null || task.getStatus() == null || task.getStatus() != 1) {
+            return;
+        }
+        if (pendingCount > 0) {
+            return;
+        }
+
+        Long pendingRecordCount = markingRecordMapper.selectCount(
+                new LambdaQueryWrapper<MarkingRecord>()
+                        .eq(MarkingRecord::getTaskId, task.getId())
+                        .eq(MarkingRecord::getStatus, 0)
+        );
+        if (pendingRecordCount != null && pendingRecordCount > 0) {
+            return;
+        }
+
+        if (task.getEnableDoubleMarking() != null && task.getEnableDoubleMarking() == 1) {
+            Long pendingArbitrationCount = markingArbitrationMapper.selectCount(
+                    new LambdaQueryWrapper<MarkingArbitration>()
+                            .eq(MarkingArbitration::getTaskId, task.getId())
+                            .eq(MarkingArbitration::getStatus, 0)
+            );
+            if (pendingArbitrationCount != null && pendingArbitrationCount > 0) {
+                return;
+            }
+        }
+
+        task.setStatus(2);
+        updateById(task);
+        updateAnswerSheetsStatusAfterTaskComplete(task);
+        updateExamStatusIfAllTasksCompleted(task);
     }
 }

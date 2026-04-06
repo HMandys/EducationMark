@@ -190,7 +190,11 @@ public class PdfGeneratorServiceImpl implements PdfGeneratorService {
         // 区域标题
         String titleText = region.getRegionName();
         if (region.getQuestionStart() != null && region.getQuestionEnd() != null) {
-            titleText += String.format("（第%d-%d题）", region.getQuestionStart(), region.getQuestionEnd());
+            if (region.getQuestionStart().equals(region.getQuestionEnd())) {
+                titleText += String.format("（第%d题）", region.getQuestionStart());
+            } else {
+                titleText += String.format("（第%d-%d题）", region.getQuestionStart(), region.getQuestionEnd());
+            }
         }
 
         Paragraph title = new Paragraph(titleText)
@@ -276,40 +280,50 @@ public class PdfGeneratorServiceImpl implements PdfGeneratorService {
 
     private void renderFillBlankRegion(Document document, AnswerSheetRegionVO region, PdfFont font) {
         Map<String, Object> config = region.getConfig();
-        int lineHeight = config != null ? (int) config.getOrDefault("lineHeight", 30) : 30;
-        int linesPerQuestion = config != null ? (int) config.getOrDefault("linesPerQuestion", 1) : 1;
+        int height = getConfigInt(config, "height", 24);
+        boolean showBorder = getConfigBoolean(config, "showBorder", true);
+        double totalScore = getConfigDouble(config, "totalScore", 0D);
 
         int start = region.getQuestionStart() != null ? region.getQuestionStart() : 1;
         int end = region.getQuestionEnd() != null ? region.getQuestionEnd() : start;
-
-        Table table = new Table(UnitValue.createPercentArray(new float[]{0.1f, 0.9f}))
-                .useAllAvailableWidth();
+        int questionCount = Math.max(end - start + 1, 1);
+        double scorePerQuestion = questionCount > 0 ? totalScore / questionCount : totalScore;
 
         for (int q = start; q <= end; q++) {
-            // 题号
-            Cell numCell = new Cell(linesPerQuestion, 1)
-                    .add(new Paragraph(String.valueOf(q) + ".").setFont(font).setFontSize(10))
+            Table headerTable = new Table(UnitValue.createPercentArray(new float[]{0.82f, 0.18f}))
+                    .useAllAvailableWidth();
+
+            Cell numCell = new Cell()
+                    .add(new Paragraph(String.valueOf(q) + ".").setFont(font).setFontSize(11).setBold())
                     .setBorder(Border.NO_BORDER)
-                    .setVerticalAlignment(VerticalAlignment.TOP)
-                    .setPaddingTop(5);
-            table.addCell(numCell);
+                    .setVerticalAlignment(VerticalAlignment.MIDDLE);
+            headerTable.addCell(numCell);
 
-            // 填空区域
-            for (int line = 0; line < linesPerQuestion; line++) {
-                if (line > 0) {
-                    table.addCell(new Cell().setBorder(Border.NO_BORDER));
-                }
-                Cell lineCell = new Cell()
-                        .setHeight(lineHeight * MM_TO_PT / 3)
-                        .setBorderBottom(new SolidBorder(1))
-                        .setBorderTop(Border.NO_BORDER)
-                        .setBorderLeft(Border.NO_BORDER)
-                        .setBorderRight(Border.NO_BORDER);
-                table.addCell(lineCell);
+            String scoreText = scorePerQuestion > 0 ? formatScore(scorePerQuestion) + "分" : "填空";
+            Cell scoreCell = new Cell()
+                    .add(new Paragraph(scoreText)
+                            .setFont(font)
+                            .setFontSize(8)
+                            .setTextAlignment(TextAlignment.CENTER))
+                    .setBorder(new SolidBorder(1))
+                    .setVerticalAlignment(VerticalAlignment.MIDDLE)
+                    .setPadding(4);
+            headerTable.addCell(scoreCell);
+            document.add(headerTable);
+
+            Div answerArea = new Div()
+                    .setHeight(Math.max(height, 18) * MM_TO_PT / 3)
+                    .setMarginBottom(10)
+                    .setBackgroundColor(ColorConstants.WHITE);
+
+            if (showBorder) {
+                answerArea.setBorder(new SolidBorder(0.6f));
+            } else {
+                answerArea.setBorderBottom(new SolidBorder(0.6f));
             }
-        }
 
-        document.add(table);
+            document.add(answerArea);
+        }
     }
 
     private void renderAnswerRegion(Document document, AnswerSheetRegionVO region, PdfFont font) {
@@ -416,5 +430,45 @@ public class PdfGeneratorServiceImpl implements PdfGeneratorService {
                 .setFontSize(8)
                 .setFontColor(new DeviceGray(0.5f))
                 .setTextAlignment(TextAlignment.RIGHT));
+    }
+
+    private int getConfigInt(Map<String, Object> config, String key, int defaultValue) {
+        if (config == null) {
+            return defaultValue;
+        }
+        Object value = config.get(key);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return defaultValue;
+    }
+
+    private double getConfigDouble(Map<String, Object> config, String key, double defaultValue) {
+        if (config == null) {
+            return defaultValue;
+        }
+        Object value = config.get(key);
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        return defaultValue;
+    }
+
+    private boolean getConfigBoolean(Map<String, Object> config, String key, boolean defaultValue) {
+        if (config == null) {
+            return defaultValue;
+        }
+        Object value = config.get(key);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        return defaultValue;
+    }
+
+    private String formatScore(double score) {
+        if (Math.abs(score - Math.rint(score)) < 0.001D) {
+            return String.valueOf((int) Math.rint(score));
+        }
+        return String.format("%.1f", score);
     }
 }

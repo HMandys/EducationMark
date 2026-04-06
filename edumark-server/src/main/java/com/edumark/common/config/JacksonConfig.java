@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
  * Jackson 全局配置
  * 解决雪花算法生成的 Long ID 在前端 JavaScript 中精度丢失的问题
  *
- * @author EduMark
+ * @author HMandy
  */
 @Configuration
 public class JacksonConfig {

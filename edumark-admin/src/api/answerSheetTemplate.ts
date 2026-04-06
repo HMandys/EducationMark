@@ -104,6 +104,8 @@ export interface RegionConfig {
   height?: number
   showBorder?: boolean
   scoreBoxPosition?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
+  enableAiMarking?: boolean
+  aiReferenceAnswer?: string
   // 兼容旧作文/填空题模板的遗留字段
   lineHeight?: number
   linesPerQuestion?: number

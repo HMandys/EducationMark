@@ -1,5 +1,6 @@
 package com.edumark.file.service.impl;
 
+import com.edumark.ai.service.AiAutoMarkingService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -83,6 +84,9 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
 
     @Resource
     private AnswerSheetDetailMapper answerSheetDetailMapper;
+
+    @Resource
+    private AiAutoMarkingService aiAutoMarkingService;
 
     @Override
     public PageResult<AnswerSheetVO> pageQuery(AnswerSheetQueryDTO query) {
@@ -577,6 +581,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         answerSheetDetailService.initializeQuestionDetails(answerSheet.getId());
         if (forceRecognize || !hasExistingDetails) {
             answerSheetDetailService.recognizeObjectiveAnswers(answerSheet.getId());
+            aiAutoMarkingService.autoMarkFillBlankQuestions(answerSheet.getId());
         }
     }
 

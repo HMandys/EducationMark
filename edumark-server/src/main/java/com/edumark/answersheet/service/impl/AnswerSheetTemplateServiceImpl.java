@@ -422,6 +422,17 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
                 }
             }
 
+            if (Integer.valueOf(2).equals(region.getRegionType()) && getConfigBoolean(config, "enableAiMarking", false)) {
+                String aiReferenceAnswer = getConfigString(config, "aiReferenceAnswer");
+                if (aiReferenceAnswer == null || aiReferenceAnswer.isBlank()) {
+                    issues.add(new AnswerSheetTemplateValidateVO.ValidationIssue(
+                            regionLabel,
+                            "aiReferenceAnswer",
+                            regionLabel + " 已启用 AI 批改，但未设置标准答案"
+                    ));
+                }
+            }
+
             String anchorType = getConfigString(config, "anchorType");
             if (anchorType != null && !"none".equals(anchorType)) {
                 String anchorKey = getConfigString(config, "anchorKey");
@@ -532,6 +543,7 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
                 config.put("height", 24); // 填空题区域高度
                 config.put("showBorder", true); // 使用单框样式
                 config.put("totalScore", Math.max(totalScore, 1)); // 单空分值
+                config.put("enableAiMarking", false);
                 config.put("regionRole", "subjective_crop");
                 config.put("anchorType", "none");
                 config.put("cropMode", "single-question");
@@ -773,6 +785,17 @@ public class AnswerSheetTemplateServiceImpl extends ServiceImpl<AnswerSheetTempl
     private Integer getConfigInteger(Map<String, Object> config, String key) {
         Double number = getConfigNumber(config, key);
         return number != null ? number.intValue() : null;
+    }
+
+    private boolean getConfigBoolean(Map<String, Object> config, String key, boolean defaultValue) {
+        if (config == null) {
+            return defaultValue;
+        }
+        Object value = config.get(key);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        return defaultValue;
     }
 
     private int getConfigListSize(Map<String, Object> config, String key) {

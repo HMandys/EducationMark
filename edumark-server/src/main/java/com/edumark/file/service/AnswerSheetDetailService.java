@@ -87,4 +87,11 @@ public interface AnswerSheetDetailService {
      * @param answerSheetId 答题卡ID
      */
     void recalculateAnswerSheetScores(Long answerSheetId);
+
+    /**
+     * 刷新答题卡状态推进
+     *
+     * @param answerSheetId 答题卡ID
+     */
+    void refreshAnswerSheetStatus(Long answerSheetId);
 }

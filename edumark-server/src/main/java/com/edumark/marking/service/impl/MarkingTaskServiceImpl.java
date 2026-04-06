@@ -1,5 +1,8 @@
 package com.edumark.marking.service.impl;
 
+fimport com.edumark.answersheet.service.AnswerSheetTemplateService;
+import com.edumark.answersheet.vo.AnswerSheetRegionVO;
+import com.edumark.answersheet.vo.AnswerSheetTemplateVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -82,6 +85,9 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
     @Resource
     private AnswerSheetDetailService answerSheetDetailService;
 
+    @Resource
+    private AnswerSheetTemplateService answerSheetTemplateService;
+
     @Override
     public PageResult<MarkingTaskVO> pageQuery(MarkingTaskQueryDTO query) {
         Page<MarkingTaskVO> page = new Page<>(query.getPageNum(), query.getPageSize());
@@ -153,20 +159,29 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
             );
         }
 
+        AnswerSheetTemplateVO template = answerSheetTemplateService.getByExamSubjectId(examSubjectId);
+        Set<Long> aiManagedQuestionIds = getAiManagedQuestionIds(template);
+
         // 没有试卷主观题时，改为按答题卡模板里的主观题题号拆分单题任务
         if (questions.isEmpty()) {
-            createTemplateQuestionTasks(examSubject, readyAnswerSheets);
+            createTemplateQuestionTasks(examSubject, readyAnswerSheets, template);
             return;
         }
 
         // 为每道主观题创建阅卷任务
         for (PaperQuestion question : questions) {
-            Long detailCount = answerSheetDetailMapper.selectCount(
+            boolean aiManagedQuestion = aiManagedQuestionIds.contains(question.getId());
+            List<AnswerSheetDetail> manualDetails = answerSheetDetailMapper.selectList(
                     new LambdaQueryWrapper<AnswerSheetDetail>()
                             .eq(AnswerSheetDetail::getQuestionId, question.getId())
                             .eq(AnswerSheetDetail::getDeleted, 0)
             );
-            if (detailCount == 0) {
+            if (aiManagedQuestion) {
+                manualDetails = manualDetails.stream()
+                        .filter(detail -> detail.getStatus() == null || detail.getStatus() != 1)
+                        .toList();
+            }
+            if (manualDetails.isEmpty()) {
                 continue;
             }
 
@@ -176,9 +191,9 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
             task.setQuestionId(question.getId());
             task.setName("第" + question.getQuestionNo() + "题阅卷任务");
             task.setTaskType(2); // 主观题
-            task.setTotalCount(detailCount.intValue());
+            task.setTotalCount(manualDetails.size());
             task.setCompletedCount(0);
-            task.setPendingCount(detailCount.intValue());
+            task.setPendingCount(manualDetails.size());
             task.setEnableDoubleMarking(question.getEnableDoubleMarking() != null ? question.getEnableDoubleMarking() : 0);
             task.setDoubleMarkingThreshold(question.getDoubleMarkingThreshold());
             task.setStatus(0); // 未开始
@@ -186,7 +201,7 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         }
     }
 
-    private void createTemplateQuestionTasks(ExamSubject examSubject, List<AnswerSheet> readyAnswerSheets) {
+    private void createTemplateQuestionTasks(ExamSubject examSubject, List<AnswerSheet> readyAnswerSheets, AnswerSheetTemplateVO template) {
         if (readyAnswerSheets == null || readyAnswerSheets.isEmpty()) {
             throw new BusinessException("该科目暂无待阅卷的答题卡，请先上传并识别答题卡");
         }
@@ -208,6 +223,13 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
                         .orderByAsc(AnswerSheetDetail::getId)
         );
 
+        Set<Integer> aiManagedQuestionNos = getAiManagedQuestionNos(template);
+        subjectiveDetails = subjectiveDetails.stream()
+                .filter(detail -> !aiManagedQuestionNos.contains(detail.getQuestionNo())
+                        || detail.getStatus() == null
+                        || detail.getStatus() != 1)
+                .toList();
+
         Map<Integer, List<AnswerSheetDetail>> detailMapByQuestionNo = subjectiveDetails.stream()
                 .filter(detail -> detail.getQuestionNo() != null)
                 .collect(Collectors.groupingBy(
@@ -217,7 +239,7 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
                 ));
 
         if (detailMapByQuestionNo.isEmpty()) {
-            throw new BusinessException("当前科目未识别到可拆分的主观题，不再生成综合阅卷任务");
+            return;
         }
 
         for (Map.Entry<Integer, List<AnswerSheetDetail>> entry : detailMapByQuestionNo.entrySet()) {
@@ -397,6 +419,10 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         }
 
         List<AnswerSheetDetail> details = answerSheetDetailMapper.selectList(detailQuery);
+        AnswerSheetTemplateVO template = task.getExamSubjectId() != null
+                ? answerSheetTemplateService.getByExamSubjectId(task.getExamSubjectId())
+                : null;
+        details = filterAiManagedCompletedDetails(details, task, template);
 
         // 查询分配的教师列表（按角色分组）
         List<MarkingTaskAssign> firstMarkers = markingTaskAssignMapper.selectList(
@@ -459,6 +485,64 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
             }
         }
         return eligibleCount;
+    }
+
+    private List<AnswerSheetDetail> filterAiManagedCompletedDetails(List<AnswerSheetDetail> details,
+                                                                    MarkingTask task,
+                                                                    AnswerSheetTemplateVO template) {
+        if (details == null || details.isEmpty() || template == null) {
+            return details;
+        }
+        Integer templateQuestionNo = resolveTemplateQuestionNo(task.getQuestionId());
+        if (templateQuestionNo != null && getAiManagedQuestionNos(template).contains(templateQuestionNo)) {
+            return details.stream()
+                    .filter(detail -> detail.getStatus() == null || detail.getStatus() != 1)
+                    .toList();
+        }
+        if (task.getQuestionId() != null && task.getQuestionId() > 0 && getAiManagedQuestionIds(template).contains(task.getQuestionId())) {
+            return details.stream()
+                    .filter(detail -> detail.getStatus() == null || detail.getStatus() != 1)
+                    .toList();
+        }
+        return details;
+    }
+
+    private Set<Long> getAiManagedQuestionIds(AnswerSheetTemplateVO template) {
+        if (template == null || template.getRegions() == null) {
+            return Set.of();
+        }
+        Set<Long> result = new HashSet<>();
+        for (AnswerSheetRegionVO region : template.getRegions()) {
+            if (!isAiManagedFillBlankRegion(region) || region.getQuestionIds() == null) {
+                continue;
+            }
+            result.addAll(region.getQuestionIds());
+        }
+        return result;
+    }
+
+    private Set<Integer> getAiManagedQuestionNos(AnswerSheetTemplateVO template) {
+        if (template == null || template.getRegions() == null) {
+            return Set.of();
+        }
+        Set<Integer> result = new HashSet<>();
+        for (AnswerSheetRegionVO region : template.getRegions()) {
+            if (!isAiManagedFillBlankRegion(region)) {
+                continue;
+            }
+            if (region.getQuestionStart() != null) {
+                result.add(region.getQuestionStart());
+            }
+        }
+        return result;
+    }
+
+    private boolean isAiManagedFillBlankRegion(AnswerSheetRegionVO region) {
+        if (region == null || !Integer.valueOf(2).equals(region.getRegionType()) || region.getConfig() == null) {
+            return false;
+        }
+        Object enabled = region.getConfig().get("enableAiMarking");
+        return enabled instanceof Boolean && (Boolean) enabled;
     }
 
     /**

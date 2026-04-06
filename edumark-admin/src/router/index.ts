@@ -220,6 +220,12 @@ export const authRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/system/menu/index.vue'),
         meta: { title: '菜单管理', icon: 'Menu', permission: 'system:menu:list' },
       },
+      {
+        path: 'ai-marking',
+        name: 'SystemAiMarking',
+        component: () => import('@/views/system/ai-marking/index.vue'),
+        meta: { title: 'AI批改设置', icon: 'Cpu', permission: 'system:menu:list' },
+      },
     ],
   },
 ]

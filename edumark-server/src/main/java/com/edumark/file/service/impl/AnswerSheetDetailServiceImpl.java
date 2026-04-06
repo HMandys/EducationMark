@@ -826,6 +826,15 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         recalculateAnswerSheetScores(answerSheetId);
     }
 
+    @Override
+    public void refreshAnswerSheetStatus(Long answerSheetId) {
+        if (answerSheetId == null) {
+            return;
+        }
+        AnswerSheetContext context = loadContext(answerSheetId, false);
+        tryAdvanceAnswerSheetStatus(answerSheetId, context);
+    }
+
     private AnswerSheetRegionVO findTemplatePreviewRegion(AnswerSheetContext context, AnswerSheetDetail detail, Integer questionNo) {
         if (context.template() == null || context.template().getRegions() == null) {
             return null;
@@ -1584,6 +1593,17 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         return number == null ? null : number.intValue();
     }
 
+    private boolean getBoolean(Map<String, Object> config, String key, boolean defaultValue) {
+        if (config == null) {
+            return defaultValue;
+        }
+        Object value = config.get(key);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        return defaultValue;
+    }
+
     private Double getPercent(Map<String, Object> config, String key) {
         if (config == null) {
             return null;
@@ -1657,22 +1677,36 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             currentStatus = 2;
         }
 
-        // 从"待阅卷"(2)自动完成(4)（只有客观题且都已评分时）
+        // 从"待阅卷"(2)自动完成(4)（只有客观题或 AI 管理题且都已评分时）
         if (currentStatus == 2) {
-            boolean hasSubjectiveQuestions = context.questions().stream()
-                    .anyMatch(q -> !isObjectiveQuestion(q));
-
-            if (!hasSubjectiveQuestions) {
-                // 只有客观题，检查是否都已评分完成
-                boolean allCompleted = context.detailMap().values().stream()
-                        .allMatch(detail -> detail.getStatus() != null && detail.getStatus() == DETAIL_STATUS_COMPLETED);
-
-                if (allCompleted) {
-                    answerSheet.setStatus(4);
-                    answerSheetMapper.updateById(answerSheet);
-                }
+            if (canAutoCompleteAnswerSheet(context)) {
+                answerSheet.setStatus(4);
+                answerSheetMapper.updateById(answerSheet);
             }
         }
+    }
+
+    private boolean canAutoCompleteAnswerSheet(AnswerSheetContext context) {
+        if (context.detailMap().isEmpty()) {
+            return false;
+        }
+        for (AnswerSheetDetail detail : context.detailMap().values()) {
+            boolean objective = detail.getIsObjective() != null && detail.getIsObjective() == 1;
+            if (objective) {
+                if (detail.getStatus() == null || detail.getStatus() != DETAIL_STATUS_COMPLETED) {
+                    return false;
+                }
+                continue;
+            }
+            if (isAiManagedFillBlankDetail(detail, context.template())) {
+                if (detail.getStatus() == null || detail.getStatus() != DETAIL_STATUS_COMPLETED) {
+                    return false;
+                }
+                continue;
+            }
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -1707,6 +1741,30 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             }
         }
         return true;
+    }
+
+    private boolean isAiManagedFillBlankDetail(AnswerSheetDetail detail, AnswerSheetTemplateVO template) {
+        if (detail == null || template == null || template.getRegions() == null) {
+            return false;
+        }
+        for (AnswerSheetRegionVO region : template.getRegions()) {
+            if (!Integer.valueOf(2).equals(region.getRegionType())) {
+                continue;
+            }
+            if (!getBoolean(region.getConfig(), "enableAiMarking", false)) {
+                continue;
+            }
+            if (detail.getRegionId() != null && region.getId() != null && region.getId().equals(detail.getRegionId())) {
+                return true;
+            }
+            Integer questionStart = region.getQuestionStart();
+            Integer questionEnd = region.getQuestionEnd();
+            if (detail.getQuestionNo() != null && questionStart != null && questionEnd != null
+                    && detail.getQuestionNo() >= questionStart && detail.getQuestionNo() <= questionEnd) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private record AnswerSheetContext(

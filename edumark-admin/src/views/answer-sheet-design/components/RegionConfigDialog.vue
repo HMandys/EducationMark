@@ -273,6 +273,18 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item label="AI批改">
+          <el-switch v-model="formData.config!.enableAiMarking" />
+          <div class="field-tip">开启后，这个填空框会走 AI 自动识别与批改链路。</div>
+        </el-form-item>
+        <el-form-item v-if="formData.config?.enableAiMarking" label="标准答案">
+          <el-input
+            v-model="formData.config!.aiReferenceAnswer"
+            placeholder="请输入这个空的标准答案"
+            maxlength="200"
+            show-word-limit
+          />
+        </el-form-item>
       </template>
 
       <template v-else-if="formData.regionType === 3">
@@ -433,6 +445,8 @@ const getDefaultConfig = (type: number): RegionConfig => {
         height: 24,
         showBorder: true,
         totalScore: 2,
+        enableAiMarking: false,
+        aiReferenceAnswer: '',
       }
     case 3:
       return {
@@ -635,6 +649,10 @@ const normalizeSingleQuestionRegion = () => {
     formData.config.height = formData.config.height ?? 24
     formData.config.showBorder = formData.config.showBorder ?? true
     formData.config.totalScore = formData.config.totalScore ?? 2
+    formData.config.enableAiMarking = formData.config.enableAiMarking ?? false
+    if (!formData.config.aiReferenceAnswer && formData.questionStart) {
+      formData.config.aiReferenceAnswer = formData.config.correctAnswers?.[String(formData.questionStart)] || ''
+    }
     if (formData.questionStart) {
       formData.questionEnd = formData.questionStart
     }
@@ -647,6 +665,30 @@ const normalizeSingleQuestionRegion = () => {
     if (formData.questionStart) {
       formData.questionEnd = formData.questionStart
     }
+  }
+}
+
+const syncFillBlankAiConfig = () => {
+  if (formData.regionType !== 2 || !formData.config || !formData.questionStart) {
+    return
+  }
+
+  const key = String(formData.questionStart)
+  const answer = formData.config.aiReferenceAnswer?.trim() || ''
+
+  if (!formData.config.correctAnswers) {
+    formData.config.correctAnswers = {}
+  }
+
+  if (formData.config.enableAiMarking && answer) {
+    formData.config.aiReferenceAnswer = answer
+    formData.config.correctAnswers[key] = answer
+    return
+  }
+
+  delete formData.config.correctAnswers[key]
+  if (Object.keys(formData.config.correctAnswers).length === 0) {
+    delete formData.config.correctAnswers
   }
 }
 
@@ -747,6 +789,15 @@ const validateQuestionRange = () => {
   }
 }
 
+const validateFillBlankAiConfig = () => {
+  if (formData.regionType !== 2 || !formData.config?.enableAiMarking) {
+    return
+  }
+  if (!formData.config.aiReferenceAnswer?.trim()) {
+    throw new Error('启用 AI 批改后必须填写标准答案')
+  }
+}
+
 const handleDetectBubbles = () => {
   detectingBubbles.value = true
 
@@ -769,6 +820,8 @@ const handleConfirm = async () => {
     await formRef.value?.validate()
     normalizeSingleQuestionRegion()
     validateQuestionRange()
+    validateFillBlankAiConfig()
+    syncFillBlankAiConfig()
     validateBounds()
     emit('confirm', cloneRegion(formData))
   } catch (error) {

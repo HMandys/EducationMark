@@ -122,10 +122,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="createTime" label="上传时间" width="170" />
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleView(row)">查看</el-button>
             <el-button type="primary" link @click="handleQuestionDetails(row)">识别明细</el-button>
+            <el-button type="info" link :loading="aiRerunLoadingId === row.id" @click="handleAiRerun(row)">AI重跑</el-button>
             <el-button type="success" link @click="handleObjectiveReview(row)">客观题复核</el-button>
             <el-button type="warning" link @click="handleSubjectiveReview(row)">主观题核验</el-button>
             <el-button type="primary" link @click="handleAddImages(row)">补传</el-button>
@@ -395,6 +396,7 @@ import {
   getAnswerSheetQuestionDetails,
   getAnswerSheetQuestionPreview,
   updateAnswerSheet,
+  rerunAiMarking,
   rerunAnswerSheetRecognition,
   deleteAnswerSheet,
   deleteAnswerSheetBatch,
@@ -459,6 +461,7 @@ const resolveDialogVisible = ref(false)
 const resolveFormRef = ref<FormInstance>()
 const resolveLoading = ref(false)
 const rerunLoading = ref(false)
+const aiRerunLoadingId = ref<Id>()
 const resolveImages = ref<AnswerSheetImage[]>([])
 const resolveForm = reactive({
   id: undefined as Id | undefined,
@@ -802,6 +805,19 @@ const handleRerunRecognition = async (row: AnswerSheet) => {
     await fetchData()
   } finally {
     rerunLoading.value = false
+  }
+}
+
+const handleAiRerun = async (row: AnswerSheet) => {
+  aiRerunLoadingId.value = row.id
+  try {
+    await rerunAiMarking(row.id)
+    ElMessage.success('已加入 AI 自动批改队列')
+    await fetchData()
+  } catch (error: any) {
+    ElMessage.error(error?.message || 'AI 自动批改重跑失败')
+  } finally {
+    aiRerunLoadingId.value = undefined
   }
 }
 

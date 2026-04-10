@@ -1,6 +1,6 @@
 package com.edumark.marking.service.impl;
 
-fimport com.edumark.answersheet.service.AnswerSheetTemplateService;
+import com.edumark.answersheet.service.AnswerSheetTemplateService;
 import com.edumark.answersheet.vo.AnswerSheetRegionVO;
 import com.edumark.answersheet.vo.AnswerSheetTemplateVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -178,7 +178,7 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
             );
             if (aiManagedQuestion) {
                 manualDetails = manualDetails.stream()
-                        .filter(detail -> detail.getStatus() == null || detail.getStatus() != 1)
+                        .filter(detail -> detail.getStatus() == null || detail.getStatus() == 0)
                         .toList();
             }
             if (manualDetails.isEmpty()) {
@@ -214,6 +214,7 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
                 new LambdaQueryWrapper<AnswerSheetDetail>()
                         .in(AnswerSheetDetail::getAnswerSheetId, answerSheetIds)
                         .eq(AnswerSheetDetail::getDeleted, 0)
+                        .ne(AnswerSheetDetail::getStatus, DETAIL_STATUS_SUBJECTIVE_ANOMALY)
                         .isNotNull(AnswerSheetDetail::getQuestionNo)
                         .and(wrapper -> wrapper
                                 .ne(AnswerSheetDetail::getIsObjective, 1)
@@ -227,7 +228,7 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         subjectiveDetails = subjectiveDetails.stream()
                 .filter(detail -> !aiManagedQuestionNos.contains(detail.getQuestionNo())
                         || detail.getStatus() == null
-                        || detail.getStatus() != 1)
+                        || detail.getStatus() == 0)
                 .toList();
 
         Map<Integer, List<AnswerSheetDetail>> detailMapByQuestionNo = subjectiveDetails.stream()
@@ -496,12 +497,12 @@ public class MarkingTaskServiceImpl extends ServiceImpl<MarkingTaskMapper, Marki
         Integer templateQuestionNo = resolveTemplateQuestionNo(task.getQuestionId());
         if (templateQuestionNo != null && getAiManagedQuestionNos(template).contains(templateQuestionNo)) {
             return details.stream()
-                    .filter(detail -> detail.getStatus() == null || detail.getStatus() != 1)
+                    .filter(detail -> detail.getStatus() == null || detail.getStatus() == 0)
                     .toList();
         }
         if (task.getQuestionId() != null && task.getQuestionId() > 0 && getAiManagedQuestionIds(template).contains(task.getQuestionId())) {
             return details.stream()
-                    .filter(detail -> detail.getStatus() == null || detail.getStatus() != 1)
+                    .filter(detail -> detail.getStatus() == null || detail.getStatus() == 0)
                     .toList();
         }
         return details;

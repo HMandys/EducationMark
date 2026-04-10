@@ -54,11 +54,11 @@ public class SchoolServiceImpl extends ServiceImpl<SchoolMapper, School> impleme
 
         School school = new School();
         BeanUtils.copyProperties(dto, school);
+        if (!StringUtils.hasText(school.getContactPhone()) && StringUtils.hasText(dto.getPhone())) {
+            school.setContactPhone(dto.getPhone());
+        }
         if (school.getStatus() == null) {
             school.setStatus(1);
-        }
-        if (school.getSort() == null) {
-            school.setSort(0);
         }
         save(school);
         return school.getId();
@@ -85,6 +85,9 @@ public class SchoolServiceImpl extends ServiceImpl<SchoolMapper, School> impleme
 
         School school = new School();
         BeanUtils.copyProperties(dto, school);
+        if (!StringUtils.hasText(school.getContactPhone()) && StringUtils.hasText(dto.getPhone())) {
+            school.setContactPhone(dto.getPhone());
+        }
         updateById(school);
     }
 

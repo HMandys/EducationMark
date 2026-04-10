@@ -26,4 +26,17 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean("aiMarkingExecutor")
+    public Executor aiMarkingExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(3);
+        executor.setMaxPoolSize(6);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("ai-marking-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+        return executor;
+    }
 }

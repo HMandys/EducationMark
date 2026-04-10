@@ -133,6 +133,10 @@ export function rerunSubjectiveReview(id: Id) {
   return request.post<AnswerSheetQuestionDetail[]>(`/answer-sheet/${id}/subjective-review/rerun`)
 }
 
+export function rerunAiMarking(id: Id) {
+  return request.post<void>(`/answer-sheet/${id}/ai-marking/rerun`)
+}
+
 export function createAnswerSheet(data: Partial<AnswerSheet>) {
   return request.post<Id>('/answer-sheet', data)
 }

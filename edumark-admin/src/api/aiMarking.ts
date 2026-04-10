@@ -35,6 +35,34 @@ export interface AiMarkingPolicy {
   promptTemplate?: string
 }
 
+export interface AiMarkingRecord {
+  id: number
+  answerSheetId: number
+  questionNo?: number
+  providerName?: string
+  protocol?: string
+  model?: string
+  referenceAnswer?: string
+  recognizedText?: string
+  suggestedScore?: number
+  confidence?: number
+  judgeReason?: string
+  status?: number
+  errorMessage?: string
+  rawResponse?: string
+  createTime?: string
+}
+
+export interface AiMarkingRecordQuery {
+  pageNum: number
+  pageSize: number
+  answerSheetId?: number
+  questionNo?: number
+  status?: number
+  providerName?: string
+  protocol?: string
+}
+
 export function getAiMarkingProviderPage(params: AiMarkingProviderQuery) {
   return request.get<PageResult<AiMarkingProvider>>('/system/ai-marking/provider/page', { params })
 }
@@ -49,6 +77,10 @@ export function updateAiMarkingProvider(data: AiMarkingProvider) {
 
 export function deleteAiMarkingProvider(id: number) {
   return request.delete<void>(`/system/ai-marking/provider/${id}`)
+}
+
+export function getAiMarkingRecordPage(params: AiMarkingRecordQuery) {
+  return request.get<PageResult<AiMarkingRecord>>('/system/ai-marking/record/page', { params })
 }
 
 export function getAiMarkingPolicy() {

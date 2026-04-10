@@ -17,24 +17,29 @@ import java.util.List;
 public class Parent extends BaseEntity {
 
     @Schema(description = "关联用户ID")
+    @TableField(exist = false)
     private Long userId;
 
     @Schema(description = "姓名")
+    @TableField("parent_name")
     private String name;
 
     @Schema(description = "性别: 0-未知 1-男 2-女")
+    @TableField(exist = false)
     private Integer gender;
 
     @Schema(description = "手机号")
     private String phone;
 
     @Schema(description = "身份证号")
+    @TableField(exist = false)
     private String idCard;
 
     @Schema(description = "状态: 0-禁用 1-启用")
     private Integer status;
 
     @Schema(description = "备注")
+    @TableField(exist = false)
     private String remark;
 
     @TableField(exist = false)

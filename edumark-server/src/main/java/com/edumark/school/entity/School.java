@@ -1,5 +1,6 @@
 package com.edumark.school.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.edumark.common.entity.BaseEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -14,12 +15,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class School extends BaseEntity {
 
     @Schema(description = "学校名称")
+    @TableField("school_name")
     private String name;
 
     @Schema(description = "学校编码")
+    @TableField("school_code")
     private String code;
 
     @Schema(description = "学校类型: 1-小学 2-初中 3-高中 4-完全中学 5-九年一贯制")
+    @TableField(exist = false)
     private Integer type;
 
     @Schema(description = "省份")
@@ -35,12 +39,15 @@ public class School extends BaseEntity {
     private String address;
 
     @Schema(description = "联系电话")
+    @TableField(exist = false)
     private String phone;
 
     @Schema(description = "负责人姓名")
+    @TableField("contact_person")
     private String contactName;
 
     @Schema(description = "负责人手机")
+    @TableField("contact_phone")
     private String contactPhone;
 
     @Schema(description = "学校Logo")
@@ -50,9 +57,11 @@ public class School extends BaseEntity {
     private Integer status;
 
     @Schema(description = "排序号")
+    @TableField(exist = false)
     private Integer sort;
 
     @Schema(description = "备注")
+    @TableField(exist = false)
     private String remark;
 
     // Getters and Setters

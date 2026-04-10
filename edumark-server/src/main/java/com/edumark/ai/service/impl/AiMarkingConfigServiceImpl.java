@@ -4,14 +4,17 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.edumark.ai.dto.AiMarkingPolicyDTO;
+import com.edumark.ai.dto.AiMarkingRecordQueryDTO;
 import com.edumark.ai.dto.AiMarkingProviderDTO;
 import com.edumark.ai.dto.AiMarkingProviderQueryDTO;
 import com.edumark.ai.entity.AiMarkingPolicy;
 import com.edumark.ai.entity.AiMarkingProvider;
 import com.edumark.ai.mapper.AiMarkingPolicyMapper;
 import com.edumark.ai.mapper.AiMarkingProviderMapper;
+import com.edumark.ai.mapper.AiMarkingRecordMapper;
 import com.edumark.ai.service.AiMarkingConfigService;
 import com.edumark.ai.vo.AiMarkingPolicyVO;
+import com.edumark.ai.vo.AiMarkingRecordVO;
 import com.edumark.ai.vo.AiMarkingProviderVO;
 import com.edumark.common.exception.BusinessException;
 import com.edumark.common.result.PageResult;
@@ -30,7 +33,7 @@ import java.util.Set;
 public class AiMarkingConfigServiceImpl extends ServiceImpl<AiMarkingProviderMapper, AiMarkingProvider>
         implements AiMarkingConfigService {
 
-    private static final Set<String> SUPPORTED_PROTOCOLS = Set.of("openai-compatible", "anthropic");
+    private static final Set<String> SUPPORTED_PROTOCOLS = Set.of("openai-compatible", "openai-responses", "anthropic");
     private static final Set<String> SUPPORTED_FAILURE_STRATEGIES = Set.of("exception-pool", "manual-review", "skip");
     private static final String DEFAULT_PROMPT_TEMPLATE = """
             你是考试填空题自动批改模型。
@@ -39,9 +42,11 @@ public class AiMarkingConfigServiceImpl extends ServiceImpl<AiMarkingProviderMap
             """;
 
     private final AiMarkingPolicyMapper policyMapper;
+    private final AiMarkingRecordMapper recordMapper;
 
-    public AiMarkingConfigServiceImpl(AiMarkingPolicyMapper policyMapper) {
+    public AiMarkingConfigServiceImpl(AiMarkingPolicyMapper policyMapper, AiMarkingRecordMapper recordMapper) {
         this.policyMapper = policyMapper;
+        this.recordMapper = recordMapper;
     }
 
     @Override
@@ -104,6 +109,12 @@ public class AiMarkingConfigServiceImpl extends ServiceImpl<AiMarkingProviderMap
         }
         removeById(id);
         ensureEnabledPolicyHasDefaultProvider();
+    }
+
+    @Override
+    public PageResult<AiMarkingRecordVO> getRecordPage(AiMarkingRecordQueryDTO query) {
+        Page<AiMarkingRecordVO> page = new Page<>(query.getPageNum(), query.getPageSize());
+        return PageResult.of(recordMapper.selectPageVO(page, query));
     }
 
     @Override

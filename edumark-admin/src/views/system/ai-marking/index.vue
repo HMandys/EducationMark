@@ -145,6 +145,95 @@
           </el-form>
         </el-card>
       </el-tab-pane>
+
+      <el-tab-pane label="批改审计" name="record">
+        <el-card class="search-card" shadow="never">
+          <el-form :model="recordQueryParams" inline>
+            <el-form-item label="答题卡ID">
+              <el-input-number v-model="recordQueryParams.answerSheetId" :min="1" :controls="false" placeholder="答题卡ID" />
+            </el-form-item>
+            <el-form-item label="题号">
+              <el-input-number v-model="recordQueryParams.questionNo" :min="1" :controls="false" placeholder="题号" />
+            </el-form-item>
+            <el-form-item label="协议">
+              <el-select v-model="recordQueryParams.protocol" placeholder="请选择协议" clearable>
+                <el-option
+                  v-for="item in protocolOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="状态">
+              <el-select v-model="recordQueryParams.status" placeholder="请选择状态" clearable>
+                <el-option label="成功" :value="1" />
+                <el-option label="失败" :value="0" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="提供商">
+              <el-input v-model="recordQueryParams.providerName" placeholder="请输入提供商名称" clearable />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="handleRecordSearch">
+                <el-icon><Search /></el-icon>搜索
+              </el-button>
+              <el-button @click="handleRecordReset">
+                <el-icon><Refresh /></el-icon>重置
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </el-card>
+
+        <el-card class="table-card" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <span>AI 批改审计记录</span>
+            </div>
+          </template>
+
+          <el-table v-loading="recordLoading" :data="recordTableData" row-key="id">
+            <el-table-column prop="answerSheetId" label="答题卡ID" width="110" />
+            <el-table-column prop="questionNo" label="题号" width="80" />
+            <el-table-column prop="providerName" label="提供商" min-width="120" />
+            <el-table-column label="协议" width="160">
+              <template #default="{ row }">
+                <el-tag effect="plain">{{ getProtocolLabel(row.protocol) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="model" label="模型" min-width="150" />
+            <el-table-column label="状态" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 1 ? 'success' : 'danger'">{{ row.status === 1 ? '成功' : '失败' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="suggestedScore" label="分数" width="80" align="center" />
+            <el-table-column label="置信度" width="100" align="center">
+              <template #default="{ row }">
+                {{ row.confidence !== undefined && row.confidence !== null ? row.confidence.toFixed(2) : '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="recognizedText" label="识别文本" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="errorMessage" label="错误信息" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="createTime" label="时间" width="170" />
+            <el-table-column label="操作" width="120" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" link @click="handleViewRecord(row)">查看详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <el-pagination
+            v-model:current-page="recordQueryParams.pageNum"
+            v-model:page-size="recordQueryParams.pageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="recordTotal"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="fetchRecordData"
+            @current-change="fetchRecordData"
+          />
+        </el-card>
+      </el-tab-pane>
     </el-tabs>
 
     <el-dialog v-model="providerDialogVisible" :title="providerDialogTitle" width="720px" destroy-on-close>
@@ -232,6 +321,35 @@
         <el-button type="primary" :loading="providerSubmitting" @click="handleSubmitProvider">确定</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="recordDialogVisible" title="批改审计详情" width="860px" destroy-on-close>
+      <el-descriptions v-if="currentRecord" :column="2" border>
+        <el-descriptions-item label="答题卡ID">{{ currentRecord.answerSheetId }}</el-descriptions-item>
+        <el-descriptions-item label="题号">{{ currentRecord.questionNo || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="提供商">{{ currentRecord.providerName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="协议">{{ getProtocolLabel(currentRecord.protocol) }}</el-descriptions-item>
+        <el-descriptions-item label="模型">{{ currentRecord.model || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="currentRecord.status === 1 ? 'success' : 'danger'">
+            {{ currentRecord.status === 1 ? '成功' : '失败' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="标准答案" :span="2">{{ currentRecord.referenceAnswer || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="识别文本" :span="2">{{ currentRecord.recognizedText || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="建议得分">{{ currentRecord.suggestedScore ?? '-' }}</el-descriptions-item>
+        <el-descriptions-item label="置信度">
+          {{ currentRecord.confidence !== undefined && currentRecord.confidence !== null ? currentRecord.confidence.toFixed(2) : '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="判分理由" :span="2">{{ currentRecord.judgeReason || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="错误信息" :span="2">{{ currentRecord.errorMessage || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="时间" :span="2">{{ currentRecord.createTime || '-' }}</el-descriptions-item>
+      </el-descriptions>
+
+      <div v-if="currentRecord?.rawResponse" class="raw-response-section">
+        <div class="raw-response-title">原始响应</div>
+        <el-input :model-value="currentRecord.rawResponse" type="textarea" :rows="12" readonly />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -243,15 +361,18 @@ import {
   createAiMarkingProvider,
   deleteAiMarkingProvider,
   getAiMarkingPolicy,
+  getAiMarkingRecordPage,
   getAiMarkingProviderPage,
   updateAiMarkingPolicy,
   updateAiMarkingProvider,
   type AiMarkingPolicy,
+  type AiMarkingRecord,
   type AiMarkingProvider,
 } from '@/api/aiMarking'
 
 const protocolOptions = [
   { label: 'OpenAI兼容', value: 'openai-compatible' },
+  { label: 'OpenAI Responses / Codex', value: 'openai-responses' },
   { label: 'Anthropic', value: 'anthropic' },
 ]
 
@@ -266,11 +387,16 @@ const providerLoading = ref(false)
 const providerSubmitting = ref(false)
 const policyLoading = ref(false)
 const policySubmitting = ref(false)
+const recordLoading = ref(false)
 const providerTableData = ref<AiMarkingProvider[]>([])
 const providerTotal = ref(0)
+const recordTableData = ref<AiMarkingRecord[]>([])
+const recordTotal = ref(0)
 const providerDialogVisible = ref(false)
 const providerDialogTitle = ref('')
 const providerFormRef = ref<FormInstance>()
+const recordDialogVisible = ref(false)
+const currentRecord = ref<AiMarkingRecord | null>(null)
 
 const queryParams = reactive({
   pageNum: 1,
@@ -278,6 +404,16 @@ const queryParams = reactive({
   providerName: '',
   protocol: '',
   enabled: undefined as number | undefined,
+})
+
+const recordQueryParams = reactive({
+  pageNum: 1,
+  pageSize: 10,
+  answerSheetId: undefined as number | undefined,
+  questionNo: undefined as number | undefined,
+  status: undefined as number | undefined,
+  providerName: '',
+  protocol: '',
 })
 
 const createInitialProviderForm = (): AiMarkingProvider => ({
@@ -389,6 +525,17 @@ const fetchPolicyData = async () => {
   }
 }
 
+const fetchRecordData = async () => {
+  recordLoading.value = true
+  try {
+    const res = await getAiMarkingRecordPage(recordQueryParams)
+    recordTableData.value = res.data.list
+    recordTotal.value = res.data.total
+  } finally {
+    recordLoading.value = false
+  }
+}
+
 const handleSearch = () => {
   queryParams.pageNum = 1
   fetchProviderData()
@@ -399,6 +546,20 @@ const handleReset = () => {
   queryParams.protocol = ''
   queryParams.enabled = undefined
   handleSearch()
+}
+
+const handleRecordSearch = () => {
+  recordQueryParams.pageNum = 1
+  fetchRecordData()
+}
+
+const handleRecordReset = () => {
+  recordQueryParams.answerSheetId = undefined
+  recordQueryParams.questionNo = undefined
+  recordQueryParams.status = undefined
+  recordQueryParams.providerName = ''
+  recordQueryParams.protocol = ''
+  handleRecordSearch()
 }
 
 const resetProviderForm = () => {
@@ -480,10 +641,16 @@ const handleSavePolicy = async () => {
   }
 }
 
+const handleViewRecord = (row: AiMarkingRecord) => {
+  currentRecord.value = row
+  recordDialogVisible.value = true
+}
+
 onMounted(async () => {
   await Promise.all([
     fetchProviderData(),
     fetchPolicyData(),
+    fetchRecordData(),
   ])
 })
 </script>
@@ -529,5 +696,16 @@ onMounted(async () => {
   margin-top: 6px;
   font-size: 12px;
   color: #64748b;
+}
+
+.raw-response-section {
+  margin-top: 16px;
+}
+
+.raw-response-title {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
 }
 </style>

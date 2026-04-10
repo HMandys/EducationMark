@@ -1,5 +1,6 @@
 package com.edumark.file.controller;
 
+import com.edumark.ai.service.AiAutoMarkingAsyncService;
 import com.edumark.common.result.PageResult;
 import com.edumark.common.result.Result;
 import com.edumark.file.dto.AnswerSheetDTO;
@@ -33,6 +34,9 @@ public class AnswerSheetController {
 
     @Resource
     private AnswerSheetDetailService answerSheetDetailService;
+
+    @Resource
+    private AiAutoMarkingAsyncService aiAutoMarkingAsyncService;
 
     @Operation(summary = "分页查询答题卡")
     @GetMapping("/page")
@@ -86,6 +90,13 @@ public class AnswerSheetController {
     @PostMapping("/{id}/subjective-review/rerun")
     public Result<List<AnswerSheetQuestionDetailVO>> rerunSubjectiveReview(@PathVariable Long id) {
         return Result.success(answerSheetDetailService.rerunSubjectiveReview(id));
+    }
+
+    @Operation(summary = "重跑 AI 自动批改")
+    @PostMapping("/{id}/ai-marking/rerun")
+    public Result<Void> rerunAiMarking(@PathVariable Long id) {
+        aiAutoMarkingAsyncService.autoMarkFillBlankQuestionsAsync(id);
+        return Result.success();
     }
 
     @Operation(summary = "创建答题卡")

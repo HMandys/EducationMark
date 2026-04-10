@@ -168,13 +168,17 @@ public class AiAutoMarkingServiceImpl implements AiAutoMarkingService {
 
             String referenceAnswer = resolveReferenceAnswer(region, detail);
             if (!StringUtils.hasText(referenceAnswer)) {
+                applyFailureStrategy(policy, detail, null);
                 saveFailureRecord(provider, detail, region, "未配置标准答案", null);
+                changed = true;
                 continue;
             }
 
             AnswerSheetImage image = pickImageForRegion(images, region.getPageNo());
             if (image == null || !StringUtils.hasText(image.getImagePath())) {
+                applyFailureStrategy(policy, detail, null);
                 saveFailureRecord(provider, detail, region, "未找到题目所在页图片", null);
+                changed = true;
                 continue;
             }
 
@@ -190,6 +194,12 @@ public class AiAutoMarkingServiceImpl implements AiAutoMarkingService {
 
                 AiJudgeResult result = invokeModel(provider, policy, referenceAnswer, detail.getFullScore(), regionImage);
                 validateJudgeResult(result, detail.getFullScore());
+                if (result.confidence() < resolveThreshold(policy)) {
+                    applyFailureStrategy(policy, detail, result);
+                    saveFailureRecord(provider, detail, region, "模型返回置信度低于阈值", result.rawResponse());
+                    changed = true;
+                    continue;
+                }
 
                 detail.setStudentAnswer(result.recognizedText());
                 detail.setScore(result.score());
@@ -199,7 +209,9 @@ public class AiAutoMarkingServiceImpl implements AiAutoMarkingService {
                 changed = true;
             } catch (Exception ex) {
                 log.warn("AI 自动批改失败，answerSheetId={}, questionNo={}, error={}", answerSheetId, questionNo, ex.getMessage());
+                applyFailureStrategy(policy, detail, null);
                 saveFailureRecord(provider, detail, region, ex.getMessage(), ex instanceof BusinessException ? null : getRootMessage(ex));
+                changed = true;
             }
         }
 
@@ -207,6 +219,22 @@ public class AiAutoMarkingServiceImpl implements AiAutoMarkingService {
             answerSheetDetailService.recalculateAnswerSheetScores(answerSheetId);
             answerSheetDetailService.refreshAnswerSheetStatus(answerSheetId);
         }
+    }
+
+    @Override
+    public boolean hasAiFillBlankQuestions(Long answerSheetId) {
+        if (answerSheetId == null) {
+            return false;
+        }
+        AnswerSheet answerSheet = answerSheetMapper.selectById(answerSheetId);
+        if (answerSheet == null || answerSheet.getExamSubjectId() == null) {
+            return false;
+        }
+        AnswerSheetTemplateVO template = templateService.getByExamSubjectId(answerSheet.getExamSubjectId());
+        if (template == null || template.getRegions() == null) {
+            return false;
+        }
+        return template.getRegions().stream().anyMatch(this::isAiManagedFillBlankRegion);
     }
 
     private AiMarkingPolicy loadEnabledPolicy() {
@@ -309,6 +337,7 @@ public class AiAutoMarkingServiceImpl implements AiAutoMarkingService {
         byte[] imageBytes = toPngBytes(image);
         return switch (provider.getProtocol()) {
             case "openai-compatible" -> invokeOpenAiCompatible(provider, policy, referenceAnswer, fullScore, imageBytes);
+            case "openai-responses" -> invokeOpenAiResponses(provider, policy, referenceAnswer, fullScore, imageBytes);
             case "anthropic" -> invokeAnthropic(provider, policy, referenceAnswer, fullScore, imageBytes);
             default -> throw new BusinessException("暂不支持该协议类型");
         };
@@ -348,6 +377,42 @@ public class AiAutoMarkingServiceImpl implements AiAutoMarkingService {
         JsonNode root = objectMapper.readTree(responseText);
         JsonNode contentNode = root.path("choices").path(0).path("message").path("content");
         return parseJudgeResult(contentNode.asText(), responseText);
+    }
+
+    private AiJudgeResult invokeOpenAiResponses(AiMarkingProvider provider,
+                                                AiMarkingPolicy policy,
+                                                String referenceAnswer,
+                                                Integer fullScore,
+                                                byte[] imageBytes) throws IOException, InterruptedException {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", provider.getModel());
+        payload.put("instructions", buildSystemPrompt(policy));
+        payload.put("max_output_tokens", provider.getMaxTokens() != null ? provider.getMaxTokens() : 2048);
+        payload.put("input", List.of(
+                Map.of(
+                        "role", "user",
+                        "content", List.of(
+                                Map.of("type", "input_text", "text", buildUserPrompt(referenceAnswer, fullScore)),
+                                Map.of(
+                                        "type", "input_image",
+                                        "image_url", "data:image/png;base64," + Base64.getEncoder().encodeToString(imageBytes),
+                                        "detail", "high"
+                                )
+                        )
+                )
+        ));
+
+        String responseText = executeRequest(
+                resolveEndpoint(provider.getBaseUrl(), "/responses"),
+                provider.getApiKey(),
+                Map.of("Authorization", "Bearer " + provider.getApiKey()),
+                payload,
+                provider.getTimeoutMs()
+        );
+
+        JsonNode root = objectMapper.readTree(responseText);
+        String text = extractResponsesText(root);
+        return parseJudgeResult(text, responseText);
     }
 
     private AiJudgeResult invokeAnthropic(AiMarkingProvider provider,
@@ -435,6 +500,32 @@ public class AiAutoMarkingServiceImpl implements AiAutoMarkingService {
         return new AiJudgeResult(recognizedText.trim(), score, confidence, reason.trim(), rawResponse);
     }
 
+    private String extractResponsesText(JsonNode root) {
+        JsonNode output = root.path("output");
+        if (output.isArray()) {
+            for (JsonNode item : output) {
+                JsonNode content = item.path("content");
+                if (!content.isArray()) {
+                    continue;
+                }
+                for (JsonNode contentItem : content) {
+                    String type = contentItem.path("type").asText("");
+                    if ("output_text".equals(type) || "text".equals(type)) {
+                        String text = contentItem.path("text").asText("");
+                        if (StringUtils.hasText(text)) {
+                            return text;
+                        }
+                    }
+                }
+            }
+        }
+        String fallback = root.path("output_text").asText("");
+        if (StringUtils.hasText(fallback)) {
+            return fallback;
+        }
+        throw new BusinessException("Responses API 未返回可解析文本");
+    }
+
     private void validateJudgeResult(AiJudgeResult result, Integer fullScore) {
         int maxScore = fullScore != null ? fullScore : 0;
         if (result.score() < 0 || result.score() > maxScore) {
@@ -442,6 +533,35 @@ public class AiAutoMarkingServiceImpl implements AiAutoMarkingService {
         }
         if (Double.isNaN(result.confidence()) || result.confidence() < 0 || result.confidence() > 1) {
             throw new BusinessException("模型返回置信度不合法");
+        }
+    }
+
+    private double resolveThreshold(AiMarkingPolicy policy) {
+        return policy.getLowConfidenceThreshold() != null ? policy.getLowConfidenceThreshold() : 0.75D;
+    }
+
+    private void applyFailureStrategy(AiMarkingPolicy policy, AnswerSheetDetail detail, AiJudgeResult result) {
+        String failureStrategy = StringUtils.hasText(policy.getFailureStrategy())
+                ? policy.getFailureStrategy().trim()
+                : "exception-pool";
+        if (result != null && StringUtils.hasText(result.recognizedText())) {
+            detail.setStudentAnswer(result.recognizedText());
+        }
+
+        switch (failureStrategy) {
+            case "manual-review" -> {
+                detail.setStatus(0);
+                detailMapper.updateById(detail);
+            }
+            case "skip" -> {
+                detail.setScore(0);
+                detail.setStatus(DETAIL_STATUS_COMPLETED);
+                detailMapper.updateById(detail);
+            }
+            default -> {
+                detail.setStatus(3);
+                detailMapper.updateById(detail);
+            }
         }
     }
 

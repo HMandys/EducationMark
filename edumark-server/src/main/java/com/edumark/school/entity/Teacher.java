@@ -18,12 +18,15 @@ public class Teacher extends BaseEntity {
     private Long schoolId;
 
     @Schema(description = "关联用户ID")
+    @TableField(exist = false)
     private Long userId;
 
     @Schema(description = "工号")
+    @TableField("teacher_code")
     private String jobNumber;
 
     @Schema(description = "姓名")
+    @TableField("teacher_name")
     private String name;
 
     @Schema(description = "性别: 0-未知 1-男 2-女")
@@ -36,6 +39,7 @@ public class Teacher extends BaseEntity {
     private String email;
 
     @Schema(description = "身份证号")
+    @TableField(exist = false)
     private String idCard;
 
     @Schema(description = "任教科目")
@@ -45,12 +49,14 @@ public class Teacher extends BaseEntity {
     private String title;
 
     @Schema(description = "入职日期")
+    @TableField(exist = false)
     private String entryDate;
 
     @Schema(description = "状态: 0-离职 1-在职")
     private Integer status;
 
     @Schema(description = "备注")
+    @TableField(exist = false)
     private String remark;
 
     @TableField(exist = false)

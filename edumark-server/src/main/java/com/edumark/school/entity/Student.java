@@ -17,10 +17,15 @@ public class Student extends BaseEntity {
     @Schema(description = "所属学校ID")
     private Long schoolId;
 
+    @Schema(description = "所属年级ID")
+    @TableField("grade_id")
+    private Long gradeId;
+
     @Schema(description = "所属班级ID")
     private Long classId;
 
     @Schema(description = "关联用户ID")
+    @TableField(exist = false)
     private Long userId;
 
     @Schema(description = "学号")
@@ -38,12 +43,15 @@ public class Student extends BaseEntity {
     private String phone;
 
     @Schema(description = "身份证号")
+    @TableField(exist = false)
     private String idCard;
 
     @Schema(description = "出生日期")
+    @TableField(exist = false)
     private String birthday;
 
     @Schema(description = "入学日期")
+    @TableField(exist = false)
     private String enrollDate;
 
     @Schema(description = "绑定码-家长绑定用")
@@ -53,6 +61,7 @@ public class Student extends BaseEntity {
     private Integer status;
 
     @Schema(description = "备注")
+    @TableField(exist = false)
     private String remark;
 
     @TableField(exist = false)
@@ -70,6 +79,9 @@ public class Student extends BaseEntity {
     // Getters and Setters
     public Long getSchoolId() { return schoolId; }
     public void setSchoolId(Long schoolId) { this.schoolId = schoolId; }
+
+    public Long getGradeId() { return gradeId; }
+    public void setGradeId(Long gradeId) { this.gradeId = gradeId; }
 
     public Long getClassId() { return classId; }
     public void setClassId(Long classId) { this.classId = classId; }

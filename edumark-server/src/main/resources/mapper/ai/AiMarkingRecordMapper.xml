@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.ai.mapper.AiMarkingRecordMapper">
+
+    <select id="selectPageVO" resultType="com.edumark.ai.vo.AiMarkingRecordVO">
+        SELECT
+            id,
+            answer_sheet_id,
+            question_no,
+            provider_name,
+            protocol,
+            model,
+            reference_answer,
+            recognized_text,
+            suggested_score,
+            confidence,
+            judge_reason,
+            status,
+            error_message,
+            raw_response,
+            create_time
+        FROM ai_marking_record
+        <where>
+            deleted = 0
+            <if test="query.answerSheetId != null">
+                AND answer_sheet_id = #{query.answerSheetId}
+            </if>
+            <if test="query.questionNo != null">
+                AND question_no = #{query.questionNo}
+            </if>
+            <if test="query.status != null">
+                AND status = #{query.status}
+            </if>
+            <if test="query.providerName != null and query.providerName != ''">
+                AND provider_name LIKE CONCAT('%', #{query.providerName}, '%')
+            </if>
+            <if test="query.protocol != null and query.protocol != ''">
+                AND protocol = #{query.protocol}
+            </if>
+        </where>
+        ORDER BY create_time DESC, id DESC
+    </select>
+
+</mapper>

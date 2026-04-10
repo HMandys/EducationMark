@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.edumark.common.exception.BusinessException;
 import com.edumark.common.result.PageResult;
+import com.edumark.school.entity.ClassInfo;
 import com.edumark.school.dto.StudentDTO;
 import com.edumark.school.dto.StudentQueryDTO;
 import com.edumark.school.entity.Student;
+import com.edumark.school.mapper.ClassInfoMapper;
 import com.edumark.school.mapper.StudentMapper;
 import com.edumark.school.service.StudentService;
 import com.edumark.school.vo.StudentVO;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import jakarta.annotation.Resource;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,6 +28,9 @@ import java.util.UUID;
  */
 @Service
 public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> implements StudentService {
+
+    @Resource
+    private ClassInfoMapper classInfoMapper;
 
     @Override
     public PageResult<StudentVO> pageQuery(StudentQueryDTO query) {
@@ -58,6 +64,8 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
 
         Student student = new Student();
         BeanUtils.copyProperties(dto, student);
+        ClassInfo classInfo = validateClassRelation(dto.getClassId(), dto.getSchoolId());
+        student.setGradeId(classInfo.getGradeId());
         if (student.getStatus() == null) {
             student.setStatus(1);
         }
@@ -95,6 +103,8 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
 
         Student student = new Student();
         BeanUtils.copyProperties(dto, student);
+        ClassInfo classInfo = validateClassRelation(dto.getClassId(), dto.getSchoolId());
+        student.setGradeId(classInfo.getGradeId());
         updateById(student);
     }
 
@@ -156,5 +166,22 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
      */
     private String generateBindCode() {
         return UUID.randomUUID().toString().replaceAll("-", "").substring(0, 6).toUpperCase();
+    }
+
+    private ClassInfo validateClassRelation(Long classId, Long schoolId) {
+        if (classId == null) {
+            throw new BusinessException("班级ID不能为空");
+        }
+        ClassInfo classInfo = classInfoMapper.selectById(classId);
+        if (classInfo == null) {
+            throw new BusinessException("班级不存在");
+        }
+        if (schoolId == null) {
+            throw new BusinessException("学校ID不能为空");
+        }
+        if (!schoolId.equals(classInfo.getSchoolId())) {
+            throw new BusinessException("学校与班级不匹配");
+        }
+        return classInfo;
     }
 }

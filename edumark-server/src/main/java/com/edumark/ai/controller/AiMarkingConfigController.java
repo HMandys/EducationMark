@@ -1,10 +1,12 @@
 package com.edumark.ai.controller;
 
 import com.edumark.ai.dto.AiMarkingPolicyDTO;
+import com.edumark.ai.dto.AiMarkingRecordQueryDTO;
 import com.edumark.ai.dto.AiMarkingProviderDTO;
 import com.edumark.ai.dto.AiMarkingProviderQueryDTO;
 import com.edumark.ai.service.AiMarkingConfigService;
 import com.edumark.ai.vo.AiMarkingPolicyVO;
+import com.edumark.ai.vo.AiMarkingRecordVO;
 import com.edumark.ai.vo.AiMarkingProviderVO;
 import com.edumark.common.result.PageResult;
 import com.edumark.common.result.Result;
@@ -63,6 +65,13 @@ public class AiMarkingConfigController {
     public Result<Void> deleteProvider(@PathVariable Long id) {
         aiMarkingConfigService.deleteProvider(id);
         return Result.success();
+    }
+
+    @Operation(summary = "分页查询 AI 批改审计记录")
+    @GetMapping("/record/page")
+    @PreAuthorize("hasAuthority('system:menu:list')")
+    public Result<PageResult<AiMarkingRecordVO>> getRecordPage(AiMarkingRecordQueryDTO query) {
+        return Result.success(aiMarkingConfigService.getRecordPage(query));
     }
 
     @Operation(summary = "获取 AI 批改策略")

@@ -77,7 +77,7 @@ jwt:
 
 # MinIO 配置
 minio:
-  endpoint: https://benefits-approximately-revenue-forty.trycloudflare.com
+  endpoint: https://beginner-ciao-explanation-advances.trycloudflare.com
   access-key: minioadmin
   secret-key: minioadmin
   bucket-name: edumark

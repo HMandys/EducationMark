@@ -178,10 +178,10 @@
               </div>
               <div class="subject-actions">
                 <el-tag
-                  :type="getSubjectTemplateStatus(subject.id) === 'published' ? 'success' : getSubjectTemplateStatus(subject.id) === 'draft' ? 'warning' : 'info'"
+                  :type="getSubjectTemplateStatus(subject) === 'published' ? 'success' : getSubjectTemplateStatus(subject) === 'draft' ? 'warning' : 'info'"
                   size="small"
                 >
-                  {{ getSubjectTemplateStatusText(subject.id) }}
+                  {{ getSubjectTemplateStatusText(subject) }}
                 </el-tag>
                 <el-button
                   type="primary"
@@ -190,7 +190,7 @@
                   bg
                   @click="goSubjectAnswerSheet(subject)"
                 >
-                  {{ getSubjectTemplateStatus(subject.id) === 'none' ? '设置答题卡' : '编辑答题卡' }}
+                  {{ getSubjectTemplateStatus(subject) === 'none' ? '设置答题卡' : '编辑答题卡' }}
                 </el-button>
               </div>
             </div>
@@ -488,15 +488,15 @@ const flowSteps = computed<FlowStep[]>(() => {
       key: 'create-exam',
       index: 1,
       phase: '准备',
-      title: '新建考试',
-      description: '填写考试信息，绑定参考班级与考试科目，工作台主线从这里启动。',
+      title: '创建考试并补齐科目',
+      description: '先填写考试基本信息和参考班级，保存后继续配置考试科目；班级和科目都齐了，这一步才算完成。',
       status: basicReady ? 'done' : 'active',
       metrics: [
         { label: '班级', value: overview.value.classCount, tone: basicReady ? 'success' : 'warning' },
         { label: '科目', value: overview.value.subjectCount, tone: basicReady ? 'success' : 'warning' },
         { label: '状态', value: examDetail.value?.statusName || getExamStatusText(examDetail.value?.status) },
       ],
-      hint: basicReady ? '考试基础信息已经齐备，可以继续准备答题卡模板。' : '先把班级和科目补齐，否则后续链路都不稳。',
+      hint: basicReady ? '考试基础信息和考试科目都已经齐备，可以继续准备答题卡模板。' : '保存考试弹窗不代表这一步结束，还要回到考试列表补齐科目。',
       actions: [
         { label: '考试管理', to: { name: 'ExamList' }, primary: !basicReady },
         { label: '出分检查', to: { name: 'ScorePublishCheck', params: { id: examId.value } } },
@@ -636,25 +636,25 @@ const flowSteps = computed<FlowStep[]>(() => {
       ],
     },
     {
-      key: 'aggregate-score',
+      key: 'publish-check',
       index: 8,
       phase: '出分',
-      title: '自动汇总成绩',
-      description: '阅卷收口后自动计算总分、排名和统计，生成正式出分前需要的全部结果数据。',
-      status: aggregateReady ? 'done' : markingFinished ? 'active' : 'waiting',
+      title: '出分检查',
+      description: '统一检查识别异常、阅卷任务、仲裁和汇总缺口；总分、排名、统计如缺失，会在正式发布时自动补齐。',
+      status: released || scorePublishCheck.value?.canPublish ? 'done' : markingFinished ? 'active' : 'waiting',
       metrics: [
-        { label: '总分记录', value: overview.value.examScoreCount, tone: overview.value.examScoreCount > 0 ? 'success' : 'warning' },
-        { label: '科目成绩', value: overview.value.subjectScoreCount, tone: overview.value.subjectScoreCount > 0 ? 'success' : 'warning' },
-        { label: '统计记录', value: overview.value.statisticsCount, tone: overview.value.statisticsCount > 0 ? 'success' : 'warning' },
+        { label: '阻塞项', value: scorePublishCheck.value?.blockingItems?.length || 0, tone: (scorePublishCheck.value?.blockingItems?.length || 0) > 0 ? 'danger' : 'success' },
+        { label: '提示项', value: scorePublishCheck.value?.warningItems?.length || 0, tone: (scorePublishCheck.value?.warningItems?.length || 0) > 0 ? 'warning' : 'default' },
+        { label: '总分/统计', value: `${overview.value.examScoreCount}/${overview.value.statisticsCount}`, tone: aggregateReady ? 'success' : 'warning' },
       ],
-      hint: aggregateReady
-        ? '汇总结果已经存在，出分前只需要确认阻塞项。'
+      hint: released || scorePublishCheck.value?.canPublish
+        ? '出分检查已经通过，可以进入最终发布。'
         : markingFinished
-          ? '阅卷虽已结束，但总分、科目分和统计还没全部产出，先去成绩中心/出分检查收口。'
-          : '阅卷还没结束，汇总阶段暂时不会完整。',
+          ? '先看阻塞项；如果只是缺总分、排名、统计，不用手工补，正式发布时会自动生成。'
+          : '阅卷还没结束，暂时不会进入出分检查。',
       actions: [
-        { label: '成绩列表', to: { name: 'ScoreList', query: { examId: String(examId.value), viewMode: 'statistics' } }, primary: aggregateReady },
-        { label: '出分检查', to: { name: 'ScorePublishCheck', params: { id: examId.value } }, primary: !aggregateReady && markingFinished },
+        { label: '出分检查', to: { name: 'ScorePublishCheck', params: { id: examId.value } }, primary: true },
+        { label: '成绩列表', to: { name: 'ScoreList', query: { examId: String(examId.value), viewMode: 'statistics' } } },
       ],
     },
     {
@@ -782,20 +782,29 @@ function goAnswerSheetDesign() {
   router.push({ path: '/answer-sheet-design/list', query: { examId: String(examId.value), action: 'create' } })
 }
 
-function getSubjectTemplateStatus(subjectId: string | number): 'published' | 'draft' | 'none' {
-  const template = templateList.value.find((t) => {
-    // 通过paperId或其他方式关联科目
-    // 这里假设模板的subjectName与科目名称匹配
-    const subject = subjectList.value.find((s) => s.id === subjectId)
-    return subject && t.subjectName === subject.subjectName
-  })
+function findTemplateForSubject(subject: ExamSubject) {
+  if (subject.paperId) {
+    const byPaperId = templateList.value.find((template) => String(template.paperId) === String(subject.paperId))
+    if (byPaperId) {
+      return byPaperId
+    }
+  }
+
+  return templateList.value.find((template) =>
+    String(template.examId || '') === String(examId.value) &&
+    template.subjectName === subject.subjectName
+  )
+}
+
+function getSubjectTemplateStatus(subject: ExamSubject): 'published' | 'draft' | 'none' {
+  const template = findTemplateForSubject(subject)
 
   if (!template) return 'none'
   return template.status === 1 ? 'published' : 'draft'
 }
 
-function getSubjectTemplateStatusText(subjectId: string | number): string {
-  const status = getSubjectTemplateStatus(subjectId)
+function getSubjectTemplateStatusText(subject: ExamSubject): string {
+  const status = getSubjectTemplateStatus(subject)
   switch (status) {
     case 'published':
       return '已发布'
@@ -807,19 +816,16 @@ function getSubjectTemplateStatusText(subjectId: string | number): string {
 }
 
 function goSubjectAnswerSheet(subject: ExamSubject) {
-  // 查找该科目对应的模板
-  const template = templateList.value.find((t) => t.subjectName === subject.subjectName)
+  const template = findTemplateForSubject(subject)
 
   if (template) {
-    // 已有模板，进入编辑
     router.push({
       path: `/answer-sheet-design/edit/${template.id}`,
       query: { examId: String(examId.value) },
     })
   } else {
-    // 没有模板，进入新建并关联科目
     router.push({
-      path: '/answer-sheet-design/new',
+      path: '/answer-sheet-design/edit',
       query: {
         examId: String(examId.value),
         subjectName: subject.subjectName,

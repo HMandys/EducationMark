@@ -106,19 +106,9 @@
             <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
             <el-button type="success" link @click="handleWorkbench(row)">工作台</el-button>
             <el-button type="primary" link @click="handleSubjects(row)">科目</el-button>
-            <el-button type="info" link @click="handleCheckPublish(row)">检查</el-button>
-            <el-button
-              v-if="row.status === 4"
-              type="success"
-              link
-              @click="handlePublish(row)"
-            >发布</el-button>
-            <el-button
-              v-if="row.status === 5"
-              type="warning"
-              link
-              @click="handleUnpublish(row)"
-            >撤回</el-button>
+            <el-button type="info" link @click="handleCheckPublish(row)">
+              {{ row.status >= 4 ? '出分检查' : '检查' }}
+            </el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -380,8 +370,6 @@ import {
   updateExam,
   deleteExam,
   deleteExamBatch,
-  publishExam,
-  unpublishExam,
   getExamSubjectList,
   createExamSubject,
   updateExamSubject,
@@ -728,17 +716,15 @@ const handleBatchDelete = async () => {
   fetchData()
 }
 
-// 发布
-const handlePublish = async (row: Exam) => {
-  await ElMessageBox.confirm(`确定要发布考试【${row.name}】吗？`, '提示', {
-    type: 'warning',
-  })
-  await publishExam(row.id)
-  ElMessage.success('发布成功')
-  fetchData()
-}
-
 const handleCheckPublish = async (row: Exam) => {
+  if (row.status >= 4) {
+    router.push({
+      name: 'ScorePublishCheck',
+      params: { id: String(row.id) },
+    })
+    return
+  }
+
   const res = await getExamPublishCheck(row.id)
   const check: ExamPublishCheck = res.data
   if (check.canPublish) {
@@ -755,16 +741,6 @@ const handleCheckPublish = async (row: Exam) => {
     type: 'warning',
     dangerouslyUseHTMLString: true,
   })
-}
-
-// 撤回发布
-const handleUnpublish = async (row: Exam) => {
-  await ElMessageBox.confirm(`确定要撤回考试【${row.name}】吗？`, '提示', {
-    type: 'warning',
-  })
-  await unpublishExam(row.id)
-  ElMessage.success('撤回成功')
-  fetchData()
 }
 
 const handleWorkbench = (row: Exam) => {

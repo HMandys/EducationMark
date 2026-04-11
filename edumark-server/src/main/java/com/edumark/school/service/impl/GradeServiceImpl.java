@@ -57,11 +57,11 @@ public class GradeServiceImpl extends ServiceImpl<GradeMapper, Grade> implements
 
         Grade grade = new Grade();
         BeanUtils.copyProperties(dto, grade);
+        if (grade.getSort() == null) {
+            grade.setSort(dto.getGradeNum() != null ? dto.getGradeNum() : 0);
+        }
         if (grade.getStatus() == null) {
             grade.setStatus(1);
-        }
-        if (grade.getSort() == null) {
-            grade.setSort(0);
         }
         save(grade);
         return grade.getId();
@@ -92,6 +92,9 @@ public class GradeServiceImpl extends ServiceImpl<GradeMapper, Grade> implements
 
         Grade grade = new Grade();
         BeanUtils.copyProperties(dto, grade);
+        if (grade.getSort() == null && dto.getGradeNum() != null) {
+            grade.setSort(dto.getGradeNum());
+        }
         updateById(grade);
     }
 

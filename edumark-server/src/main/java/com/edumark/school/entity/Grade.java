@@ -18,15 +18,19 @@ public class Grade extends BaseEntity {
     private Long schoolId;
 
     @Schema(description = "年级名称")
+    @TableField("grade_name")
     private String name;
 
     @Schema(description = "年级编码")
+    @TableField("grade_code")
     private String code;
 
     @Schema(description = "入学年份")
+    @TableField(exist = false)
     private Integer enrollYear;
 
     @Schema(description = "年级序号: 1-9表示一年级到九年级, 10-12表示高一到高三")
+    @TableField(exist = false)
     private Integer gradeNum;
 
     @Schema(description = "状态: 0-禁用 1-启用")
@@ -36,6 +40,7 @@ public class Grade extends BaseEntity {
     private Integer sort;
 
     @Schema(description = "备注")
+    @TableField(exist = false)
     private String remark;
 
     @TableField(exist = false)

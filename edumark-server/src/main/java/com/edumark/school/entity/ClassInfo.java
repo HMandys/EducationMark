@@ -21,12 +21,15 @@ public class ClassInfo extends BaseEntity {
     private Long gradeId;
 
     @Schema(description = "班级名称")
+    @TableField("class_name")
     private String name;
 
     @Schema(description = "班级编码")
+    @TableField("class_code")
     private String code;
 
     @Schema(description = "班级序号")
+    @TableField(exist = false)
     private Integer classNum;
 
     @Schema(description = "班主任教师ID")
@@ -39,6 +42,7 @@ public class ClassInfo extends BaseEntity {
     private Integer sort;
 
     @Schema(description = "备注")
+    @TableField(exist = false)
     private String remark;
 
     @TableField(exist = false)

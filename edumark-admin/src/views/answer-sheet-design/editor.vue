@@ -643,7 +643,6 @@ const handleCreateRegion = (bounds: { boxX: number; boxY: number; boxWidth: numb
 
   editingRegionIndex.value = -1
   regionDialogVisible.value = true
-  drawMode.value = false
   selectedRegionIndex.value = -1
 }
 

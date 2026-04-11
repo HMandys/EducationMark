@@ -57,11 +57,11 @@ public class ClassInfoServiceImpl extends ServiceImpl<ClassInfoMapper, ClassInfo
 
         ClassInfo classInfo = new ClassInfo();
         BeanUtils.copyProperties(dto, classInfo);
+        if (classInfo.getSort() == null) {
+            classInfo.setSort(dto.getClassNum() != null ? dto.getClassNum() : 0);
+        }
         if (classInfo.getStatus() == null) {
             classInfo.setStatus(1);
-        }
-        if (classInfo.getSort() == null) {
-            classInfo.setSort(0);
         }
         save(classInfo);
         return classInfo.getId();
@@ -92,6 +92,9 @@ public class ClassInfoServiceImpl extends ServiceImpl<ClassInfoMapper, ClassInfo
 
         ClassInfo classInfo = new ClassInfo();
         BeanUtils.copyProperties(dto, classInfo);
+        if (classInfo.getSort() == null && dto.getClassNum() != null) {
+            classInfo.setSort(dto.getClassNum());
+        }
         updateById(classInfo);
     }
 

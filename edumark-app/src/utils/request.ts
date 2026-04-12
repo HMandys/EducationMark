@@ -17,7 +17,8 @@ interface RequestOptions {
 
 interface ResponseData<T = any> {
   code: number
-  msg: string
+  message?: string
+  msg?: string
   data: T
 }
 
@@ -62,6 +63,7 @@ export function request<T = any>(options: RequestOptions): Promise<ResponseData<
         }
 
         const result = res.data as ResponseData<T>
+        const message = result.message || result.msg || '请求失败'
 
         // 请求成功
         if (result.code === 200) {
@@ -76,7 +78,7 @@ export function request<T = any>(options: RequestOptions): Promise<ResponseData<
         }
         // 其他错误
         else {
-          uni.showToast({ title: result.msg || '请求失败', icon: 'none' })
+          uni.showToast({ title: message, icon: 'none' })
           reject(result)
         }
       },

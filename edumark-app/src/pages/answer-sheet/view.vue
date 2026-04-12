@@ -16,15 +16,15 @@
     <!-- 图片列表 -->
     <view class="image-container" v-if="currentSheet">
       <view class="sheet-info">
-        <text class="info-item">科目: {{ currentSheet.subjectName }}</text>
-        <text class="info-item" v-if="currentSheet.totalScore !== undefined">
-          得分: {{ currentSheet.totalScore }}
+        <text class="info-item">科目: {{ currentSheetView.subjectName }}</text>
+        <text class="info-item" v-if="currentSheetView.totalScore !== undefined">
+          得分: {{ currentSheetView.totalScore }}
         </text>
       </view>
 
       <view class="image-list">
         <view
-          v-for="(image, index) in currentSheet.images"
+          v-for="(image, index) in currentSheetImages"
           :key="image.id"
           class="image-item"
           @click="handlePreviewImage(index)"
@@ -54,6 +54,13 @@ import { getAnswerSheetList, type AnswerSheet } from '@/api/answerSheet'
 const answerSheets = ref<AnswerSheet[]>([])
 const currentSheet = ref<AnswerSheet | null>(null)
 const loading = ref(false)
+
+const currentSheetView = computed(() => currentSheet.value ?? {
+  subjectName: '',
+  totalScore: undefined,
+})
+
+const currentSheetImages = computed(() => currentSheet.value?.images ?? [])
 
 let examId: number
 let studentId: number
@@ -85,7 +92,7 @@ const handleSelectSheet = (sheet: AnswerSheet) => {
 const handlePreviewImage = (index: number) => {
   if (!currentSheet.value) return
 
-  const urls = currentSheet.value.images.map(img => img.imageUrl)
+  const urls = currentSheetImages.value.map(img => img.imageUrl)
   uni.previewImage({
     urls,
     current: index,

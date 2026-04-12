@@ -78,9 +78,9 @@
         <label class="agreement-label">
           <checkbox :checked="agreed" color="#409EFF" />
           <text>我已阅读并同意</text>
-          <text class="link" @click.stop="handleViewAgreement('user')">《用户协议》</text>
+          <text class="link" @click="handleViewAgreement($event, 'user')">《用户协议》</text>
           <text>和</text>
-          <text class="link" @click.stop="handleViewAgreement('privacy')">《隐私政策》</text>
+          <text class="link" @click="handleViewAgreement($event, 'privacy')">《隐私政策》</text>
         </label>
       </checkbox-group>
     </view>
@@ -163,7 +163,8 @@ const handleRegister = () => {
 }
 
 // 查看协议
-const handleViewAgreement = (type: string) => {
+const handleViewAgreement = (event: any, type: string) => {
+  event?.stopPropagation?.()
   uni.showToast({ title: `查看${type === 'user' ? '用户协议' : '隐私政策'}`, icon: 'none' })
 }
 </script>

@@ -72,7 +72,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useUserStore } from '@/stores/user'
+import { useUserStore, type Student } from '@/stores/user'
 import { bindStudent, unbindStudent, getBindStudents } from '@/api/student'
 
 const userStore = useUserStore()
@@ -119,7 +119,7 @@ const handleBind = async () => {
 }
 
 // 解绑学生
-const handleUnbind = async (student: any) => {
+const handleUnbind = async (student: Student) => {
   uni.showModal({
     title: '确认解绑',
     content: `确定要解绑学生"${student.name}"吗？`,

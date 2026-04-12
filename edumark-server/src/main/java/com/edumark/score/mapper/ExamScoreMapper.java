@@ -37,4 +37,9 @@ public interface ExamScoreMapper extends BaseMapper<ExamScore> {
      * 删除考试成绩
      */
     int deleteByExamId(@Param("examId") Long examId);
+
+    /**
+     * 查询学生最近成绩
+     */
+    List<ExamScoreVO> selectRecentByStudentId(@Param("studentId") Long studentId, @Param("limit") Integer limit);
 }

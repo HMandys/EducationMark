@@ -3,44 +3,44 @@
     <!-- 总分卡片 -->
     <view class="score-card" v-if="scoreData">
       <view class="card-header">
-        <text class="exam-name">{{ scoreData.examName }}</text>
+        <text class="exam-name">{{ scoreView.examName }}</text>
       </view>
 
       <view class="score-main">
         <view class="total-score">
-          <text class="score-num">{{ scoreData.totalScore }}</text>
+          <text class="score-num">{{ scoreView.totalScore }}</text>
           <text class="score-label">总分</text>
         </view>
         <view class="rank-list">
           <view class="rank-item">
-            <text class="rank-num">{{ scoreData.classRank || '-' }}</text>
+            <text class="rank-num">{{ scoreView.classRank || '-' }}</text>
             <text class="rank-label">班级排名</text>
           </view>
           <view class="rank-item">
-            <text class="rank-num">{{ scoreData.gradeRank || '-' }}</text>
+            <text class="rank-num">{{ scoreView.gradeRank || '-' }}</text>
             <text class="rank-label">年级排名</text>
           </view>
         </view>
       </view>
 
       <view class="student-info">
-        <text>{{ scoreData.studentName }}</text>
+        <text>{{ scoreView.studentName }}</text>
         <text class="divider">|</text>
-        <text>{{ scoreData.className }}</text>
+        <text>{{ scoreView.className }}</text>
         <text class="divider">|</text>
-        <text>{{ scoreData.studentNumber }}</text>
+        <text>{{ scoreView.studentNumber }}</text>
       </view>
     </view>
 
     <!-- 各科成绩 -->
-    <view class="section" v-if="scoreData?.subjectScores?.length">
+    <view class="section" v-if="subjectScores.length">
       <view class="section-header">
         <text class="section-title">各科成绩</text>
       </view>
 
       <view class="subject-list">
         <view
-          v-for="subject in scoreData.subjectScores"
+          v-for="subject in subjectScores"
           :key="subject.id"
           class="subject-item"
         >
@@ -81,12 +81,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getStudentExamScore, type ExamScore } from '@/api/exam'
 
 const scoreData = ref<ExamScore | null>(null)
 const loading = ref(false)
+
+const scoreView = computed(() => scoreData.value ?? {
+  examName: '',
+  totalScore: 0,
+  classRank: undefined,
+  gradeRank: undefined,
+  studentName: '',
+  className: '',
+  studentNumber: '',
+})
+
+const subjectScores = computed(() => scoreData.value?.subjectScores ?? [])
 
 let examId: number
 let studentId: number

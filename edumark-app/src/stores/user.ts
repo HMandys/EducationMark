@@ -24,9 +24,13 @@ export interface Student {
   id: number
   name: string
   studentNumber: string
+  classId?: number
   className: string
+  gradeId?: number
   gradeName: string
+  schoolId?: number
   schoolName: string
+  bindTime?: string
 }
 
 export const useUserStore = defineStore('user', () => {

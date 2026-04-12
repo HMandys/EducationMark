@@ -9,6 +9,7 @@
         <result column="name" property="name"/>
         <result column="code" property="code"/>
         <result column="type" property="type"/>
+        <result column="type_name" property="typeName"/>
         <result column="academic_year" property="academicYear"/>
         <result column="semester" property="semester"/>
         <result column="grade_id" property="gradeId"/>
@@ -16,6 +17,7 @@
         <result column="start_time" property="startTime"/>
         <result column="end_time" property="endTime"/>
         <result column="status" property="status"/>
+        <result column="status_name" property="statusName"/>
         <result column="total_score" property="totalScore"/>
         <result column="student_count" property="studentCount"/>
         <result column="subject_count" property="subjectCount"/>
@@ -28,6 +30,22 @@
         SELECT e.*,
             s.school_name AS school_name,
             g.grade_name AS grade_name,
+            CASE e.type
+                WHEN 1 THEN '期中考试'
+                WHEN 2 THEN '期末考试'
+                WHEN 3 THEN '月考'
+                WHEN 4 THEN '模拟考试'
+                ELSE '其他'
+            END AS type_name,
+            CASE e.status
+                WHEN 0 THEN '草稿'
+                WHEN 1 THEN '待考试'
+                WHEN 2 THEN '考试中'
+                WHEN 3 THEN '阅卷中'
+                WHEN 4 THEN '已完成'
+                WHEN 5 THEN '已发布'
+                ELSE '未知状态'
+            END AS status_name,
             (SELECT COUNT(1) FROM exam_subject es WHERE es.exam_id = e.id AND es.deleted = 0) AS subject_count
         FROM exam e
         LEFT JOIN school s ON s.id = e.school_id
@@ -61,11 +79,58 @@
         SELECT e.*,
             s.school_name AS school_name,
             g.grade_name AS grade_name,
+            CASE e.type
+                WHEN 1 THEN '期中考试'
+                WHEN 2 THEN '期末考试'
+                WHEN 3 THEN '月考'
+                WHEN 4 THEN '模拟考试'
+                ELSE '其他'
+            END AS type_name,
+            CASE e.status
+                WHEN 0 THEN '草稿'
+                WHEN 1 THEN '待考试'
+                WHEN 2 THEN '考试中'
+                WHEN 3 THEN '阅卷中'
+                WHEN 4 THEN '已完成'
+                WHEN 5 THEN '已发布'
+                ELSE '未知状态'
+            END AS status_name,
             (SELECT COUNT(1) FROM exam_subject es WHERE es.exam_id = e.id AND es.deleted = 0) AS subject_count
         FROM exam e
         LEFT JOIN school s ON s.id = e.school_id
         LEFT JOIN grade g ON g.id = e.grade_id
         WHERE e.id = #{id} AND e.deleted = 0
+    </select>
+
+    <select id="selectPublishedListByStudentId" resultMap="ExamVOMap">
+        SELECT e.*,
+            s.school_name AS school_name,
+            g.grade_name AS grade_name,
+            CASE e.type
+                WHEN 1 THEN '期中考试'
+                WHEN 2 THEN '期末考试'
+                WHEN 3 THEN '月考'
+                WHEN 4 THEN '模拟考试'
+                ELSE '其他'
+            END AS type_name,
+            CASE e.status
+                WHEN 0 THEN '草稿'
+                WHEN 1 THEN '待考试'
+                WHEN 2 THEN '考试中'
+                WHEN 3 THEN '阅卷中'
+                WHEN 4 THEN '已完成'
+                WHEN 5 THEN '已发布'
+                ELSE '未知状态'
+            END AS status_name,
+            (SELECT COUNT(1) FROM exam_subject es WHERE es.exam_id = e.id AND es.deleted = 0) AS subject_count
+        FROM exam e
+        INNER JOIN exam_score score ON score.exam_id = e.id
+        LEFT JOIN school s ON s.id = e.school_id
+        LEFT JOIN grade g ON g.id = e.grade_id
+        WHERE score.student_id = #{studentId}
+          AND e.deleted = 0
+          AND e.status = 5
+        ORDER BY COALESCE(e.end_time, e.start_time, e.create_time) DESC, e.id DESC
     </select>
 
 </mapper>

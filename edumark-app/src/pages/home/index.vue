@@ -12,7 +12,7 @@
             <text class="switch-icon" v-if="userStore.isParent">&#xe604;</text>
           </view>
           <text class="class" v-if="currentStudent">
-            {{ currentStudent.schoolName }} · {{ currentStudent.gradeName }} · {{ currentStudent.className }}
+            {{ currentStudentSummary }}
           </text>
         </view>
       </view>
@@ -67,16 +67,16 @@
               </view>
             </view>
           </view>
-          <view class="score-subjects" v-if="score.subjectScores?.length">
+          <view class="score-subjects" v-if="getSubjectScores(score).length">
             <view
-              v-for="subject in score.subjectScores.slice(0, 4)"
+              v-for="subject in getSubjectScores(score).slice(0, 4)"
               :key="subject.id"
               class="subject-item"
             >
               <text class="subject-name">{{ subject.subjectName }}</text>
               <text class="subject-score">{{ subject.score }}/{{ subject.fullScore }}</text>
             </view>
-            <view v-if="score.subjectScores.length > 4" class="subject-item more">
+            <view v-if="getSubjectScores(score).length > 4" class="subject-item more">
               <text>...</text>
             </view>
           </view>
@@ -120,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { getRecentScores, type ExamScore } from '@/api/exam'
@@ -132,6 +132,12 @@ const recentScores = ref<ExamScore[]>([])
 
 // 当前学生
 const currentStudent = ref(userStore.currentStudent)
+const currentStudentSummary = computed(() => {
+  if (!currentStudent.value) return ''
+  return `${currentStudent.value.schoolName} · ${currentStudent.value.gradeName} · ${currentStudent.value.className}`
+})
+
+const getSubjectScores = (score: ExamScore) => score.subjectScores ?? []
 
 // 加载最新成绩
 const loadRecentScores = async () => {
@@ -197,12 +203,22 @@ const handleViewAnswerSheet = () => {
 
 // 查看AI报告
 const handleViewAIReport = () => {
-  uni.showToast({ title: '功能开发中', icon: 'none' })
+  if (!currentStudent.value) {
+    uni.showToast({ title: '请先选择学生', icon: 'none' })
+    return
+  }
+
+  uni.navigateTo({ url: '/pages/report/index' })
 }
 
 // 查看成绩趋势
 const handleViewTrend = () => {
-  uni.showToast({ title: '功能开发中', icon: 'none' })
+  if (!currentStudent.value) {
+    uni.showToast({ title: '请先选择学生', icon: 'none' })
+    return
+  }
+
+  uni.navigateTo({ url: '/pages/trend/index' })
 }
 
 // 监听学生变化

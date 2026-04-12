@@ -2,8 +2,8 @@
   <view class="exam-page">
     <!-- 学生信息 -->
     <view class="student-bar" v-if="currentStudent">
-      <text class="student-name">{{ currentStudent.name }}</text>
-      <text class="student-class">{{ currentStudent.className }}</text>
+      <text class="student-name">{{ currentStudentView.name }}</text>
+      <text class="student-class">{{ currentStudentView.className }}</text>
     </view>
 
     <!-- 考试列表 -->
@@ -64,6 +64,10 @@ const loading = ref(false)
 const examList = ref<Exam[]>([])
 
 const currentStudent = computed(() => userStore.currentStudent)
+const currentStudentView = computed(() => currentStudent.value ?? {
+  name: '',
+  className: '',
+})
 
 // 加载考试列表
 const loadExamList = async () => {
@@ -81,7 +85,7 @@ const loadExamList = async () => {
 }
 
 // 格式化日期
-const formatDate = (dateStr: string) => {
+const formatDate = (dateStr?: string) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`

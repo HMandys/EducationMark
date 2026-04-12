@@ -25,6 +25,9 @@ public class StudentVO {
     @Schema(description = "所属班级ID")
     private Long classId;
 
+    @Schema(description = "所属年级ID")
+    private Long gradeId;
+
     @Schema(description = "班级名称")
     private String className;
 
@@ -80,6 +83,9 @@ public class StudentVO {
 
     public Long getClassId() { return classId; }
     public void setClassId(Long classId) { this.classId = classId; }
+
+    public Long getGradeId() { return gradeId; }
+    public void setGradeId(Long gradeId) { this.gradeId = gradeId; }
 
     public String getClassName() { return className; }
     public void setClassName(String className) { this.className = className; }

@@ -25,6 +25,7 @@
         <result column="school_id" property="schoolId"/>
         <result column="school_name" property="schoolName"/>
         <result column="class_id" property="classId"/>
+        <result column="grade_id" property="gradeId"/>
         <result column="class_name" property="className"/>
         <result column="grade_name" property="gradeName"/>
         <result column="user_id" property="userId"/>
@@ -46,6 +47,7 @@
             st.school_id,
             s.school_name AS school_name,
             st.class_id,
+            st.grade_id,
             c.class_name AS class_name,
             g.grade_name AS grade_name,
             NULL AS user_id,
@@ -91,6 +93,7 @@
             st.school_id,
             s.school_name AS school_name,
             st.class_id,
+            st.grade_id,
             c.class_name AS class_name,
             g.grade_name AS grade_name,
             NULL AS user_id,

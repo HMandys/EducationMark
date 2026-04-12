@@ -39,7 +39,7 @@
     </view>
 
     <!-- 学生信息（学生端） -->
-    <view class="section" v-if="userStore.isStudent && userStore.currentStudent">
+    <view class="section" v-if="userStore.isStudent && currentStudent">
       <view class="section-header">
         <text class="section-title">学生信息</text>
       </view>
@@ -47,19 +47,19 @@
       <view class="info-list">
         <view class="info-item">
           <text class="info-label">姓名</text>
-          <text class="info-value">{{ userStore.currentStudent.name }}</text>
+          <text class="info-value">{{ currentStudent?.name }}</text>
         </view>
         <view class="info-item">
           <text class="info-label">学号</text>
-          <text class="info-value">{{ userStore.currentStudent.studentNumber }}</text>
+          <text class="info-value">{{ currentStudent?.studentNumber }}</text>
         </view>
         <view class="info-item">
           <text class="info-label">学校</text>
-          <text class="info-value">{{ userStore.currentStudent.schoolName }}</text>
+          <text class="info-value">{{ currentStudent?.schoolName }}</text>
         </view>
         <view class="info-item">
           <text class="info-label">班级</text>
-          <text class="info-value">{{ userStore.currentStudent.className }}</text>
+          <text class="info-value">{{ currentStudent?.className }}</text>
         </view>
       </view>
     </view>
@@ -94,11 +94,13 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore, type Student } from '@/stores/user'
 import { loadStudentContext } from '@/services/session'
 
 const userStore = useUserStore()
+const currentStudent = computed(() => userStore.currentStudent)
 
 // 手机号脱敏
 const maskPhone = (phone?: string) => {
@@ -119,7 +121,7 @@ const handleBindStudent = () => {
 
 // 修改密码
 const handleChangePassword = () => {
-  uni.showToast({ title: '功能开发中', icon: 'none' })
+  uni.navigateTo({ url: '/pages/password/index' })
 }
 
 // 关于我们

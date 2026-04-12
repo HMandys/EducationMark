@@ -54,6 +54,7 @@ public class SecurityConfig {
             // 登录相关
             "/auth/login",
             "/auth/captcha",
+            "/app/auth/login",
             // 阅卷码免登录接口
             "/marking/access/login",
             "/marking/access/task",

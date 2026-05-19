@@ -2,19 +2,28 @@ package com.edumark.app.controller;
 
 import com.edumark.app.dto.AppLoginDTO;
 import com.edumark.app.dto.AppChangePasswordDTO;
+import com.edumark.app.dto.AppRegisterDTO;
 import com.edumark.app.vo.AppLoginVO;
 import com.edumark.common.exception.BusinessException;
 import com.edumark.common.result.Result;
+import com.edumark.school.entity.Parent;
+import com.edumark.school.mapper.ParentMapper;
 import com.edumark.security.service.AuthService;
 import com.edumark.security.service.LoginUserDetails;
 import com.edumark.security.utils.SecurityUtils;
 import com.edumark.system.dto.LoginDTO;
+import com.edumark.system.entity.SysRole;
 import com.edumark.system.entity.SysUser;
+import com.edumark.system.entity.SysUserRole;
+import com.edumark.system.mapper.SysRoleMapper;
+import com.edumark.system.mapper.SysUserRoleMapper;
 import com.edumark.system.service.SysUserService;
 import com.edumark.system.vo.LoginVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -32,10 +41,23 @@ public class AppAuthController {
 
     private final SysUserService sysUserService;
     private final AuthService authService;
+    private final ParentMapper parentMapper;
+    private final SysRoleMapper sysRoleMapper;
+    private final SysUserRoleMapper sysUserRoleMapper;
+    private final PasswordEncoder passwordEncoder;
 
-    public AppAuthController(SysUserService sysUserService, AuthService authService) {
+    public AppAuthController(SysUserService sysUserService,
+                             AuthService authService,
+                             ParentMapper parentMapper,
+                             SysRoleMapper sysRoleMapper,
+                             SysUserRoleMapper sysUserRoleMapper,
+                             PasswordEncoder passwordEncoder) {
         this.sysUserService = sysUserService;
         this.authService = authService;
+        this.parentMapper = parentMapper;
+        this.sysRoleMapper = sysRoleMapper;
+        this.sysUserRoleMapper = sysUserRoleMapper;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Operation(summary = "登录")
@@ -49,6 +71,63 @@ public class AppAuthController {
 
         LoginVO loginVO = authService.login(loginDTO);
         return Result.success(toAppLoginVO(loginVO, matchedUser));
+    }
+
+    @Operation(summary = "家长注册")
+    @PostMapping("/register")
+    @Transactional(rollbackFor = Exception.class)
+    public Result<AppLoginVO> register(@Valid @RequestBody AppRegisterDTO dto) {
+        String userType = dto.getUserType();
+        if (userType != null && !userType.isBlank() && !"parent".equalsIgnoreCase(userType)) {
+            throw new BusinessException("当前仅支持家长自助注册，学生账号请由学校开通");
+        }
+
+        List<SysUser> existingUsers = sysUserService.lambdaQuery()
+                .eq(SysUser::getPhone, dto.getPhone())
+                .list();
+        boolean parentUserExists = existingUsers.stream()
+                .map(user -> sysUserService.getByUsername(user.getUsername()))
+                .filter(Objects::nonNull)
+                .anyMatch(user -> matchesAppRole(user, "parent"));
+        if (parentUserExists) {
+            throw new BusinessException("该手机号已注册家长账号，请直接登录");
+        }
+
+        Parent parent = parentMapper.selectByPhone(dto.getPhone());
+        if (parent == null) {
+            parent = new Parent();
+            parent.setName(dto.getNickname());
+            parent.setPhone(dto.getPhone());
+            parent.setStatus(1);
+            parentMapper.insert(parent);
+        }
+
+        SysUser user = new SysUser();
+        user.setUsername(generateParentUsername(dto.getPhone()));
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        user.setRealName(dto.getNickname());
+        user.setPhone(dto.getPhone());
+        user.setUserType(2);
+        user.setParentId(parent.getId());
+        user.setStatus(1);
+        user.setRemark("家长端自助注册");
+        sysUserService.save(user);
+
+        SysRole parentRole = sysRoleMapper.selectByRoleCode("PARENT");
+        if (parentRole != null) {
+            SysUserRole userRole = new SysUserRole();
+            userRole.setUserId(user.getId());
+            userRole.setRoleId(parentRole.getId());
+            sysUserRoleMapper.insert(userRole);
+        }
+
+        LoginDTO loginDTO = new LoginDTO();
+        loginDTO.setUsername(user.getUsername());
+        loginDTO.setPassword(dto.getPassword());
+        LoginVO loginVO = authService.login(loginDTO);
+
+        SysUser registeredUser = sysUserService.getByUsername(user.getUsername());
+        return Result.success(toAppLoginVO(loginVO, registeredUser));
     }
 
     @Operation(summary = "获取用户信息")
@@ -119,6 +198,20 @@ public class AppAuthController {
             return "STUDENT".equalsIgnoreCase(roleCode) || ((roleCode == null || roleCode.isBlank()) && Objects.equals(user.getUserType(), 3));
         }
         return false;
+    }
+
+    private String generateParentUsername(String phone) {
+        String baseUsername = "parent_" + phone;
+        if (sysUserService.getByUsername(baseUsername) == null) {
+            return baseUsername;
+        }
+
+        int suffix = 1;
+        String username;
+        do {
+            username = baseUsername + "_" + suffix++;
+        } while (sysUserService.getByUsername(username) != null);
+        return username;
     }
 
     private AppLoginVO toAppLoginVO(LoginVO loginVO, SysUser user) {

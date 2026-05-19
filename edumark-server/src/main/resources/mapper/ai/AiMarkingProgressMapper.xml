@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edumark.ai.mapper.AiMarkingProgressMapper">
+
+    <sql id="BaseSelect">
+        SELECT
+            t.id AS templateId,
+            COALESCE(p.exam_subject_id, esf.id) AS examSubjectId,
+            COALESCE(e1.id, e2.id) AS examId,
+            COALESCE(e1.name, e2.name) AS examName,
+            COALESCE(es1.subject_name, esf.subject_name, t.subject_name) AS subjectName,
+            t.name AS templateName,
+            t.update_time AS updateTime
+        FROM answer_sheet_template t
+        LEFT JOIN paper p ON p.id = t.paper_id AND p.deleted = 0
+        LEFT JOIN exam_subject es1 ON es1.id = p.exam_subject_id AND es1.deleted = 0
+        LEFT JOIN exam e1 ON e1.id = es1.exam_id AND e1.deleted = 0
+        LEFT JOIN exam_subject esf ON t.paper_id IS NULL
+            AND esf.exam_id = t.exam_id
+            AND esf.subject_name = t.subject_name
+            AND esf.deleted = 0
+        LEFT JOIN exam e2 ON e2.id = t.exam_id AND e2.deleted = 0
+        WHERE t.deleted = 0
+          AND t.status = 1
+          AND COALESCE(p.exam_subject_id, esf.id) IS NOT NULL
+          AND EXISTS (
+              SELECT 1
+              FROM answer_sheet_region r
+              WHERE r.template_id = t.id
+                AND r.deleted = 0
+                AND r.region_type = 2
+                AND JSON_UNQUOTE(JSON_EXTRACT(r.config, '$.enableAiMarking')) = 'true'
+          )
+    </sql>
+
+    <select id="selectExamProgressBaseList" resultType="com.edumark.ai.vo.AiMarkingExamProgressVO">
+        <include refid="BaseSelect"/>
+        <if test="query.examName != null and query.examName != ''">
+            AND COALESCE(e1.name, e2.name) LIKE CONCAT('%', #{query.examName}, '%')
+        </if>
+        <if test="query.subjectName != null and query.subjectName != ''">
+            AND COALESCE(es1.subject_name, esf.subject_name, t.subject_name) LIKE CONCAT('%', #{query.subjectName}, '%')
+        </if>
+        ORDER BY t.update_time DESC, t.id DESC
+    </select>
+
+    <select id="selectExamProgressBaseBySubjectId" resultType="com.edumark.ai.vo.AiMarkingExamProgressVO">
+        <include refid="BaseSelect"/>
+        AND COALESCE(p.exam_subject_id, esf.id) = #{examSubjectId}
+        ORDER BY t.update_time DESC, t.id DESC
+        LIMIT 1
+    </select>
+
+</mapper>

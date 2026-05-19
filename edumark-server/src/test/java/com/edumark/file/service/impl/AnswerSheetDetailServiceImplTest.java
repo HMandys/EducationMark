@@ -3,6 +3,9 @@ package com.edumark.file.service.impl;
 import com.edumark.answersheet.service.AnswerSheetTemplateService;
 import com.edumark.answersheet.vo.AnswerSheetRegionVO;
 import com.edumark.answersheet.vo.AnswerSheetTemplateVO;
+import com.edumark.common.exception.BusinessException;
+import com.edumark.exam.entity.Exam;
+import com.edumark.exam.mapper.ExamMapper;
 import com.edumark.file.entity.AnswerSheet;
 import com.edumark.file.entity.AnswerSheetDetail;
 import com.edumark.file.mapper.AnswerSheetDetailMapper;
@@ -10,6 +13,7 @@ import com.edumark.file.mapper.AnswerSheetImageMapper;
 import com.edumark.file.mapper.AnswerSheetMapper;
 import com.edumark.exam.mapper.PaperMapper;
 import com.edumark.exam.mapper.PaperQuestionMapper;
+import com.edumark.marking.mapper.MarkingTaskMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,10 +48,16 @@ class AnswerSheetDetailServiceImplTest {
     private AnswerSheetImageMapper answerSheetImageMapper;
 
     @Mock
+    private ExamMapper examMapper;
+
+    @Mock
     private PaperMapper paperMapper;
 
     @Mock
     private PaperQuestionMapper paperQuestionMapper;
+
+    @Mock
+    private MarkingTaskMapper markingTaskMapper;
 
     @Mock
     private AnswerSheetTemplateService answerSheetTemplateService;
@@ -59,8 +70,10 @@ class AnswerSheetDetailServiceImplTest {
         inject("answerSheetMapper", answerSheetMapper);
         inject("answerSheetDetailMapper", answerSheetDetailMapper);
         inject("answerSheetImageMapper", answerSheetImageMapper);
+        inject("examMapper", examMapper);
         inject("paperMapper", paperMapper);
         inject("paperQuestionMapper", paperQuestionMapper);
+        inject("markingTaskMapper", markingTaskMapper);
         inject("answerSheetTemplateService", answerSheetTemplateService);
     }
 
@@ -149,6 +162,60 @@ class AnswerSheetDetailServiceImplTest {
         assertEquals("A", detail.getStudentAnswer());
         assertEquals(2, detail.getScore());
         assertEquals(1, detail.getStatus());
+    }
+
+    @Test
+    void refreshAnswerSheetStatus_completedSheetShouldRollbackWhenAiDetailPending() {
+        AnswerSheet answerSheet = new AnswerSheet();
+        answerSheet.setId(10L);
+        answerSheet.setExamSubjectId(20L);
+        answerSheet.setStatus(4);
+
+        AnswerSheetDetail detail = new AnswerSheetDetail();
+        detail.setId(1L);
+        detail.setQuestionNo(1);
+        detail.setRegionId(11L);
+        detail.setIsObjective(0);
+        detail.setStatus(0);
+        detail.setScore(0);
+
+        AnswerSheetRegionVO region = new AnswerSheetRegionVO();
+        region.setId(11L);
+        region.setRegionType(2);
+        region.setQuestionStart(1);
+        region.setQuestionEnd(1);
+        region.setConfig(Map.of("enableAiMarking", true));
+
+        AnswerSheetTemplateVO template = new AnswerSheetTemplateVO();
+        template.setRegions(List.of(region));
+
+        when(answerSheetMapper.selectById(10L)).thenReturn(answerSheet);
+        when(answerSheetDetailMapper.selectList(any())).thenReturn(List.of(detail));
+        when(answerSheetImageMapper.selectListByAnswerSheetId(10L)).thenReturn(List.of());
+        when(paperMapper.selectByExamSubjectId(20L)).thenReturn(null);
+        when(answerSheetTemplateService.getByExamSubjectId(20L)).thenReturn(template);
+
+        service.refreshAnswerSheetStatus(10L);
+
+        ArgumentCaptor<AnswerSheet> captor = ArgumentCaptor.forClass(AnswerSheet.class);
+        verify(answerSheetMapper).updateById(captor.capture());
+        assertEquals(2, captor.getValue().getStatus());
+    }
+
+    @Test
+    void updateQuestionScore_publishedExam_shouldRejectMutation() {
+        AnswerSheet answerSheet = new AnswerSheet();
+        answerSheet.setId(10L);
+        answerSheet.setExamId(99L);
+
+        Exam exam = new Exam();
+        exam.setId(99L);
+        exam.setStatus(5);
+
+        when(answerSheetMapper.selectById(10L)).thenReturn(answerSheet);
+        when(examMapper.selectById(99L)).thenReturn(exam);
+
+        assertThrows(BusinessException.class, () -> service.updateQuestionScore(10L, 20L, 6, true));
     }
 
     private Object newBubbleDefinition(int questionNo, String option, double x, double y, double width, double height) throws Exception {

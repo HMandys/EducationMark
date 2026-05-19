@@ -28,8 +28,7 @@ export interface RegisterParams {
   phone: string
   password: string
   nickname: string
-  verifyCode: string
-  userType: 'parent' | 'student'
+  userType: 'parent'
 }
 
 /**

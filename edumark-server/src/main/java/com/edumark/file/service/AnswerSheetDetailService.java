@@ -64,6 +64,17 @@ public interface AnswerSheetDetailService {
     AnswerSheetQuestionDetailVO updateSubjectiveReviewStatus(Long answerSheetId, Long questionId, Integer status);
 
     /**
+     * 保存 AI 异常复核后的题目结果
+     *
+     * @param answerSheetId 答题卡ID
+     * @param questionId 题目ID
+     * @param studentAnswer 人工确认答案
+     * @param score 人工确认得分
+     * @return 更新后的题目明细
+     */
+    AnswerSheetQuestionDetailVO updateAiReviewResult(Long answerSheetId, Long questionId, String studentAnswer, Integer score);
+
+    /**
      * 批量重跑主观题核验
      *
      * @param answerSheetId 答题卡ID

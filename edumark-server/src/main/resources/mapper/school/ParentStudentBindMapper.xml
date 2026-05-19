@@ -36,4 +36,27 @@
         WHERE parent_id = #{parentId} AND student_id = #{studentId}
     </select>
 
+    <insert id="insertBind" parameterType="com.edumark.school.entity.ParentStudentBind">
+        INSERT INTO parent_student_bind (
+            id,
+            parent_id,
+            student_id,
+            relation,
+            create_time,
+            update_time
+        ) VALUES (
+            #{id},
+            #{parentId},
+            #{studentId},
+            #{relation},
+            #{createTime},
+            #{updateTime}
+        )
+    </insert>
+
+    <delete id="deleteBindById">
+        DELETE FROM parent_student_bind
+        WHERE id = #{id}
+    </delete>
+
 </mapper>

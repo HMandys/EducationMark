@@ -5,8 +5,10 @@ import com.edumark.answersheet.service.AnswerSheetTemplateService;
 import com.edumark.answersheet.vo.AnswerSheetRegionVO;
 import com.edumark.answersheet.vo.AnswerSheetTemplateVO;
 import com.edumark.common.exception.BusinessException;
+import com.edumark.exam.entity.Exam;
 import com.edumark.exam.entity.Paper;
 import com.edumark.exam.entity.PaperQuestion;
+import com.edumark.exam.mapper.ExamMapper;
 import com.edumark.exam.mapper.PaperMapper;
 import com.edumark.exam.mapper.PaperQuestionMapper;
 import com.edumark.file.entity.AnswerSheet;
@@ -16,6 +18,8 @@ import com.edumark.file.mapper.AnswerSheetImageMapper;
 import com.edumark.file.mapper.AnswerSheetMapper;
 import com.edumark.file.service.AnswerSheetDetailService;
 import com.edumark.file.service.FileService;
+import com.edumark.marking.entity.MarkingTask;
+import com.edumark.marking.mapper.MarkingTaskMapper;
 import com.edumark.file.vo.AnswerSheetImageVO;
 import com.edumark.file.vo.AnswerSheetQuestionDetailVO;
 import jakarta.annotation.Resource;
@@ -48,6 +52,13 @@ import java.util.stream.Collectors;
 @Service
 public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
+    private static final int ANSWER_SHEET_STATUS_RECOGNIZED = 1;
+    private static final int ANSWER_SHEET_STATUS_READY_FOR_MARKING = 2;
+    private static final int ANSWER_SHEET_STATUS_MARKING = 3;
+    private static final int ANSWER_SHEET_STATUS_COMPLETED = 4;
+    private static final int EXAM_STATUS_MARKING = 3;
+    private static final int EXAM_STATUS_COMPLETED = 4;
+    private static final int EXAM_STATUS_PUBLISHED = 5;
     private static final int DETAIL_STATUS_PENDING = 0;
     private static final int DETAIL_STATUS_COMPLETED = 1;
     private static final int DETAIL_STATUS_SUBJECTIVE_VERIFIED = 2;
@@ -88,10 +99,16 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
     private AnswerSheetImageMapper answerSheetImageMapper;
 
     @Resource
+    private ExamMapper examMapper;
+
+    @Resource
     private PaperMapper paperMapper;
 
     @Resource
     private PaperQuestionMapper paperQuestionMapper;
+
+    @Resource
+    private MarkingTaskMapper markingTaskMapper;
 
     @Resource
     private AnswerSheetTemplateService answerSheetTemplateService;
@@ -242,6 +259,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
     @Override
     public List<AnswerSheetQuestionDetailVO> recognizeObjectiveAnswers(Long answerSheetId) {
+        ensureExamMutable(answerSheetId, "重新识别客观题");
         AnswerSheetContext context = loadContext(answerSheetId, true);
         Map<String, BufferedImage> imageCache = new HashMap<>();
 
@@ -634,6 +652,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
     @Override
     public AnswerSheetQuestionDetailVO updateObjectiveAnswer(Long answerSheetId, Long questionId, String studentAnswer) {
+        ensureExamMutable(answerSheetId, "修改客观题答案");
         AnswerSheetContext context = loadContext(answerSheetId, true);
         Integer templateQuestionNo = resolveTemplateQuestionNo(questionId);
         if (templateQuestionNo != null) {
@@ -679,6 +698,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
     @Override
     public AnswerSheetQuestionDetailVO updateSubjectiveReviewStatus(Long answerSheetId, Long questionId, Integer status) {
+        ensureExamMutable(answerSheetId, "更新主观题核验状态");
         if (!isAllowedSubjectiveReviewStatus(status)) {
             throw new BusinessException("主观题核验状态无效");
         }
@@ -738,7 +758,80 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
     }
 
     @Override
+    public AnswerSheetQuestionDetailVO updateAiReviewResult(Long answerSheetId, Long questionId, String studentAnswer, Integer score) {
+        ensureExamMutable(answerSheetId, "保存 AI 异常复核结果");
+        if (questionId == null) {
+            throw new BusinessException("题目不存在");
+        }
+        if (score == null || score < 0) {
+            throw new BusinessException("题目得分无效");
+        }
+
+        AnswerSheetContext context = loadContext(answerSheetId, true);
+        Integer templateQuestionNo = resolveTemplateQuestionNo(questionId);
+        if (templateQuestionNo != null) {
+            AnswerSheetDetail detail = getDetailByQuestionNo(context.detailMap(), templateQuestionNo);
+            if (detail == null) {
+                throw new BusinessException("题目不存在");
+            }
+            if (detail.getIsObjective() != null && detail.getIsObjective() == 1) {
+                throw new BusinessException("当前题目不是 AI 主观题");
+            }
+            Integer fullScore = detail.getFullScore();
+            if (fullScore != null && score > fullScore) {
+                throw new BusinessException("题目得分不能超过满分");
+            }
+
+            detail.setStudentAnswer(studentAnswer == null ? null : studentAnswer.trim());
+            detail.setScore(score);
+            detail.setStatus(DETAIL_STATUS_COMPLETED);
+            answerSheetDetailMapper.updateById(detail);
+            recalculateAnswerSheetScores(answerSheetId);
+            tryAdvanceAnswerSheetStatus(answerSheetId, context);
+
+            AnswerSheetContext refreshedContext = loadContext(answerSheetId, false);
+            AnswerSheetDetail refreshedDetail = getDetailByQuestionNo(refreshedContext.detailMap(), templateQuestionNo);
+            return buildQuestionDetailVOFromDetail(refreshedContext, refreshedDetail);
+        }
+
+        PaperQuestion question = context.questionMap().get(questionId);
+        if (question == null) {
+            throw new BusinessException("题目不存在");
+        }
+        if (isObjectiveQuestion(question)) {
+            throw new BusinessException("当前题目不是 AI 主观题");
+        }
+        if (question.getScore() != null && score > question.getScore()) {
+            throw new BusinessException("题目得分不能超过满分");
+        }
+
+        AnswerSheetDetail detail = context.detailMap().get(questionId);
+        if (detail == null) {
+            detail = new AnswerSheetDetail();
+            detail.setAnswerSheetId(answerSheetId);
+            detail.setQuestionId(questionId);
+            detail.setStudentAnswer(studentAnswer == null ? null : studentAnswer.trim());
+            detail.setScore(score);
+            detail.setStatus(DETAIL_STATUS_COMPLETED);
+            answerSheetDetailMapper.insert(detail);
+            context.detailMap().put(questionId, detail);
+        } else {
+            detail.setStudentAnswer(studentAnswer == null ? null : studentAnswer.trim());
+            detail.setScore(score);
+            detail.setStatus(DETAIL_STATUS_COMPLETED);
+            answerSheetDetailMapper.updateById(detail);
+        }
+
+        recalculateAnswerSheetScores(answerSheetId);
+        tryAdvanceAnswerSheetStatus(answerSheetId, context);
+
+        AnswerSheetContext refreshedContext = loadContext(answerSheetId, false);
+        return buildQuestionDetailVO(refreshedContext, refreshedContext.questionMap().get(questionId));
+    }
+
+    @Override
     public List<AnswerSheetQuestionDetailVO> rerunSubjectiveReview(Long answerSheetId) {
+        ensureExamMutable(answerSheetId, "重跑主观题核验");
         AnswerSheetContext context = loadContext(answerSheetId, true);
         Map<Long, AnswerSheetDetail> detailMap = context.detailMap();
 
@@ -790,6 +883,7 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
 
     @Override
     public void updateQuestionScore(Long answerSheetId, Long questionId, Integer score, boolean completed) {
+        ensureExamMutable(answerSheetId, "提交阅卷分数");
         if (answerSheetId == null || questionId == null) {
             return;
         }
@@ -1670,20 +1764,30 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
         AnswerSheet answerSheet = context.answerSheet();
         int currentStatus = answerSheet.getStatus() == null ? 0 : answerSheet.getStatus();
 
-        // 从"已识别"(1)推进到"待阅卷"(2)
-        if (currentStatus == 1 && canAdvanceToReadyForMarking(context)) {
-            answerSheet.setStatus(2);
+        // 已完成后如果明细被重跑回退，需要重新回到待阅卷。
+        if (currentStatus == ANSWER_SHEET_STATUS_COMPLETED && !canAutoCompleteAnswerSheet(context)) {
+            answerSheet.setStatus(ANSWER_SHEET_STATUS_READY_FOR_MARKING);
             answerSheetMapper.updateById(answerSheet);
-            currentStatus = 2;
+            currentStatus = ANSWER_SHEET_STATUS_READY_FOR_MARKING;
+        }
+
+        // 从"已识别"(1)推进到"待阅卷"(2)
+        if (currentStatus == ANSWER_SHEET_STATUS_RECOGNIZED && canAdvanceToReadyForMarking(context)) {
+            answerSheet.setStatus(ANSWER_SHEET_STATUS_READY_FOR_MARKING);
+            answerSheetMapper.updateById(answerSheet);
+            currentStatus = ANSWER_SHEET_STATUS_READY_FOR_MARKING;
         }
 
         // 从"待阅卷"(2)自动完成(4)（只有客观题或 AI 管理题且都已评分时）
-        if (currentStatus == 2) {
+        if (currentStatus == ANSWER_SHEET_STATUS_READY_FOR_MARKING) {
             if (canAutoCompleteAnswerSheet(context)) {
-                answerSheet.setStatus(4);
+                answerSheet.setStatus(ANSWER_SHEET_STATUS_COMPLETED);
                 answerSheetMapper.updateById(answerSheet);
+                currentStatus = ANSWER_SHEET_STATUS_COMPLETED;
             }
         }
+
+        updateExamStatusForTasklessFlow(answerSheet);
     }
 
     private boolean canAutoCompleteAnswerSheet(AnswerSheetContext context) {
@@ -1765,6 +1869,74 @@ public class AnswerSheetDetailServiceImpl implements AnswerSheetDetailService {
             }
         }
         return false;
+    }
+
+    private void ensureExamMutable(Long answerSheetId, String action) {
+        if (answerSheetId == null) {
+            return;
+        }
+        AnswerSheet answerSheet = answerSheetMapper.selectById(answerSheetId);
+        if (answerSheet == null) {
+            throw new BusinessException("答题卡不存在");
+        }
+        if (answerSheet.getExamId() == null) {
+            return;
+        }
+        Exam exam = examMapper.selectById(answerSheet.getExamId());
+        if (exam == null) {
+            throw new BusinessException("考试不存在");
+        }
+        if (exam.getStatus() != null && exam.getStatus() == EXAM_STATUS_PUBLISHED) {
+            throw new BusinessException("考试成绩已发布，不能" + action);
+        }
+    }
+
+    private void updateExamStatusForTasklessFlow(AnswerSheet answerSheet) {
+        if (answerSheet == null || answerSheet.getExamId() == null) {
+            return;
+        }
+
+        Long taskCount = markingTaskMapper.selectCount(
+                new LambdaQueryWrapper<MarkingTask>()
+                        .eq(MarkingTask::getExamId, answerSheet.getExamId())
+                        .eq(MarkingTask::getDeleted, 0)
+        );
+        if (taskCount != null && taskCount > 0) {
+            return;
+        }
+
+        Exam exam = examMapper.selectById(answerSheet.getExamId());
+        if (exam == null || exam.getStatus() == null || exam.getStatus() == EXAM_STATUS_PUBLISHED) {
+            return;
+        }
+
+        List<AnswerSheet> answerSheets = answerSheetMapper.selectList(
+                new LambdaQueryWrapper<AnswerSheet>()
+                        .eq(AnswerSheet::getExamId, answerSheet.getExamId())
+                        .eq(AnswerSheet::getDeleted, 0)
+        );
+        if (answerSheets.isEmpty()) {
+            return;
+        }
+
+        boolean allCompleted = answerSheets.stream()
+                .allMatch(sheet -> sheet.getStatus() != null && sheet.getStatus() == ANSWER_SHEET_STATUS_COMPLETED);
+        if (allCompleted) {
+            if (exam.getStatus() < EXAM_STATUS_COMPLETED) {
+                exam.setStatus(EXAM_STATUS_COMPLETED);
+                examMapper.updateById(exam);
+            }
+            return;
+        }
+
+        if (exam.getStatus() >= EXAM_STATUS_COMPLETED) {
+            boolean hasInFlightSheets = answerSheets.stream()
+                    .anyMatch(sheet -> sheet.getStatus() == null || sheet.getStatus() != ANSWER_SHEET_STATUS_COMPLETED);
+            if (hasInFlightSheets) {
+                exam.setStatus(EXAM_STATUS_MARKING);
+                examMapper.updateById(exam);
+            }
+        }
     }
 
     private record AnswerSheetContext(

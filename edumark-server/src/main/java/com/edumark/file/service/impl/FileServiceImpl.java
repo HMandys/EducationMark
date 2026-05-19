@@ -120,7 +120,7 @@ public class FileServiceImpl implements FileService {
 
     @Override
     public String getUrl(String objectName) {
-        return minioConfig.getEndpoint() + "/" + minioConfig.getBucketName() + "/" + objectName;
+        return minioConfig.getPublicEndpoint() + "/" + minioConfig.getBucketName() + "/" + objectName;
     }
 
     @Override

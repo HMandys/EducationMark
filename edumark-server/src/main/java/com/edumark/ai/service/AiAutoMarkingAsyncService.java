@@ -20,9 +20,30 @@ public class AiAutoMarkingAsyncService {
     @Async("aiMarkingExecutor")
     public void autoMarkFillBlankQuestionsAsync(Long answerSheetId) {
         try {
-            aiAutoMarkingService.autoMarkFillBlankQuestions(answerSheetId);
+            aiAutoMarkingService.autoMarkFillBlankQuestions(answerSheetId, false);
         } catch (Exception ex) {
-            log.warn("异步 AI 自动批改失败，answerSheetId={}, error={}", answerSheetId, ex.getMessage(), ex);
+            log.warn("异步 AI 自动批改失败，answerSheetId={}, forceRerun=false, error={}",
+                    answerSheetId, ex.getMessage(), ex);
+        }
+    }
+
+    @Async("aiMarkingExecutor")
+    public void autoMarkFillBlankQuestionsAsync(Long answerSheetId, boolean forceRerun) {
+        try {
+            aiAutoMarkingService.autoMarkFillBlankQuestions(answerSheetId, forceRerun);
+        } catch (Exception ex) {
+            log.warn("异步 AI 自动批改失败，answerSheetId={}, forceRerun={}, error={}",
+                    answerSheetId, forceRerun, ex.getMessage(), ex);
+        }
+    }
+
+    @Async("aiMarkingExecutor")
+    public void autoMarkExamSubjectFillBlankQuestionsAsync(Long examSubjectId, boolean forceRerun) {
+        try {
+            aiAutoMarkingService.autoMarkExamSubjectFillBlankQuestions(examSubjectId, forceRerun);
+        } catch (Exception ex) {
+            log.warn("异步 AI 科目批改失败，examSubjectId={}, forceRerun={}, error={}",
+                    examSubjectId, forceRerun, ex.getMessage(), ex);
         }
     }
 }

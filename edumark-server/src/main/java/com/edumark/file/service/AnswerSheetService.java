@@ -82,4 +82,14 @@ public interface AnswerSheetService extends IService<AnswerSheet> {
      * 重新执行识别与匹配
      */
     void reRecognize(Long id);
+
+    /**
+     * 重新执行识别与匹配，并在识别时优先使用已确认的学号提示
+     */
+    void reRecognize(Long id, String preferredStudentNumber);
+
+    /**
+     * 校验答题卡所属考试是否仍允许修改分数或批改结果
+     */
+    void ensureExamNotPublished(Long answerSheetId, String action);
 }

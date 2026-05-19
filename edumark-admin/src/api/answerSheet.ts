@@ -65,6 +65,11 @@ export interface AnswerSheetObjectiveAnswerDTO {
   studentAnswer?: string
 }
 
+export interface AnswerSheetAiReviewResultDTO {
+  studentAnswer?: string
+  score?: number
+}
+
 export interface AnswerSheetQuery {
   pageNum: number
   pageSize: number
@@ -126,6 +131,13 @@ export function updateSubjectiveReviewStatus(id: Id, questionId: Id, status: num
     `/answer-sheet/${id}/details/${questionId}/subjective-review-status`,
     null,
     { params: { status } }
+  )
+}
+
+export function updateAiReviewResult(id: Id, questionId: Id, data: AnswerSheetAiReviewResultDTO) {
+  return request.put<AnswerSheetQuestionDetail>(
+    `/answer-sheet/${id}/details/${questionId}/ai-review-result`,
+    data
   )
 }
 

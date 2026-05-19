@@ -30,4 +30,14 @@ public interface ParentStudentBindMapper extends BaseMapper<ParentStudentBind> {
      * 检查绑定是否存在
      */
     ParentStudentBind selectByParentAndStudent(@Param("parentId") Long parentId, @Param("studentId") Long studentId);
+
+    /**
+     * 新增绑定关系（兼容不同初始化脚本生成的字段差异）
+     */
+    int insertBind(ParentStudentBind bind);
+
+    /**
+     * 删除绑定关系（兼容未包含逻辑删除字段的历史表）
+     */
+    int deleteBindById(@Param("id") Long id);
 }

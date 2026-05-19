@@ -26,7 +26,14 @@
           </el-select>
         </el-form-item>
         <el-form-item label="学年">
-          <el-input v-model="queryParams.academicYear" placeholder="如: 2024-2025" clearable />
+          <el-select v-model="queryParams.academicYear" placeholder="请选择学年" clearable>
+            <el-option
+              v-for="item in academicYearOptions"
+              :key="item"
+              :label="item"
+              :value="item"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="学期">
           <el-select v-model="queryParams.semester" placeholder="请选择" clearable>
@@ -103,13 +110,13 @@
         <el-table-column prop="createTime" label="创建时间" width="170" />
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+            <el-button type="primary" link :disabled="row.status >= 2" @click="handleEdit(row)">编辑</el-button>
             <el-button type="success" link @click="handleWorkbench(row)">工作台</el-button>
             <el-button type="primary" link @click="handleSubjects(row)">科目</el-button>
             <el-button type="info" link @click="handleCheckPublish(row)">
               {{ row.status >= 4 ? '出分检查' : '检查' }}
             </el-button>
-            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+            <el-button type="danger" link :disabled="row.status >= 2" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -184,7 +191,14 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="学年" prop="academicYear">
-              <el-input v-model="formData.academicYear" placeholder="如: 2024-2025" />
+              <el-select v-model="formData.academicYear" placeholder="请选择学年">
+                <el-option
+                  v-for="item in academicYearOptions"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -453,7 +467,7 @@ const formRules: FormRules = {
   schoolId: [{ required: true, message: '请选择学校', trigger: 'change' }],
   name: [{ required: true, message: '请输入考试名称', trigger: 'blur' }],
   type: [{ required: true, message: '请选择考试类型', trigger: 'change' }],
-  academicYear: [{ required: true, message: '请输入学年', trigger: 'blur' }],
+  academicYear: [{ required: true, message: '请选择学年', trigger: 'change' }],
   semester: [{ required: true, message: '请选择学期', trigger: 'change' }],
   gradeId: [{ required: true, message: '请选择年级', trigger: 'change' }],
   startTime: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
@@ -548,6 +562,17 @@ const getDefaultSemester = () => {
   const month = new Date().getMonth() + 1
   return month >= 2 && month <= 7 ? 2 : 1
 }
+
+const academicYearOptions = (() => {
+  const currentYear = new Date().getFullYear()
+  const baseYear = new Date().getMonth() >= 7 ? currentYear : currentYear - 1
+  const options: string[] = []
+  for (let i = 1; i >= -3; i--) {
+    const y = baseYear + i
+    options.push(`${y}-${y + 1}`)
+  }
+  return options
+})()
 
 const loadGradeOptions = async (schoolId: number) => {
   const res = await getGradeListBySchool(schoolId)
@@ -646,8 +671,21 @@ const handleEdit = async (row: Exam) => {
   dialogTitle.value = '编辑考试'
   const res = await getExamDetail(row.id)
   const detail = res.data
-  Object.assign(formData, detail)
-  formData.classIds = detail.classes?.map(c => c.classId) || []
+  Object.assign(formData, {
+    id: detail.id,
+    schoolId: detail.schoolId,
+    name: detail.name,
+    code: detail.code || '',
+    type: detail.type,
+    academicYear: detail.academicYear,
+    semester: detail.semester,
+    gradeId: detail.gradeId,
+    startTime: detail.startTime,
+    endTime: detail.endTime,
+    description: detail.description || '',
+    remark: detail.remark || '',
+    classIds: detail.classes?.map(c => c.classId) || [],
+  })
   gradeList.value = []
   classList.value = []
   if (detail.schoolId) {
@@ -671,24 +709,10 @@ const handleSubmit = async () => {
       await fetchData()
     } else {
       const res = await createExam(data)
-      const createdExam: Exam = {
-        id: res.data,
-        schoolId: data.schoolId!,
-        name: data.name!,
-        code: data.code || '',
-        type: data.type!,
-        academicYear: data.academicYear!,
-        semester: data.semester!,
-        gradeId: data.gradeId,
-        status: 0,
-        totalScore: 0,
-        studentCount: 0,
-      }
-      ElMessage.success('创建成功，请继续配置考试科目')
-      currentExam.value = createdExam
-      subjectDialogVisible.value = true
-      await loadSubjectList()
-      await fetchData()
+      ElMessage.success('创建成功，即将跳转到工作台配置科目')
+      dialogVisible.value = false
+      router.push({ name: 'ExamWorkbench', params: { id: String(res.data) } })
+      return
     }
     dialogVisible.value = false
   } finally {
@@ -711,9 +735,15 @@ const handleBatchDelete = async () => {
   await ElMessageBox.confirm(`确定要删除选中的 ${selectedIds.value.length} 个考试吗？`, '提示', {
     type: 'warning',
   })
-  await deleteExamBatch(selectedIds.value)
-  ElMessage.success('删除成功')
-  fetchData()
+  try {
+    await deleteExamBatch(selectedIds.value)
+    ElMessage.success('删除成功')
+  } catch {
+    // 全局拦截器已展示错误提示（含部分成功信息）
+  } finally {
+    selectedIds.value = []
+    fetchData()
+  }
 }
 
 const handleCheckPublish = async (row: Exam) => {

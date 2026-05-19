@@ -167,8 +167,13 @@
         </div>
 
         <div class="side-card">
-          <div class="side-card__title">考试科目与答题卡</div>
-          <div class="side-card__desc">为每个科目设置答题卡模板，支持上传图片、定位和区域配置</div>
+          <div class="side-card__title-row">
+            <div>
+              <div class="side-card__title">考试科目与答题卡</div>
+              <div class="side-card__desc">为每个科目设置答题卡模板，支持上传图片、定位和区域配置</div>
+            </div>
+            <el-button type="primary" size="small" text bg @click="handleAddSubject">添加科目</el-button>
+          </div>
           <el-empty v-if="subjectList.length === 0" description="还没有配置科目" :image-size="70" />
           <div v-else class="subject-list">
             <div v-for="subject in subjectList" :key="subject.id" class="subject-item-enhanced">
@@ -192,6 +197,8 @@
                 >
                   {{ getSubjectTemplateStatus(subject) === 'none' ? '设置答题卡' : '编辑答题卡' }}
                 </el-button>
+                <el-button type="info" size="small" text @click="handleEditSubject(subject)">编辑</el-button>
+                <el-button type="danger" size="small" text @click="handleDeleteSubject(subject)">删除</el-button>
               </div>
             </div>
           </div>
@@ -270,16 +277,61 @@
         </div>
       </div>
     </div>
+
+    <el-dialog v-model="subjectDialogVisible" :title="subjectDialogTitle" width="500px" destroy-on-close>
+      <el-form ref="subjectFormRef" :model="subjectForm" :rules="subjectFormRules" label-width="100px">
+        <el-form-item label="科目名称" prop="subjectName">
+          <el-input v-model="subjectForm.subjectName" placeholder="请输入科目名称" />
+        </el-form-item>
+        <el-form-item label="科目编码">
+          <el-input v-model="subjectForm.subjectCode" placeholder="请输入科目编码" />
+        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="满分" prop="fullScore">
+              <el-input-number v-model="subjectForm.fullScore" :min="0" :max="300" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="及格分">
+              <el-input-number v-model="subjectForm.passScore" :min="0" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="优秀分">
+              <el-input-number v-model="subjectForm.excellentScore" :min="0" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="时长(分钟)">
+              <el-input-number v-model="subjectForm.duration" :min="0" :max="300" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="排序">
+          <el-input-number v-model="subjectForm.sort" :min="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="subjectDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="subjectSubmitting" @click="handleSubjectSubmit">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { onBeforeRouteUpdate, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import {
   getExamDetail,
   getExamSubjectList,
+  createExamSubject,
+  updateExamSubject,
+  deleteExamSubject,
   type Exam,
   type ExamPublishCheck,
   type ExamSubject,
@@ -411,8 +463,14 @@ const summaryCards = computed(() => [
   {
     label: '阅卷任务',
     value: overview.value.markingTaskCount,
-    desc: overview.value.markingTaskCount > 0 ? '任务已生成' : '等待裁题完成',
-    tone: overview.value.markingTaskCount > 0 ? 'success' : 'default',
+    desc: overview.value.markingTaskCount > 0
+      ? '任务已生成'
+      : overview.value.pendingMarkingAnswerSheetCount > 0
+        ? '还有答卷未完成评分'
+        : overview.value.completedAnswerSheetCount > 0
+          ? '自动评分流'
+          : '等待裁题完成',
+    tone: overview.value.markingTaskCount > 0 || overview.value.completedAnswerSheetCount > 0 ? 'success' : 'default',
   },
   {
     label: '待仲裁',
@@ -444,10 +502,12 @@ const overviewCards = computed(() => [
     tone: overview.value.recognitionExceptionCount > 0 ? 'danger' : 'success',
   },
   {
-    label: '待阅卷',
+    label: '待处理答卷',
     value: `${overview.value.pendingMarkingAnswerSheetCount}`,
-    badge: overview.value.pendingMarkingAnswerSheetCount > 0 ? '可推进' : '未就绪',
-    desc: '裁题完成后进入待阅卷池，随后生成阅卷任务。',
+    badge: overview.value.pendingMarkingAnswerSheetCount > 0 ? '需处理' : '已清空',
+    desc: overview.value.markingTaskCount > 0
+      ? '人工阅卷任务下仍未完成的答题卡数量。'
+      : '没有人工任务时，这里通常是客观题或 AI 异常还未收口。',
     tone: overview.value.pendingMarkingAnswerSheetCount > 0 ? 'warning' : 'default',
   },
   {
@@ -465,18 +525,25 @@ const flowSteps = computed<FlowStep[]>(() => {
   const templateUploaded = requiredTemplateCount > 0 && overview.value.uploadedTemplateCount >= requiredTemplateCount
   const regionConfigured = requiredTemplateCount > 0 && overview.value.publishedTemplateCount >= requiredTemplateCount
   const answerSheetsReady = overview.value.answerSheetCount > 0
+  const hasMarkingTasks = overview.value.markingTaskCount > 0
+  const allAnswerSheetsCompleted =
+    answerSheetsReady &&
+    overview.value.completedAnswerSheetCount >= overview.value.answerSheetCount
   const recognitionSettled =
     answerSheetsReady &&
     overview.value.pendingRecognitionCount === 0 &&
     overview.value.recognitionExceptionCount === 0
-  const cropReady =
-    overview.value.markingTaskCount > 0 ||
-    overview.value.completedAnswerSheetCount > 0
+  const tasklessCompleted =
+    !hasMarkingTasks &&
+    allAnswerSheetsCompleted &&
+    recognitionSettled
+  const cropReady = hasMarkingTasks || tasklessCompleted
   const accessReady =
-    overview.value.markingTaskCount > 0 &&
+    hasMarkingTasks &&
     overview.value.requiredAccessCodeCount > 0 &&
     overview.value.accessCodeCount >= overview.value.requiredAccessCodeCount
-  const markingFinished = overview.value.markingTaskCount > 0 && overview.value.unfinishedTaskCount === 0
+  const markingFinished = hasMarkingTasks && overview.value.unfinishedTaskCount === 0
+  const scoreGateReady = tasklessCompleted || markingFinished
   const aggregateReady =
     overview.value.examScoreCount > 0 &&
     overview.value.subjectScoreCount > 0 &&
@@ -577,14 +644,28 @@ const flowSteps = computed<FlowStep[]>(() => {
       description: '按题目区域裁切生成题目图片，主观题样本进入可阅卷状态，异常样本进入人工核验。',
       status: cropReady ? 'done' : recognitionSettled ? 'active' : 'waiting',
       metrics: [
-        { label: '已生成任务', value: overview.value.markingTaskCount, tone: cropReady ? 'success' : 'warning' },
-        { label: '已完成阅卷', value: overview.value.completedAnswerSheetCount, tone: overview.value.completedAnswerSheetCount > 0 ? 'success' : 'default' },
+        { label: '已生成任务', value: overview.value.markingTaskCount, tone: hasMarkingTasks ? 'success' : 'default' },
+        {
+          label: '已完成答卷',
+          value: `${overview.value.completedAnswerSheetCount} / ${overview.value.answerSheetCount}`,
+          tone: allAnswerSheetsCompleted ? 'success' : overview.value.completedAnswerSheetCount > 0 ? 'warning' : 'default',
+        },
+        {
+          label: '待处理答卷',
+          value: overview.value.pendingMarkingAnswerSheetCount,
+          tone: overview.value.pendingMarkingAnswerSheetCount > 0 ? 'warning' : 'success',
+        },
       ],
-      hint: cropReady
-        ? '已经能进入阅卷任务，说明题图链路至少已经跑通。'
-        : '识别收口后还要把题图真正裁出来，再进入阅卷任务分配。',
+      hint: hasMarkingTasks
+        ? '已经能进入阅卷任务，说明题图链路已经跑通。'
+        : tasklessCompleted
+          ? '本场没有人工阅卷任务，AI 和客观题评分已经收口，可以进入出分检查。'
+          : overview.value.pendingMarkingAnswerSheetCount > 0
+            ? '还有答题卡未完成评分；优先做客观题复核，或到 AI 批改页保存异常题结果。'
+            : '识别收口后还要把题图真正裁出来，再进入阅卷任务分配。',
       actions: [
         { label: '去答题卡列表', to: { name: 'AnswerSheetList', query: { examId: String(examId.value) } }, primary: !cropReady },
+        { label: 'AI异常处理', to: { name: 'SystemAiMarking', query: { examName: examDetail.value?.name || undefined } } },
       ],
     },
     {
@@ -593,18 +674,22 @@ const flowSteps = computed<FlowStep[]>(() => {
       phase: '阅卷',
       title: '生成阅卷码',
       description: '分配任务时生成 8 位数字阅卷码，老师可免登录进入独立阅卷页。',
-      status: overview.value.markingTaskCount > 0 && overview.value.accessCodeCount === overview.value.requiredAccessCodeCount
+      status: tasklessCompleted
         ? 'done'
-        : cropReady
-          ? 'active'
-          : 'waiting',
+        : accessReady
+          ? 'done'
+          : hasMarkingTasks
+            ? 'active'
+            : 'waiting',
       metrics: [
-        { label: '任务数', value: overview.value.markingTaskCount, tone: overview.value.markingTaskCount > 0 ? 'success' : 'default' },
+        { label: '任务数', value: overview.value.markingTaskCount, tone: hasMarkingTasks ? 'success' : 'default' },
         { label: '应有码数', value: overview.value.requiredAccessCodeCount, tone: overview.value.requiredAccessCodeCount > 0 ? 'default' : 'warning' },
         { label: '已有码数', value: overview.value.accessCodeCount, tone: accessReady ? 'success' : 'warning' },
       ],
-      hint: overview.value.markingTaskCount === 0
-        ? '先完成裁题并生成阅卷任务，再给老师发码。'
+      hint: tasklessCompleted
+        ? '本场没有人工阅卷任务，不需要生成阅卷码。'
+        : !hasMarkingTasks
+          ? '当前没有人工阅卷任务；先把待处理答卷收口，不要卡在阅卷码步骤。'
         : accessReady
           ? '阅卷码已经补齐，老师可以按角色直接进入 /marking。'
           : '去任务页启动任务并补齐阅卷码，双评任务必须同时具备一评码和二评码。',
@@ -619,19 +704,22 @@ const flowSteps = computed<FlowStep[]>(() => {
       phase: '阅卷',
       title: '老师阅卷',
       description: '老师通过阅卷码免登录评分，支持问题卷标记、双评分差阈值仲裁和任务进度追踪。',
-      status: markingFinished ? 'done' : overview.value.markingTaskCount > 0 ? 'active' : 'waiting',
+      status: tasklessCompleted ? 'done' : markingFinished ? 'done' : hasMarkingTasks ? 'active' : 'waiting',
       metrics: [
         { label: '未完成任务', value: overview.value.unfinishedTaskCount, tone: overview.value.unfinishedTaskCount > 0 ? 'warning' : 'success' },
         { label: '已完成答题卡', value: overview.value.completedAnswerSheetCount, tone: overview.value.completedAnswerSheetCount > 0 ? 'success' : 'default' },
         { label: '待仲裁', value: overview.value.pendingArbitrationCount, tone: overview.value.pendingArbitrationCount > 0 ? 'danger' : 'success' },
       ],
-      hint: markingFinished
-        ? '阅卷已经完成，进入汇总和出分阶段。'
-        : overview.value.markingTaskCount > 0
+      hint: tasklessCompleted
+        ? '本场由客观题和 AI 批改自动完成，没有老师阅卷步骤。'
+        : markingFinished
+          ? '阅卷已经完成，进入汇总和出分阶段。'
+          : hasMarkingTasks
           ? '盯住待仲裁和未完成任务，别让老师评分长期悬空。'
-          : '先生成阅卷任务，否则老师没有实际工作入口。',
+          : '当前没有老师阅卷任务；如果仍有待处理答卷，请先处理客观题或 AI 异常。',
       actions: [
-        { label: '去阅卷任务', to: { name: 'MarkingTask', query: { examId: String(examId.value) } }, primary: overview.value.markingTaskCount > 0 },
+        { label: '去阅卷任务', to: { name: 'MarkingTask', query: { examId: String(examId.value) } }, primary: hasMarkingTasks },
+        { label: 'AI批改', to: { name: 'SystemAiMarking', query: { examName: examDetail.value?.name || undefined } }, primary: !hasMarkingTasks },
         { label: '出分检查', to: { name: 'ScorePublishCheck', params: { id: examId.value } } },
       ],
     },
@@ -641,7 +729,7 @@ const flowSteps = computed<FlowStep[]>(() => {
       phase: '出分',
       title: '出分检查',
       description: '统一检查识别异常、阅卷任务、仲裁和汇总缺口；总分、排名、统计如缺失，会在正式发布时自动补齐。',
-      status: released || scorePublishCheck.value?.canPublish ? 'done' : markingFinished ? 'active' : 'waiting',
+      status: released || scorePublishCheck.value?.canPublish ? 'done' : scoreGateReady ? 'active' : 'waiting',
       metrics: [
         { label: '阻塞项', value: scorePublishCheck.value?.blockingItems?.length || 0, tone: (scorePublishCheck.value?.blockingItems?.length || 0) > 0 ? 'danger' : 'success' },
         { label: '提示项', value: scorePublishCheck.value?.warningItems?.length || 0, tone: (scorePublishCheck.value?.warningItems?.length || 0) > 0 ? 'warning' : 'default' },
@@ -649,9 +737,11 @@ const flowSteps = computed<FlowStep[]>(() => {
       ],
       hint: released || scorePublishCheck.value?.canPublish
         ? '出分检查已经通过，可以进入最终发布。'
-        : markingFinished
+        : scoreGateReady
           ? '先看阻塞项；如果只是缺总分、排名、统计，不用手工补，正式发布时会自动生成。'
-          : '阅卷还没结束，暂时不会进入出分检查。',
+          : hasMarkingTasks
+            ? '阅卷还没结束，暂时不会进入出分检查。'
+            : '还有答题卡没有完成评分，先处理客观题复核或 AI 异常。',
       actions: [
         { label: '出分检查', to: { name: 'ScorePublishCheck', params: { id: examId.value } }, primary: true },
         { label: '成绩列表', to: { name: 'ScoreList', query: { examId: String(examId.value), viewMode: 'statistics' } } },
@@ -948,6 +1038,77 @@ function getTaskProgress(task: MarkingTaskVO) {
     return 0
   }
   return Math.min(100, Math.round((task.completedCount / task.totalCount) * 100))
+}
+
+const subjectDialogVisible = ref(false)
+const subjectDialogTitle = ref('')
+const subjectFormRef = ref<FormInstance>()
+const subjectSubmitting = ref(false)
+
+const subjectForm = reactive<Partial<ExamSubject>>({
+  id: undefined,
+  examId: undefined,
+  subjectName: '',
+  subjectCode: '',
+  fullScore: 100,
+  passScore: 60,
+  excellentScore: 85,
+  duration: 120,
+  sort: 0,
+  status: 1,
+})
+
+const subjectFormRules: FormRules = {
+  subjectName: [{ required: true, message: '请输入科目名称', trigger: 'blur' }],
+  fullScore: [{ required: true, message: '请输入满分', trigger: 'blur' }],
+}
+
+function handleAddSubject() {
+  subjectDialogTitle.value = '添加科目'
+  Object.assign(subjectForm, {
+    id: undefined,
+    examId: examId.value,
+    subjectName: '',
+    subjectCode: '',
+    fullScore: 100,
+    passScore: 60,
+    excellentScore: 85,
+    duration: 120,
+    sort: subjectList.value.length,
+    status: 1,
+  })
+  subjectDialogVisible.value = true
+}
+
+function handleEditSubject(subject: ExamSubject) {
+  subjectDialogTitle.value = '编辑科目'
+  Object.assign(subjectForm, subject)
+  subjectDialogVisible.value = true
+}
+
+async function handleDeleteSubject(subject: ExamSubject) {
+  await ElMessageBox.confirm(`确定要删除科目【${subject.subjectName}】吗？`, '提示', { type: 'warning' })
+  await deleteExamSubject(subject.id)
+  ElMessage.success('删除成功')
+  loadWorkbench()
+}
+
+async function handleSubjectSubmit() {
+  await subjectFormRef.value?.validate()
+  subjectSubmitting.value = true
+  try {
+    if (subjectForm.id) {
+      await updateExamSubject(subjectForm)
+      ElMessage.success('更新成功')
+    } else {
+      await createExamSubject(subjectForm)
+      ElMessage.success('添加成功')
+    }
+    subjectDialogVisible.value = false
+    loadWorkbench()
+  } finally {
+    subjectSubmitting.value = false
+  }
 }
 </script>
 
@@ -1370,6 +1531,14 @@ function getTaskProgress(task: MarkingTaskVO) {
   color: #0f172a;
   font-size: 16px;
   font-weight: 700;
+}
+
+.side-card__title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 4px;
 }
 
 .next-card {

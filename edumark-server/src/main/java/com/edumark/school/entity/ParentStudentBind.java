@@ -23,6 +23,7 @@ public class ParentStudentBind extends BaseEntity {
     @Schema(description = "关系: 1-父亲 2-母亲 3-爷爷 4-奶奶 5-外公 6-外婆 9-其他")
     private Integer relation;
 
+    @TableField(exist = false)
     @Schema(description = "是否为主要联系人")
     private Integer isPrimary;
 

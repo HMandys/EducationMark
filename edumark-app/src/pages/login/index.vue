@@ -30,8 +30,8 @@
       <!-- 表单 -->
       <view class="form">
         <view class="form-item">
+          <text class="form-label">手机号</text>
           <view class="input-wrap">
-            <text class="icon">&#xe600;</text>
             <input
               v-model="form.phone"
               type="number"
@@ -43,8 +43,8 @@
         </view>
 
         <view class="form-item">
-          <view class="input-wrap">
-            <text class="icon">&#xe601;</text>
+          <text class="form-label">密码</text>
+          <view class="input-wrap password-wrap">
             <input
               v-model="form.password"
               :password="!showPassword"
@@ -52,10 +52,10 @@
               class="input"
             />
             <text
-              class="icon eye-icon"
+              class="password-toggle"
               @click="showPassword = !showPassword"
             >
-              {{ showPassword ? '&#xe602;' : '&#xe603;' }}
+              {{ showPassword ? '隐藏' : '显示' }}
             </text>
           </view>
         </view>
@@ -159,7 +159,7 @@ const handleForgetPassword = () => {
 
 // 注册
 const handleRegister = () => {
-  uni.showToast({ title: '请联系学校管理员开通账号', icon: 'none' })
+  uni.navigateTo({ url: '/pages/register/index' })
 }
 
 // 查看协议
@@ -171,11 +171,14 @@ const handleViewAgreement = (event: any, type: string) => {
 
 <style lang="scss" scoped>
 .login-page {
+  width: 100%;
   min-height: 100vh;
   background: linear-gradient(180deg, #409EFF 0%, #79bbff 100%);
   display: flex;
   flex-direction: column;
-  padding: 0 60rpx;
+  padding: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .logo-area {
@@ -205,18 +208,25 @@ const handleViewAgreement = (event: any, type: string) => {
 }
 
 .form-area {
+  align-self: center;
+  width: auto;
+  margin: 0 36rpx;
+  max-width: 640rpx;
   background: #fff;
   border-radius: 24rpx;
   padding: 40rpx;
   box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
 }
 
 .user-type-tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
   margin-bottom: 40rpx;
 
   .tab-item {
-    flex: 1;
+    min-width: 0;
     text-align: center;
     padding: 20rpx 0;
     font-size: 32rpx;
@@ -233,38 +243,66 @@ const handleViewAgreement = (event: any, type: string) => {
 }
 
 .form {
+  display: flex;
+  flex-direction: column;
+  gap: 28rpx;
+
   .form-item {
-    margin-bottom: 30rpx;
+    width: 100%;
+    margin-bottom: 0;
+    box-sizing: border-box;
+  }
+
+  .form-label {
+    display: block;
+    margin-bottom: 12rpx;
+    font-size: 26rpx;
+    line-height: 1.4;
+    color: #606266;
   }
 
   .input-wrap {
+    width: 100%;
     display: flex;
     align-items: center;
+    position: relative;
     background: #f5f7fa;
     border-radius: 12rpx;
     padding: 0 24rpx;
-    height: 96rpx;
+    min-height: 96rpx;
+    box-sizing: border-box;
 
-    .icon {
-      font-size: 40rpx;
-      color: #999;
-      margin-right: 20rpx;
-    }
-
-    .eye-icon {
-      margin-right: 0;
-      margin-left: 20rpx;
+    .password-toggle {
+      position: absolute;
+      right: 24rpx;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 26rpx;
+      line-height: 1;
+      color: #409EFF;
     }
 
     .input {
       flex: 1;
+      min-width: 0;
+      width: 100%;
       height: 96rpx;
+      line-height: 96rpx;
       font-size: 30rpx;
+      text-align: left;
+      box-sizing: border-box;
+    }
+  }
+
+  .password-wrap {
+    .input {
+      padding-right: 90rpx;
     }
   }
 }
 
 .btn-login {
+  width: 100%;
   background: #409EFF;
   color: #fff;
   text-align: center;
@@ -272,7 +310,9 @@ const handleViewAgreement = (event: any, type: string) => {
   border-radius: 48rpx;
   font-size: 34rpx;
   font-weight: bold;
-  margin-top: 20rpx;
+  margin-top: 10rpx;
+  line-height: 1.2;
+  box-sizing: border-box;
 
   &.disabled {
     background: #a0cfff;
@@ -286,7 +326,9 @@ const handleViewAgreement = (event: any, type: string) => {
 .other-actions {
   display: flex;
   justify-content: space-between;
-  margin-top: 30rpx;
+  align-items: center;
+  margin-top: 34rpx;
+  gap: 24rpx;
 
   .link {
     font-size: 26rpx;
@@ -295,14 +337,23 @@ const handleViewAgreement = (event: any, type: string) => {
 }
 
 .agreement {
+  align-self: center;
+  width: auto;
+  margin-left: 36rpx;
+  margin-right: 36rpx;
+  max-width: 640rpx;
   margin-top: auto;
   padding: 40rpx 0;
+  box-sizing: border-box;
 
   .agreement-label {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-wrap: wrap;
+    row-gap: 8rpx;
     font-size: 24rpx;
+    line-height: 1.6;
     color: rgba(255, 255, 255, 0.9);
 
     checkbox {

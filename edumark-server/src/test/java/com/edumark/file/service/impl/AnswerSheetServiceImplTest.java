@@ -1,8 +1,15 @@
 package com.edumark.file.service.impl;
 
+import com.edumark.ai.service.AiAutoMarkingAsyncService;
+import com.edumark.ai.service.AiAutoMarkingService;
+import com.edumark.common.exception.BusinessException;
+import com.edumark.exam.entity.Exam;
+import com.edumark.exam.mapper.ExamMapper;
 import com.edumark.file.entity.AnswerSheet;
+import com.edumark.file.dto.AnswerSheetUploadDTO;
 import com.edumark.file.mapper.AnswerSheetDetailMapper;
 import com.edumark.file.service.AnswerSheetDetailService;
+import com.edumark.marking.mapper.MarkingTaskMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -11,7 +18,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.lang.reflect.Method;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -25,6 +34,18 @@ class AnswerSheetServiceImplTest {
     @Mock
     private AnswerSheetDetailService answerSheetDetailService;
 
+    @Mock
+    private ExamMapper examMapper;
+
+    @Mock
+    private MarkingTaskMapper markingTaskMapper;
+
+    @Mock
+    private AiAutoMarkingService aiAutoMarkingService;
+
+    @Mock
+    private AiAutoMarkingAsyncService aiAutoMarkingAsyncService;
+
     private AnswerSheetServiceImpl service;
 
     @BeforeEach
@@ -32,6 +53,11 @@ class AnswerSheetServiceImplTest {
         service = new AnswerSheetServiceImpl();
         inject("answerSheetDetailMapper", answerSheetDetailMapper);
         inject("answerSheetDetailService", answerSheetDetailService);
+        inject("examMapper", examMapper);
+        inject("markingTaskMapper", markingTaskMapper);
+        inject("aiAutoMarkingService", aiAutoMarkingService);
+        inject("aiAutoMarkingAsyncService", aiAutoMarkingAsyncService);
+        lenient().when(aiAutoMarkingService.hasAiFillBlankQuestions(1L)).thenReturn(false);
     }
 
     @Test
@@ -54,6 +80,22 @@ class AnswerSheetServiceImplTest {
 
         verify(answerSheetDetailService).initializeQuestionDetails(1L);
         verify(answerSheetDetailService).recognizeObjectiveAnswers(1L);
+    }
+
+    @Test
+    void uploadAnswerSheet_startedMarkingTask_shouldRejectSupplementaryUpload() {
+        AnswerSheetUploadDTO dto = new AnswerSheetUploadDTO();
+        dto.setExamId(10L);
+        dto.setExamSubjectId(20L);
+
+        Exam exam = new Exam();
+        exam.setId(10L);
+        exam.setStatus(3);
+
+        when(examMapper.selectById(10L)).thenReturn(exam);
+        when(markingTaskMapper.selectCount(any())).thenReturn(1L);
+
+        assertThrows(BusinessException.class, () -> service.uploadAnswerSheet(dto));
     }
 
     private AnswerSheet buildReadyAnswerSheet() {

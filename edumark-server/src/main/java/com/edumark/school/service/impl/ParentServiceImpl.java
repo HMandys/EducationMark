@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import jakarta.annotation.Resource;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -172,7 +173,10 @@ public class ParentServiceImpl extends ServiceImpl<ParentMapper, Parent> impleme
         bind.setStudentId(student.getId());
         bind.setRelation(dto.getRelation() != null ? dto.getRelation() : 9);
         bind.setIsPrimary(0);
-        parentStudentBindMapper.insert(bind);
+        LocalDateTime now = LocalDateTime.now();
+        bind.setCreateTime(now);
+        bind.setUpdateTime(now);
+        parentStudentBindMapper.insertBind(bind);
     }
 
     @Override
@@ -182,7 +186,7 @@ public class ParentServiceImpl extends ServiceImpl<ParentMapper, Parent> impleme
         if (bind == null) {
             throw new BusinessException("未找到绑定关系");
         }
-        parentStudentBindMapper.deleteById(bind.getId());
+        parentStudentBindMapper.deleteBindById(bind.getId());
     }
 
     @Override

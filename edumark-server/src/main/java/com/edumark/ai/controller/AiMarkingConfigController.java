@@ -1,10 +1,14 @@
 package com.edumark.ai.controller;
 
 import com.edumark.ai.dto.AiMarkingPolicyDTO;
+import com.edumark.ai.dto.AiMarkingProgressQueryDTO;
 import com.edumark.ai.dto.AiMarkingRecordQueryDTO;
 import com.edumark.ai.dto.AiMarkingProviderDTO;
 import com.edumark.ai.dto.AiMarkingProviderQueryDTO;
+import com.edumark.ai.service.AiAutoMarkingAsyncService;
 import com.edumark.ai.service.AiMarkingConfigService;
+import com.edumark.ai.vo.AiMarkingExamProgressDetailVO;
+import com.edumark.ai.vo.AiMarkingExamProgressVO;
 import com.edumark.ai.vo.AiMarkingPolicyVO;
 import com.edumark.ai.vo.AiMarkingRecordVO;
 import com.edumark.ai.vo.AiMarkingProviderVO;
@@ -32,9 +36,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiMarkingConfigController {
 
     private final AiMarkingConfigService aiMarkingConfigService;
+    private final AiAutoMarkingAsyncService aiAutoMarkingAsyncService;
 
-    public AiMarkingConfigController(AiMarkingConfigService aiMarkingConfigService) {
+    public AiMarkingConfigController(AiMarkingConfigService aiMarkingConfigService,
+                                     AiAutoMarkingAsyncService aiAutoMarkingAsyncService) {
         this.aiMarkingConfigService = aiMarkingConfigService;
+        this.aiAutoMarkingAsyncService = aiAutoMarkingAsyncService;
     }
 
     @Operation(summary = "分页查询 AI 批改提供商")
@@ -72,6 +79,28 @@ public class AiMarkingConfigController {
     @PreAuthorize("hasAuthority('system:menu:list')")
     public Result<PageResult<AiMarkingRecordVO>> getRecordPage(AiMarkingRecordQueryDTO query) {
         return Result.success(aiMarkingConfigService.getRecordPage(query));
+    }
+
+    @Operation(summary = "分页查询 AI 考试进度")
+    @GetMapping("/progress/page")
+    @PreAuthorize("hasAuthority('system:menu:list')")
+    public Result<PageResult<AiMarkingExamProgressVO>> getProgressPage(AiMarkingProgressQueryDTO query) {
+        return Result.success(aiMarkingConfigService.getProgressPage(query));
+    }
+
+    @Operation(summary = "查询 AI 考试进度详情")
+    @GetMapping("/progress/{examSubjectId}")
+    @PreAuthorize("hasAuthority('system:menu:list')")
+    public Result<AiMarkingExamProgressDetailVO> getProgressDetail(@PathVariable Long examSubjectId) {
+        return Result.success(aiMarkingConfigService.getProgressDetail(examSubjectId));
+    }
+
+    @Operation(summary = "启动科目 AI 批改")
+    @PostMapping("/progress/{examSubjectId}/run")
+    @PreAuthorize("hasAuthority('system:menu:list')")
+    public Result<Void> runExamSubjectAiMarking(@PathVariable Long examSubjectId) {
+        aiAutoMarkingAsyncService.autoMarkExamSubjectFillBlankQuestionsAsync(examSubjectId, true);
+        return Result.success();
     }
 
     @Operation(summary = "获取 AI 批改策略")

@@ -22,6 +22,7 @@ import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -94,7 +95,10 @@ public class AppStudentController {
         bind.setStudentId(student.getId());
         bind.setRelation(9);
         bind.setIsPrimary(0);
-        parentStudentBindMapper.insert(bind);
+        LocalDateTime now = LocalDateTime.now();
+        bind.setCreateTime(now);
+        bind.setUpdateTime(now);
+        parentStudentBindMapper.insertBind(bind);
 
         StudentVO studentVO = studentMapper.selectVOById(student.getId());
         if (studentVO == null) {
@@ -114,7 +118,7 @@ public class AppStudentController {
         if (bind == null) {
             throw new BusinessException("未找到绑定关系");
         }
-        parentStudentBindMapper.deleteById(bind.getId());
+        parentStudentBindMapper.deleteBindById(bind.getId());
         return Result.success();
     }
 

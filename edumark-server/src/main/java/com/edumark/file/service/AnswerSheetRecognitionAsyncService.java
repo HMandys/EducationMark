@@ -31,8 +31,20 @@ public class AnswerSheetRecognitionAsyncService {
      */
     @Async("answerSheetRecognitionExecutor")
     public void recognizeAsync(Long answerSheetId) {
+        doRecognize(answerSheetId, null);
+    }
+
+    /**
+     * 异步执行答题卡识别，并优先使用已确认的学号提示
+     */
+    @Async("answerSheetRecognitionExecutor")
+    public void recognizeAsync(Long answerSheetId, String preferredStudentNumber) {
+        doRecognize(answerSheetId, preferredStudentNumber);
+    }
+
+    private void doRecognize(Long answerSheetId, String preferredStudentNumber) {
         try {
-            answerSheetService.reRecognize(answerSheetId);
+            answerSheetService.reRecognize(answerSheetId, preferredStudentNumber);
         } catch (Exception e) {
             // 识别失败，更新为异常状态
             AnswerSheet answerSheet = answerSheetMapper.selectById(answerSheetId);

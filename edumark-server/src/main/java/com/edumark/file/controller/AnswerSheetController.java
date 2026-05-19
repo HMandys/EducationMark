@@ -3,6 +3,7 @@ package com.edumark.file.controller;
 import com.edumark.ai.service.AiAutoMarkingAsyncService;
 import com.edumark.common.result.PageResult;
 import com.edumark.common.result.Result;
+import com.edumark.file.dto.AnswerSheetAiReviewResultDTO;
 import com.edumark.file.dto.AnswerSheetDTO;
 import com.edumark.file.dto.AnswerSheetObjectiveAnswerDTO;
 import com.edumark.file.dto.AnswerSheetQueryDTO;
@@ -86,6 +87,20 @@ public class AnswerSheetController {
         return Result.success(answerSheetDetailService.updateSubjectiveReviewStatus(id, questionId, status));
     }
 
+    @Operation(summary = "保存 AI 异常复核结果")
+    @PutMapping("/{id}/details/{questionId}/ai-review-result")
+    public Result<AnswerSheetQuestionDetailVO> updateAiReviewResult(
+            @PathVariable Long id,
+            @PathVariable Long questionId,
+            @RequestBody AnswerSheetAiReviewResultDTO dto) {
+        return Result.success(answerSheetDetailService.updateAiReviewResult(
+                id,
+                questionId,
+                dto.getStudentAnswer(),
+                dto.getScore()
+        ));
+    }
+
     @Operation(summary = "批量重跑主观题核验")
     @PostMapping("/{id}/subjective-review/rerun")
     public Result<List<AnswerSheetQuestionDetailVO>> rerunSubjectiveReview(@PathVariable Long id) {
@@ -95,7 +110,8 @@ public class AnswerSheetController {
     @Operation(summary = "重跑 AI 自动批改")
     @PostMapping("/{id}/ai-marking/rerun")
     public Result<Void> rerunAiMarking(@PathVariable Long id) {
-        aiAutoMarkingAsyncService.autoMarkFillBlankQuestionsAsync(id);
+        answerSheetService.ensureExamNotPublished(id, "重跑 AI 自动批改");
+        aiAutoMarkingAsyncService.autoMarkFillBlankQuestionsAsync(id, true);
         return Result.success();
     }
 

@@ -41,9 +41,8 @@ public class AppAiAnalysisServiceImpl implements AppAiAnalysisService {
 
     private static final int PROVIDER_STATUS_ENABLED = 1;
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(20))
-            .build();
+    @Resource
+    private HttpClient aiHttpClient;
 
     @Resource
     private AiMarkingProviderMapper providerMapper;
@@ -218,7 +217,7 @@ public class AppAiAnalysisServiceImpl implements AppAiAnalysisService {
                 .header("Content-Type", "application/json");
         extraHeaders.forEach(builder::header);
 
-        HttpResponse<String> response = httpClient.send(
+        HttpResponse<String> response = aiHttpClient.send(
                 builder.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
                 HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
         );
@@ -297,10 +296,8 @@ public class AppAiAnalysisServiceImpl implements AppAiAnalysisService {
         if (trimmed.endsWith(path)) {
             return trimmed;
         }
-        if (trimmed.endsWith("/")) {
-            return trimmed.substring(0, trimmed.length() - 1) + path;
-        }
-        return trimmed + path;
+        String base = trimmed.replaceAll("/+$", "");
+        return base + path;
     }
 
     private String buildSystemPrompt() {

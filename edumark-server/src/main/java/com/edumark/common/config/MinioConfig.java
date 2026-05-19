@@ -20,6 +20,11 @@ public class MinioConfig {
     private String endpoint;
 
     /**
+     * 前端访问地址，不配置时使用服务地址
+     */
+    private String publicEndpoint;
+
+    /**
      * 访问密钥
      */
     private String accessKey;
@@ -36,6 +41,11 @@ public class MinioConfig {
 
     public String getEndpoint() { return endpoint; }
     public void setEndpoint(String endpoint) { this.endpoint = endpoint; }
+
+    public String getPublicEndpoint() {
+        return publicEndpoint == null || publicEndpoint.isBlank() ? endpoint : publicEndpoint;
+    }
+    public void setPublicEndpoint(String publicEndpoint) { this.publicEndpoint = publicEndpoint; }
 
     public String getAccessKey() { return accessKey; }
     public void setAccessKey(String accessKey) { this.accessKey = accessKey; }

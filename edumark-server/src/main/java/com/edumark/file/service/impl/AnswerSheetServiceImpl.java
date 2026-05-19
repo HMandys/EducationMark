@@ -8,6 +8,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.edumark.common.exception.BusinessException;
 import com.edumark.common.result.PageResult;
 import com.edumark.exam.entity.Exam;
+import com.edumark.exam.entity.ExamClass;
+import com.edumark.exam.mapper.ExamClassMapper;
 import com.edumark.exam.mapper.ExamMapper;
 import com.edumark.file.dto.AnswerSheetDTO;
 import com.edumark.file.dto.AnswerSheetQueryDTO;
@@ -27,6 +29,8 @@ import com.edumark.file.service.AnswerSheetService;
 import com.edumark.file.service.FileService;
 import com.edumark.file.vo.AnswerSheetImageVO;
 import com.edumark.file.vo.AnswerSheetVO;
+import com.edumark.marking.entity.MarkingTask;
+import com.edumark.marking.mapper.MarkingTaskMapper;
 import com.edumark.school.entity.Student;
 import com.edumark.school.mapper.StudentMapper;
 import jakarta.annotation.Resource;
@@ -41,6 +45,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -56,6 +61,9 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
     private static final int STATUS_RECOGNIZED = 1;
     private static final int STATUS_READY_FOR_MARKING = 2;
     private static final int STATUS_RECOGNITION_EXCEPTION = 5;
+    private static final int EXAM_STATUS_PUBLISHED = 5;
+    private static final int MARKING_TASK_STATUS_IN_PROGRESS = 1;
+    private static final int MARKING_TASK_STATUS_COMPLETED = 2;
     private static final Pattern DIGIT_STUDENT_NUMBER_PATTERN = Pattern.compile("(?<!\\d)(\\d{6,20})(?!\\d)");
     private static final Pattern ALNUM_STUDENT_NUMBER_PATTERN = Pattern.compile("(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9]{5,19})(?![A-Za-z0-9])");
 
@@ -73,6 +81,12 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
 
     @Resource
     private ExamMapper examMapper;
+
+    @Resource
+    private ExamClassMapper examClassMapper;
+
+    @Resource
+    private MarkingTaskMapper markingTaskMapper;
 
     @Resource
     private BarcodeRecognitionService barcodeRecognitionService;
@@ -114,6 +128,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long create(AnswerSheetDTO dto) {
+        ensureExamAllowsAnswerSheetIntake(dto.getExamId(), dto.getExamSubjectId(), "新增答题卡");
         AnswerSheet entity = new AnswerSheet();
         BeanUtils.copyProperties(dto, entity);
         entity.setImageCount(0);
@@ -129,6 +144,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         if (entity == null) {
             throw new BusinessException("答题卡不存在");
         }
+        ensureExamAllowsAnswerSheetIntake(entity.getExamId(), entity.getExamSubjectId(), "修改答题卡");
         BeanUtils.copyProperties(dto, entity, getNullPropertyNames(dto));
         applyStudentResolution(entity, dto.getStudentId(), dto.getStudentNumber());
         updateById(entity);
@@ -143,6 +159,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         if (entity == null) {
             return;
         }
+        ensureExamAllowsAnswerSheetIntake(entity.getExamId(), entity.getExamSubjectId(), "删除答题卡");
         // 删除图片文件
         List<AnswerSheetImageVO> images = answerSheetImageMapper.selectListByAnswerSheetId(id);
         for (AnswerSheetImageVO image : images) {
@@ -171,6 +188,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         if (answerSheet == null) {
             throw new BusinessException("答题卡不存在");
         }
+        ensureExamAllowsAnswerSheetIntake(answerSheet.getExamId(), answerSheet.getExamSubjectId(), "上传答题卡图片");
 
         int currentCount = answerSheet.getImageCount() != null ? answerSheet.getImageCount() : 0;
         int pageNum = currentCount + 1;
@@ -221,6 +239,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         if (exam == null) {
             throw new BusinessException("考试不存在");
         }
+        ensureExamAllowsAnswerSheetIntake(exam.getId(), dto.getExamSubjectId(), "补录答题卡");
 
         AnswerSheet answerSheet = new AnswerSheet();
         answerSheet.setExamId(dto.getExamId());
@@ -277,6 +296,10 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         if (image == null) {
             return;
         }
+        AnswerSheet answerSheet = getById(image.getAnswerSheetId());
+        if (answerSheet != null) {
+            ensureExamAllowsAnswerSheetIntake(answerSheet.getExamId(), answerSheet.getExamSubjectId(), "删除答题卡图片");
+        }
         // 删除文件
         if (image.getImagePath() != null) {
             fileService.delete(image.getImagePath());
@@ -285,7 +308,7 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
         answerSheetImageMapper.deleteById(imageId);
 
         // 更新图片数量
-        AnswerSheet answerSheet = getById(image.getAnswerSheetId());
+        answerSheet = getById(image.getAnswerSheetId());
         if (answerSheet != null) {
             int count = answerSheetImageMapper.selectCount(
                     new LambdaQueryWrapper<AnswerSheetImage>()
@@ -319,14 +342,32 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
 
     @Override
     public void reRecognize(Long id) {
+        reRecognize(id, null);
+    }
+
+    @Override
+    public void reRecognize(Long id, String preferredStudentNumber) {
         AnswerSheet entity = getById(id);
         if (entity == null) {
             throw new BusinessException("答题卡不存在");
         }
-        refreshRecognition(entity, null);
+        ensureExamAllowsAnswerSheetIntake(entity.getExamId(), entity.getExamSubjectId(), "重跑识别");
+        refreshRecognition(entity, preferredStudentNumber);
         updateById(entity);
         syncNullableRecognitionFields(entity);
         initializeQuestionDetailsIfReady(entity, true);
+    }
+
+    @Override
+    public void ensureExamNotPublished(Long answerSheetId, String action) {
+        if (answerSheetId == null) {
+            return;
+        }
+        AnswerSheet answerSheet = answerSheetMapper.selectById(answerSheetId);
+        if (answerSheet == null) {
+            throw new BusinessException("答题卡不存在");
+        }
+        ensureExamStatusNotPublished(answerSheet.getExamId(), action);
     }
 
     private void applyRecognitionResult(AnswerSheet answerSheet, AnswerSheetUploadDTO dto, Exam exam) {
@@ -566,6 +607,39 @@ public class AnswerSheetServiceImpl extends ServiceImpl<AnswerSheetMapper, Answe
                 .map(pd -> pd.getName())
                 .filter(name -> beanWrapper.getPropertyValue(name) == null)
                 .toArray(String[]::new);
+    }
+
+    private void ensureExamAllowsAnswerSheetIntake(Long examId, Long examSubjectId, String action) {
+        ensureExamStatusNotPublished(examId, action);
+        ensureExamSubjectNotLocked(examSubjectId, action);
+    }
+
+    private void ensureExamStatusNotPublished(Long examId, String action) {
+        if (examId == null) {
+            return;
+        }
+        Exam exam = examMapper.selectById(examId);
+        if (exam == null) {
+            throw new BusinessException("考试不存在");
+        }
+        if (exam.getStatus() != null && exam.getStatus() == EXAM_STATUS_PUBLISHED) {
+            throw new BusinessException("考试成绩已发布，不能" + action);
+        }
+    }
+
+    private void ensureExamSubjectNotLocked(Long examSubjectId, String action) {
+        if (examSubjectId == null) {
+            return;
+        }
+        Long lockedTaskCount = markingTaskMapper.selectCount(
+                new LambdaQueryWrapper<MarkingTask>()
+                        .eq(MarkingTask::getExamSubjectId, examSubjectId)
+                        .eq(MarkingTask::getDeleted, 0)
+                        .in(MarkingTask::getStatus, MARKING_TASK_STATUS_IN_PROGRESS, MARKING_TASK_STATUS_COMPLETED)
+        );
+        if (lockedTaskCount != null && lockedTaskCount > 0) {
+            throw new BusinessException("当前科目已进入阅卷流程，不能" + action);
+        }
     }
 
     private void initializeQuestionDetailsIfReady(AnswerSheet answerSheet, boolean forceRecognize) {

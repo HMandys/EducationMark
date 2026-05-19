@@ -23,6 +23,7 @@ import com.edumark.exam.service.ExamService;
 import com.edumark.exam.vo.ExamPublishCheckVO;
 import com.edumark.exam.vo.ExamVO;
 import com.edumark.score.service.ScoreService;
+import com.edumark.school.entity.ClassInfo;
 import com.edumark.school.mapper.ClassInfoMapper;
 import com.edumark.school.mapper.GradeMapper;
 import com.edumark.school.vo.ClassInfoVO;
@@ -47,6 +48,13 @@ import java.util.stream.Collectors;
  */
 @Service
 public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements ExamService {
+
+    private static final int EXAM_STATUS_DRAFT = 0;
+    private static final int EXAM_STATUS_PENDING = 1;
+    private static final int EXAM_STATUS_IN_PROGRESS = 2;
+    private static final int EXAM_STATUS_MARKING = 3;
+    private static final int EXAM_STATUS_COMPLETED = 4;
+    private static final int EXAM_STATUS_PUBLISHED = 5;
 
     @Resource
     private ExamClassMapper examClassMapper;
@@ -170,13 +178,17 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
     }
 
     private void saveExamClasses(Long examId, List<Long> classIds) {
-        if (classIds != null && !classIds.isEmpty()) {
-            for (Long classId : classIds) {
-                ExamClass examClass = new ExamClass();
-                examClass.setExamId(examId);
-                examClass.setClassId(classId);
-                examClassMapper.insert(examClass);
-            }
+        if (classIds == null || classIds.isEmpty()) {
+            return;
+        }
+        List<ExamClass> examClasses = classIds.stream().map(classId -> {
+            ExamClass examClass = new ExamClass();
+            examClass.setExamId(examId);
+            examClass.setClassId(classId);
+            return examClass;
+        }).toList();
+        for (ExamClass examClass : examClasses) {
+            examClassMapper.insert(examClass);
         }
     }
 
@@ -192,6 +204,10 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
         }
         removeById(id);
         examClassMapper.deleteByExamId(id);
+        examSubjectMapper.delete(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ExamSubject>()
+                        .eq(ExamSubject::getExamId, id)
+        );
     }
 
     @Override
@@ -200,8 +216,30 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
         if (ids == null || ids.isEmpty()) {
             throw new BusinessException("请选择要删除的考试");
         }
+        List<String> skipped = new ArrayList<>();
+        int deletedCount = 0;
         for (Long id : ids) {
-            delete(id);
+            Exam exam = getById(id);
+            if (exam == null) {
+                continue;
+            }
+            if (exam.getStatus() != null && exam.getStatus() >= 2) {
+                skipped.add(exam.getName());
+                continue;
+            }
+            removeById(id);
+            examClassMapper.deleteByExamId(id);
+            examSubjectMapper.delete(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ExamSubject>()
+                            .eq(ExamSubject::getExamId, id)
+            );
+            deletedCount++;
+        }
+        if (!skipped.isEmpty() && deletedCount == 0) {
+            throw new BusinessException("以下考试正在进行中或已结束，无法删除：" + String.join("、", skipped));
+        }
+        if (!skipped.isEmpty()) {
+            throw new BusinessException("已删除 " + deletedCount + " 个，以下考试跳过：" + String.join("、", skipped));
         }
     }
 
@@ -216,20 +254,24 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
             throw new BusinessException("无效的考试状态");
         }
         int current = exam.getStatus() != null ? exam.getStatus() : 0;
-        if (status == 5) {
+        if (status == EXAM_STATUS_PUBLISHED) {
             if (current != 4) {
                 throw new BusinessException("只有已完成的考试才能发布成绩");
             }
             scoreService.publish(id, SecurityUtils.getCurrentUserId());
             return;
         }
-        if (current == 5 && status == 4) {
+        if (current == EXAM_STATUS_PUBLISHED && status == EXAM_STATUS_COMPLETED) {
             scoreService.unpublish(id, SecurityUtils.getCurrentUserId());
             return;
         }
+        if (status == EXAM_STATUS_COMPLETED) {
+            throw new BusinessException("考试完成状态会在阅卷流程结束后自动收口，不能手动设置");
+        }
 
-        // 非发布状态仅允许顺序推进
-        boolean valid = status == current + 1;
+        // 非发布状态仅允许顺序推进或从「待考试」回退到「草稿」
+        boolean valid = status == current + 1
+                || (current == EXAM_STATUS_PENDING && status == EXAM_STATUS_DRAFT);
         if (!valid) {
             throw new BusinessException("不允许从「" + getStatusName(current) + "」变更为「" + getStatusName(status) + "」");
         }
@@ -239,12 +281,12 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
 
     private String getStatusName(int status) {
         return switch (status) {
-            case 0 -> "草稿";
-            case 1 -> "待考试";
-            case 2 -> "考试中";
-            case 3 -> "阅卷中";
-            case 4 -> "已完成";
-            case 5 -> "已发布";
+            case EXAM_STATUS_DRAFT -> "草稿";
+            case EXAM_STATUS_PENDING -> "待考试";
+            case EXAM_STATUS_IN_PROGRESS -> "考试中";
+            case EXAM_STATUS_MARKING -> "阅卷中";
+            case EXAM_STATUS_COMPLETED -> "已完成";
+            case EXAM_STATUS_PUBLISHED -> "已发布";
             default -> "未知";
         };
     }
@@ -287,46 +329,17 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
 
         for (ExamSubject subject : subjects) {
             Paper paper = paperMapper.selectByExamSubjectId(subject.getId());
-
-            // 先检查答题卡模板（支持通过paperId或examId+subjectName查找）
-            AnswerSheetTemplate template = null;
-            if (paper != null) {
-                template = answerSheetTemplateMapper.selectOne(
-                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AnswerSheetTemplate>()
-                                .eq(AnswerSheetTemplate::getPaperId, paper.getId())
-                                .eq(AnswerSheetTemplate::getDeleted, 0)
-                                .last("LIMIT 1")
-                );
-            }
-            // 如果通过paperId找不到，尝试通过examId + subjectName查找
-            if (template == null) {
-                template = answerSheetTemplateMapper.selectOne(
-                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AnswerSheetTemplate>()
-                                .eq(AnswerSheetTemplate::getExamId, id)
-                                .eq(AnswerSheetTemplate::getSubjectName, subject.getSubjectName())
-                                .eq(AnswerSheetTemplate::getDeleted, 0)
-                                .last("LIMIT 1")
-                );
-            }
+            AnswerSheetTemplate template = findTemplateForSubject(id, paper, subject);
 
             if (template != null && Objects.equals(template.getStatus(), 1)) {
                 publishedTemplateCount++;
-                // 有已发布的答题卡模板，试卷状态和题目不做强制检查
                 if (paper != null && Objects.equals(paper.getStatus(), 1)) {
                     completedPaperCount++;
                 }
-                if (paper != null) {
-                    Long questionCount = paperQuestionMapper.selectCount(
-                            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PaperQuestion>()
-                                    .eq(PaperQuestion::getPaperId, paper.getId())
-                                    .eq(PaperQuestion::getDeleted, 0)
-                    );
-                    if (questionCount != null && questionCount > 0) {
-                        subjectWithQuestionCount++;
-                    }
+                if (paper != null && countPaperQuestions(paper.getId()) > 0) {
+                    subjectWithQuestionCount++;
                 }
             } else {
-                // 没有已发布的答题卡模板，检查完整的配置链路
                 if (template != null) {
                     missingItems.add(subject.getSubjectName() + "答题卡模板未发布");
                 } else {
@@ -344,12 +357,7 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
                     missingItems.add(subject.getSubjectName() + "试卷未完成");
                 }
 
-                Long questionCount = paperQuestionMapper.selectCount(
-                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PaperQuestion>()
-                                .eq(PaperQuestion::getPaperId, paper.getId())
-                                .eq(PaperQuestion::getDeleted, 0)
-                );
-                if (questionCount != null && questionCount > 0) {
+                if (countPaperQuestions(paper.getId()) > 0) {
                     subjectWithQuestionCount++;
                 } else {
                     missingItems.add(subject.getSubjectName() + "试卷未配置题目");
@@ -373,6 +381,37 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
     @Transactional(rollbackFor = Exception.class)
     public void unpublish(Long id) {
         scoreService.unpublish(id, SecurityUtils.getCurrentUserId());
+    }
+
+    private AnswerSheetTemplate findTemplateForSubject(Long examId, Paper paper, ExamSubject subject) {
+        AnswerSheetTemplate template = null;
+        if (paper != null) {
+            template = answerSheetTemplateMapper.selectOne(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AnswerSheetTemplate>()
+                            .eq(AnswerSheetTemplate::getPaperId, paper.getId())
+                            .eq(AnswerSheetTemplate::getDeleted, 0)
+                            .last("LIMIT 1")
+            );
+        }
+        if (template == null) {
+            template = answerSheetTemplateMapper.selectOne(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AnswerSheetTemplate>()
+                            .eq(AnswerSheetTemplate::getExamId, examId)
+                            .eq(AnswerSheetTemplate::getSubjectName, subject.getSubjectName())
+                            .eq(AnswerSheetTemplate::getDeleted, 0)
+                            .last("LIMIT 1")
+            );
+        }
+        return template;
+    }
+
+    private long countPaperQuestions(Long paperId) {
+        Long count = paperQuestionMapper.selectCount(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PaperQuestion>()
+                        .eq(PaperQuestion::getPaperId, paperId)
+                        .eq(PaperQuestion::getDeleted, 0)
+        );
+        return count != null ? count : 0;
     }
 
     private void validateExamDTO(ExamDTO dto) {
@@ -423,16 +462,16 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
             throw new BusinessException("请至少选择一个参考班级");
         }
 
-        for (Long classId : normalizedClassIds) {
-            ClassInfoVO classInfo = classInfoMapper.selectVOById(classId);
-            if (classInfo == null) {
-                throw new BusinessException("存在无效的参考班级");
-            }
+        List<ClassInfo> classInfoList = classInfoMapper.selectBatchIds(normalizedClassIds);
+        if (classInfoList == null || classInfoList.size() != normalizedClassIds.size()) {
+            throw new BusinessException("存在无效的参考班级");
+        }
+        for (ClassInfo classInfo : classInfoList) {
             if (!Objects.equals(classInfo.getSchoolId(), dto.getSchoolId())) {
-                throw new BusinessException("存在不属于当前学校的参考班级");
+                throw new BusinessException("班级「" + classInfo.getName() + "」不属于当前学校");
             }
             if (!Objects.equals(classInfo.getGradeId(), dto.getGradeId())) {
-                throw new BusinessException("存在不属于当前年级的参考班级");
+                throw new BusinessException("班级「" + classInfo.getName() + "」不属于当前年级");
             }
         }
 

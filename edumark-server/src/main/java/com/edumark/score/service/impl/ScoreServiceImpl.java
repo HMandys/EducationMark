@@ -665,6 +665,15 @@ public class ScoreServiceImpl implements ScoreService {
             throw new BusinessException("阅卷未完成，不能发布成绩");
         }
 
+        ScorePublishCheckVO publishCheck = getPublishCheck(examId);
+        if (publishCheck.getCanPublish() == null || !publishCheck.getCanPublish()) {
+            List<String> blockingItems = publishCheck.getBlockingItems();
+            String message = (blockingItems == null || blockingItems.isEmpty())
+                    ? "当前考试不满足出分条件"
+                    : String.join("；", blockingItems);
+            throw new BusinessException(message);
+        }
+
         // 汇总成绩
         aggregateScores(examId);
 

@@ -248,9 +248,11 @@ import {
   saveCornerConfig,
   detectCorners,
   detectBubbles,
+  detectBubblesByPath,
   type AnswerSheetTemplate,
   type AnswerSheetRegion,
   type BubbleMapItem,
+  type BubbleDetectionResult,
   type TemplateValidationResult,
   type CornerConfig,
 } from '@/api/answerSheetTemplate'
@@ -299,6 +301,7 @@ const validationDialogVisible = ref(false)
 const validationResult = ref<TemplateValidationResult | null>(null)
 const sampleImageUrl = ref('')
 const sampleImageName = ref('')
+const sampleImageFile = ref<File | null>(null)
 const sampleImageVisible = ref(false)
 const sampleImageOpacity = ref(35)
 const bubbleDetectLoading = ref(false)
@@ -428,8 +431,8 @@ const canDetectChoiceBubbles = computed(() => {
     && sampleImageUrl.value
     && region.config?.boxX !== undefined
     && region.config?.boxY !== undefined
-    && region.config?.boxWidth
-    && region.config?.boxHeight
+    && region.config?.boxWidth !== undefined
+    && region.config?.boxHeight !== undefined
     && region.questionStart
     && region.questionEnd
     && region.config?.optionCount
@@ -637,6 +640,104 @@ const handlePreviewRegionUpdate = ({ index, region }: { index: number; region: A
   templateForm.regions.splice(index, 1, cloneRegion(region))
 }
 
+const resolveBubbleDetectionSource = () => {
+  if (sampleImageFile.value) {
+    return {
+      mode: 'file' as const,
+      file: sampleImageFile.value,
+    }
+  }
+
+  if (templateImageFile.value) {
+    return {
+      mode: 'file' as const,
+      file: templateImageFile.value,
+    }
+  }
+
+  if (templateForm.templateImagePath) {
+    return {
+      mode: 'path' as const,
+      path: templateForm.templateImagePath,
+    }
+  }
+
+  return null
+}
+
+const runBubbleDetection = async (
+  region: AnswerSheetRegion,
+  { silent = false }: { silent?: boolean } = {},
+): Promise<BubbleDetectionResult | null> => {
+  if (!region.questionStart || !region.questionEnd) {
+    if (!silent) {
+      ElMessage.warning('请先填写起始题号和结束题号')
+    }
+    return null
+  }
+
+  const config = region.config
+  if (
+    config?.boxX === undefined
+    || config?.boxY === undefined
+    || config?.boxWidth === undefined
+    || config?.boxHeight === undefined
+  ) {
+    if (!silent) {
+      ElMessage.warning('区域坐标不完整')
+    }
+    return null
+  }
+
+  const source = resolveBubbleDetectionSource()
+  if (!source) {
+    if (!silent) {
+      ElMessage.warning('请先上传样张或模板图片')
+    }
+    return null
+  }
+
+  const params = {
+    boxX: config.boxX,
+    boxY: config.boxY,
+    boxWidth: config.boxWidth,
+    boxHeight: config.boxHeight,
+    questionStart: region.questionStart,
+    questionEnd: region.questionEnd,
+    optionCount: config.optionCount || 4,
+    questionsPerRow: config.questionsPerRow || 5,
+    layoutDirection: config.layoutDirection || 'column' as const,
+  }
+
+  if (!silent) {
+    ElMessage.info('正在自动检测选项位置...')
+  }
+
+  try {
+    const result = source.mode === 'file'
+      ? await detectBubbles(source.file, params)
+      : await detectBubblesByPath(source.path, params)
+
+    if (result.data.success && result.data.bubbleMap?.length) {
+      if (!silent) {
+        ElMessage.success(`检测到 ${result.data.detectedCount} 个选项位置`)
+      }
+      return result.data
+    }
+
+    if (!silent) {
+      ElMessage.warning(result.data.errorMessage || '气泡检测失败')
+    }
+    return null
+  } catch (error) {
+    console.error('气泡检测失败', error)
+    if (!silent) {
+      ElMessage.error('气泡检测失败')
+    }
+    return null
+  }
+}
+
 // 处理拉框创建区域
 const handleCreateRegion = (bounds: { boxX: number; boxY: number; boxWidth: number; boxHeight: number }) => {
   currentRegion.value = buildRegionDraft(bounds)
@@ -648,49 +749,7 @@ const handleCreateRegion = (bounds: { boxX: number; boxY: number; boxWidth: numb
 
 // 自动检测气泡（供 RegionConfigDialog 调用）
 const handleAutoDetectBubbles = async (region: AnswerSheetRegion) => {
-  if (!templateImageFile.value) {
-    ElMessage.warning('请先上传答题卡图片')
-    return null
-  }
-
-  if (!region.questionStart || !region.questionEnd) {
-    ElMessage.warning('请先填写起始题号和结束题号')
-    return null
-  }
-
-  const config = region.config
-  if (!config?.boxX || !config?.boxY || !config?.boxWidth || !config?.boxHeight) {
-    ElMessage.warning('区域坐标不完整')
-    return null
-  }
-
-  ElMessage.info('正在自动检测选项位置...')
-
-  try {
-    const result = await detectBubbles(templateImageFile.value, {
-      boxX: config.boxX,
-      boxY: config.boxY,
-      boxWidth: config.boxWidth,
-      boxHeight: config.boxHeight,
-      questionStart: region.questionStart,
-      questionEnd: region.questionEnd,
-      optionCount: config.optionCount || 4,
-      questionsPerRow: config.questionsPerRow || 5,
-      layoutDirection: config.layoutDirection || 'column',
-    })
-
-    if (result.data.success && result.data.bubbleMap) {
-      ElMessage.success(`检测到 ${result.data.detectedCount} 个选项位置`)
-      return result.data
-    } else {
-      ElMessage.warning(result.data.errorMessage || '气泡检测失败')
-      return null
-    }
-  } catch (error) {
-    console.error('气泡检测失败', error)
-    ElMessage.error('气泡检测失败')
-    return null
-  }
+  return runBubbleDetection(region)
 }
 
 // 处理弹窗中的气泡检测请求
@@ -748,6 +807,7 @@ const handleSampleImageChange = (file: UploadFile) => {
 
   revokeSampleImage()
   lastAutoDetectSignature.value = ''
+  sampleImageFile.value = file.raw
   sampleImageUrl.value = URL.createObjectURL(file.raw)
   sampleImageName.value = file.name
   sampleImageVisible.value = true
@@ -756,6 +816,7 @@ const handleSampleImageChange = (file: UploadFile) => {
 const clearSampleImage = () => {
   revokeSampleImage()
   lastAutoDetectSignature.value = ''
+  sampleImageFile.value = null
   sampleImageUrl.value = ''
   sampleImageName.value = ''
   sampleImageVisible.value = false
@@ -775,6 +836,7 @@ const handleTemplateImageChange = async (file: UploadFile) => {
 
   // 同时设置为样张，方便拉框
   revokeSampleImage()
+  sampleImageFile.value = file.raw
   sampleImageUrl.value = URL.createObjectURL(file.raw)
   sampleImageName.value = file.name
   sampleImageVisible.value = true
@@ -876,213 +938,6 @@ const calculateExpectedBubbleCount = (region: AnswerSheetRegion) => {
   return Math.max(questionEnd - questionStart + 1, 0) * optionCount
 }
 
-interface DetectedComponent {
-  x: number
-  y: number
-  width: number
-  height: number
-  area: number
-  fillRatio: number
-  centerX: number
-  centerY: number
-}
-
-const loadImageElement = (url: string) => new Promise<HTMLImageElement>((resolve, reject) => {
-  const image = new Image()
-  image.onload = () => resolve(image)
-  image.onerror = () => reject(new Error('样张图片加载失败'))
-  image.src = url
-})
-
-const median = (values: number[]) => {
-  if (values.length === 0) {
-    return 0
-  }
-  const sorted = [...values].sort((a, b) => a - b)
-  const middle = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle]
-}
-
-const computeOtsuThreshold = (grayValues: Uint8ClampedArray) => {
-  const histogram = new Array<number>(256).fill(0)
-  grayValues.forEach((value) => {
-    histogram[value] += 1
-  })
-
-  const total = grayValues.length
-  let sum = 0
-  for (let i = 0; i < 256; i += 1) {
-    sum += i * histogram[i]
-  }
-
-  let sumB = 0
-  let weightB = 0
-  let maxVariance = 0
-  let threshold = 127
-
-  for (let i = 0; i < 256; i += 1) {
-    weightB += histogram[i]
-    if (weightB === 0) {
-      continue
-    }
-
-    const weightF = total - weightB
-    if (weightF === 0) {
-      break
-    }
-
-    sumB += i * histogram[i]
-    const meanB = sumB / weightB
-    const meanF = (sum - sumB) / weightF
-    const betweenClassVariance = weightB * weightF * (meanB - meanF) ** 2
-
-    if (betweenClassVariance > maxVariance) {
-      maxVariance = betweenClassVariance
-      threshold = i
-    }
-  }
-
-  return threshold
-}
-
-const detectConnectedComponents = (
-  grayValues: Uint8ClampedArray,
-  width: number,
-  height: number,
-  threshold: number,
-) => {
-  const visited = new Uint8Array(width * height)
-  const components: DetectedComponent[] = []
-  const queueX = new Int32Array(width * height)
-  const queueY = new Int32Array(width * height)
-
-  const getIndex = (x: number, y: number) => y * width + x
-
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const index = getIndex(x, y)
-      if (visited[index] || grayValues[index] > threshold) {
-        continue
-      }
-
-      let head = 0
-      let tail = 0
-      queueX[tail] = x
-      queueY[tail] = y
-      tail += 1
-      visited[index] = 1
-
-      let minX = x
-      let minY = y
-      let maxX = x
-      let maxY = y
-      let area = 0
-
-      while (head < tail) {
-        const currentX = queueX[head]
-        const currentY = queueY[head]
-        head += 1
-        area += 1
-
-        minX = Math.min(minX, currentX)
-        minY = Math.min(minY, currentY)
-        maxX = Math.max(maxX, currentX)
-        maxY = Math.max(maxY, currentY)
-
-        const neighbors = [
-          [currentX - 1, currentY],
-          [currentX + 1, currentY],
-          [currentX, currentY - 1],
-          [currentX, currentY + 1],
-        ]
-
-        neighbors.forEach(([nextX, nextY]) => {
-          if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) {
-            return
-          }
-
-          const nextIndex = getIndex(nextX, nextY)
-          if (visited[nextIndex] || grayValues[nextIndex] > threshold) {
-            return
-          }
-
-          visited[nextIndex] = 1
-          queueX[tail] = nextX
-          queueY[tail] = nextY
-          tail += 1
-        })
-      }
-
-      const componentWidth = maxX - minX + 1
-      const componentHeight = maxY - minY + 1
-      const boxArea = componentWidth * componentHeight
-
-      components.push({
-        x: minX,
-        y: minY,
-        width: componentWidth,
-        height: componentHeight,
-        area,
-        fillRatio: boxArea > 0 ? area / boxArea : 0,
-        centerX: minX + componentWidth / 2,
-        centerY: minY + componentHeight / 2,
-      })
-    }
-  }
-
-  return components
-}
-
-const clusterRows = (components: DetectedComponent[], rowTolerance: number) => {
-  const rows: DetectedComponent[][] = []
-  components
-    .slice()
-    .sort((a, b) => a.centerY - b.centerY)
-    .forEach((component) => {
-      const lastRow = rows[rows.length - 1]
-      if (!lastRow) {
-        rows.push([component])
-        return
-      }
-
-      const averageY = lastRow.reduce((sum, item) => sum + item.centerY, 0) / lastRow.length
-      if (Math.abs(component.centerY - averageY) <= rowTolerance) {
-        lastRow.push(component)
-      } else {
-        rows.push([component])
-      }
-    })
-
-  return rows.map(row => row.sort((a, b) => a.centerX - b.centerX))
-}
-
-const pickBestWindow = (components: DetectedComponent[], expectedCount: number) => {
-  if (components.length <= expectedCount) {
-    return components
-  }
-
-  let bestWindow = components.slice(0, expectedCount)
-  let bestScore = Number.NEGATIVE_INFINITY
-
-  for (let start = 0; start <= components.length - expectedCount; start += 1) {
-    const window = components.slice(start, start + expectedCount)
-    const gapValues = window.slice(1).map((item, index) => item.centerX - window[index].centerX)
-    const gapMedian = median(gapValues)
-    const gapVariance = gapValues.reduce((sum, value) => sum + Math.abs(value - gapMedian), 0)
-    const areaScore = window.reduce((sum, item) => sum + item.area, 0)
-    const score = areaScore - gapVariance * 4
-
-    if (score > bestScore) {
-      bestScore = score
-      bestWindow = window
-    }
-  }
-
-  return bestWindow
-}
-
 const handleDetectChoiceBubbles = async (silent: boolean = false) => {
   const region = selectedChoiceRegion.value
   if (!region || !sampleImageUrl.value) {
@@ -1094,136 +949,17 @@ const handleDetectChoiceBubbles = async (silent: boolean = false) => {
 
   bubbleDetectLoading.value = true
   try {
-    const image = await loadImageElement(sampleImageUrl.value)
-    const cropX = Math.max(Math.floor(((region.config?.boxX || 0) / 100) * image.width), 0)
-    const cropY = Math.max(Math.floor(((region.config?.boxY || 0) / 100) * image.height), 0)
-    const cropWidth = Math.max(Math.floor(((region.config?.boxWidth || 0) / 100) * image.width), 1)
-    const cropHeight = Math.max(Math.floor(((region.config?.boxHeight || 0) / 100) * image.height), 1)
-
-    const canvas = document.createElement('canvas')
-    const maxDetectWidth = 1200
-    const scale = cropWidth > maxDetectWidth ? maxDetectWidth / cropWidth : 1
-    const detectWidth = Math.max(Math.floor(cropWidth * scale), 1)
-    const detectHeight = Math.max(Math.floor(cropHeight * scale), 1)
-    canvas.width = detectWidth
-    canvas.height = detectHeight
-
-    const context = canvas.getContext('2d')
-    if (!context) {
-      throw new Error('无法初始化图像识别画布')
-    }
-
-    context.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, detectWidth, detectHeight)
-    const imageData = context.getImageData(0, 0, detectWidth, detectHeight)
-    const grayValues = new Uint8ClampedArray(detectWidth * detectHeight)
-    for (let i = 0; i < imageData.data.length; i += 4) {
-      const pixelIndex = i / 4
-      grayValues[pixelIndex] = Math.round(
-        imageData.data[i] * 0.299
-        + imageData.data[i + 1] * 0.587
-        + imageData.data[i + 2] * 0.114,
-      )
-    }
-
-    const otsuThreshold = computeOtsuThreshold(grayValues)
-    const threshold = Math.min(220, Math.round(otsuThreshold * 0.92))
-    const allComponents = detectConnectedComponents(grayValues, detectWidth, detectHeight, threshold)
-    const expectedBubbleCount = calculateExpectedBubbleCount(region)
-
-    const roughCandidates = allComponents.filter((component) => {
-      const aspectRatio = component.width / component.height
-      return component.area >= 10
-        && component.width >= 4
-        && component.height >= 4
-        && component.width <= detectWidth * 0.12
-        && component.height <= detectHeight * 0.12
-        && aspectRatio >= 0.45
-        && aspectRatio <= 1.9
-        && component.fillRatio >= 0.12
-        && component.fillRatio <= 0.85
-    })
-
-    if (roughCandidates.length === 0) {
-      throw new Error('没有检测到可用的选项气泡候选，请调整总框或更换更清晰的样张')
-    }
-
-    const sampleCandidates = roughCandidates
-      .slice()
-      .sort((a, b) => b.area - a.area)
-      .slice(0, Math.max(expectedBubbleCount * 2, 20))
-
-    const medianWidth = median(sampleCandidates.map(item => item.width))
-    const medianHeight = median(sampleCandidates.map(item => item.height))
-    const candidates = roughCandidates
-      .filter((component) => (
-        component.width >= medianWidth * 0.55
-        && component.width <= medianWidth * 1.8
-        && component.height >= medianHeight * 0.55
-        && component.height <= medianHeight * 1.8
-      ))
-      .sort((a, b) => a.centerY - b.centerY)
-
-    const questionCount = Math.max((region.questionEnd || 0) - (region.questionStart || 0) + 1, 0)
-    const optionCount = region.config?.optionCount || 4
-    const questionsPerRow = region.config?.questionsPerRow || 5
-    const expectedRowCount = Math.ceil(questionCount / questionsPerRow)
-
-    let rows = clusterRows(candidates, Math.max(medianHeight * 1.2, 8))
-    while (rows.length > expectedRowCount && rows.length > 1) {
-      let mergeIndex = 0
-      let minDistance = Number.POSITIVE_INFINITY
-      for (let i = 0; i < rows.length - 1; i += 1) {
-        const currentY = rows[i].reduce((sum, item) => sum + item.centerY, 0) / rows[i].length
-        const nextY = rows[i + 1].reduce((sum, item) => sum + item.centerY, 0) / rows[i + 1].length
-        const distance = Math.abs(nextY - currentY)
-        if (distance < minDistance) {
-          minDistance = distance
-          mergeIndex = i
-        }
-      }
-      rows.splice(mergeIndex, 2, [...rows[mergeIndex], ...rows[mergeIndex + 1]].sort((a, b) => a.centerX - b.centerX))
-    }
-
-    const bubbleMap: BubbleMapItem[] = []
-    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-      const questionsInRow = Math.min(questionsPerRow, questionCount - rowIndex * questionsPerRow)
-      if (questionsInRow <= 0) {
-        break
-      }
-
-      const expectedRowBubbleCount = questionsInRow * optionCount
-      const rowComponents = pickBestWindow(rows[rowIndex], expectedRowBubbleCount)
-      if (rowComponents.length < expectedRowBubbleCount) {
-        continue
-      }
-
-      for (let questionOffset = 0; questionOffset < questionsInRow; questionOffset += 1) {
-        const questionNo = (region.questionStart || 1) + rowIndex * questionsPerRow + questionOffset
-        const optionComponents = rowComponents.slice(questionOffset * optionCount, (questionOffset + 1) * optionCount)
-        optionComponents.forEach((component, optionIndex) => {
-          bubbleMap.push({
-            questionNo,
-            option: String.fromCharCode(65 + optionIndex),
-            x: (region.config?.boxX || 0) + (component.x / detectWidth) * (region.config?.boxWidth || 0),
-            y: (region.config?.boxY || 0) + (component.y / detectHeight) * (region.config?.boxHeight || 0),
-            width: (component.width / detectWidth) * (region.config?.boxWidth || 0),
-            height: (component.height / detectHeight) * (region.config?.boxHeight || 0),
-            confidence: Number((component.area / Math.max(medianWidth * medianHeight, 1)).toFixed(2)),
-          })
-        })
-      }
-    }
-
-    if (bubbleMap.length === 0) {
-      throw new Error('识别结果为空，请检查客观题总框是否覆盖到真实涂卡区')
+    const result = await runBubbleDetection(region, { silent })
+    if (!result?.bubbleMap?.length) {
+      return false
     }
 
     const nextRegion = cloneRegion(region)
     nextRegion.config = {
       ...nextRegion.config,
-      bubbleMap,
-      detectedBubbleCount: bubbleMap.length,
-      expectedBubbleCount,
+      bubbleMap: result.bubbleMap,
+      detectedBubbleCount: result.detectedCount || result.bubbleMap.length,
+      expectedBubbleCount: result.expectedCount || calculateExpectedBubbleCount(region),
     }
 
     handlePreviewRegionUpdate({
@@ -1231,22 +967,16 @@ const handleDetectChoiceBubbles = async (silent: boolean = false) => {
       region: nextRegion,
     })
 
-    if (bubbleMap.length < expectedBubbleCount) {
+    const detectedBubbleCount = result.detectedCount || result.bubbleMap.length
+    const expectedBubbleCount = result.expectedCount || calculateExpectedBubbleCount(region)
+    if (detectedBubbleCount < expectedBubbleCount) {
       if (!silent) {
-        ElMessage.warning(`仅识别到 ${bubbleMap.length}/${expectedBubbleCount} 个选项，请检查样张清晰度或适当缩小总框`)
+        ElMessage.warning(`仅识别到 ${detectedBubbleCount}/${expectedBubbleCount} 个选项，请检查样张清晰度或适当缩小总框`)
       }
       return false
     }
 
-    if (!silent) {
-      ElMessage.success(`已识别 ${bubbleMap.length} 个选项气泡`)
-    }
     return true
-  } catch (error) {
-    if (!silent && error instanceof Error) {
-      ElMessage.warning(error.message)
-    }
-    return false
   } finally {
     bubbleDetectLoading.value = false
   }
@@ -1343,6 +1073,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   revokeSampleImage()
+  sampleImageFile.value = null
 })
 </script>
 
